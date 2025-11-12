@@ -1,0 +1,653 @@
+@startuml
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+
+title Wakfu Damage & Combo Simulator – Backend (Domain-Driven + Patterns)
+
+package "domain.character" {
+  class CharacterClass {
+    - name : String
+    - baseSpells : List<Spell>
+    - basePassives : List<Passive>
+  }
+
+  class Build {
+    - characterClass : CharacterClass
+    - level : int
+    - stats : StatsAggregate
+    - chosenSpells : List<SpellRef>
+    - chosenPassives : List<PassiveRef>
+    - chosenSublimations : List<SublimationRef>
+  }
+
+  class SpellRef {
+    - spellId : String
+    - rank:int }
+  class PassiveRef { - passiveId : String }
+  class SublimationRef { - sublimationId : String }
+}
+
+package "domain.stats" {
+  class StatsAggregate {
+    - elemental : ElementalMastery
+    - secondary : SecondaryMastery
+    - combat : CombatStats
+  }
+
+  class ElementalMastery {
+    - fire:int
+    - water:int
+    - earth:int
+    - air:int
+  }
+
+  class SecondaryMastery {
+    - crit:int
+    - backstab:int
+    - distance:int
+    - melee:int
+    - heal:int
+    - berserk:int
+    - indirect:int
+  }
+
+  class CombatStats {
+    - dmgInflictedPct:int
+    - dmgInflictedConstantPct:int
+    - dmgInflictedConditionalPct:int
+    - critChancePct:int
+    - healDonePct:int
+    - blockPct:int
+    - range:int
+    - lock:int
+    - initiative:int
+    - dodge:int
+    - willpower:int
+  }
+}
+
+package "domain.spell" {
+  interface ISpell
+  class Spell implements ISpell {
+    - id:String
+    - name:String
+    - type: SpellType
+    - cost: ResourceCost
+    - ratio: DamageRatio
+    - cooldown:int
+    - perTurn:int
+    - perTarget:int
+    - tags: Set<SpellTag>
+    - producedEffects: List<IEffect>  // Composite of effects (damage, summons, etc.)
+    + canCast(ctx:CastContext) : boolean
+  }
+
+  enum SpellType {
+    ELEMENTAL,
+    NEUTRAL,
+    INNATE
+  }
+  enum SpellTag {
+    MECHANISM,
+    TRANSPOSE,
+    TELEPORT,
+    SUMMON,
+    ROUAGE,
+    SINISTRO,
+    REGULATOR,
+    DIAL,
+    INDIRECT
+  }
+
+  class ResourceCost {
+    - ap: int
+    - mp: int
+    - wp: int
+  }
+  class DamageRatio {
+    - base: int
+    - scaling: Map<String,Float>
+  } // e.g. { "aoe":0.9 }
+}
+
+package "domain.passive" {
+  interface Passive {
+    - id:String
+    - name:String
+    - description:String
+    - conditions: List<ICondition>
+    - gains: List<IEffect>
+    - removals: List<IEffect>
+  }
+}
+
+package "domain.sublimation" {
+  class Sublimation {
+    - id:String
+    - name:String
+    - type:SublimationType
+    - conditions: List<ICondition>
+    - gains: List<IEffect>
+    - removals: List<IEffect>
+  }
+  enum SublimationType {
+    CLASSIC,
+    EPIC,
+    RELIC
+  }
+}
+
+package "domain.condition" {
+  interface ICondition {
+    + isSatisfied(ctx:ConditionContext) : boolean
+  }
+
+  ' Specification Pattern (combinable conditions)
+  class AndCondition implements ICondition {
+    - left:ICondition
+    - right:ICondition
+  }
+  class OrCondition  implements ICondition {
+    - left:ICondition
+    - right:ICondition
+  }
+  class NotCondition implements ICondition {
+    - inner:ICondition
+  }
+
+  ' Examples of concrete conditions
+  class FacingCondition implements ICondition {
+    - requiredFacing:Facing
+    }
+  class OnDialCellCondition implements ICondition {}
+  class ChargesAtLeastCondition implements ICondition {
+    - sourceId:String
+    - min:int
+  }
+  class TurnHourWrapCondition implements ICondition {}
+  class OnTransposeCondition implements ICondition {}
+  class CritProcCondition implements ICondition {}
+  enum Facing {
+    FRONT,
+    SIDE,
+    BACK
+  }
+}
+
+package "domain.effect" {
+  interface IEffect {
+    + apply(ctx:EffectContext) : void
+  }
+
+  ' Composite: an effect can contain many effects
+  class CompositeEffect implements IEffect {
+    - children:List<IEffect>
+  }
+
+  ' Concrete effects
+  class ModifyResourceEffect implements IEffect {
+    - ap:int
+    - mp:int
+    - wp:int
+  }
+  class ModifyStatEffect implements IEffect {
+    - key:String
+    - flat:int
+    - pct:int
+    - duration:int
+  }
+  class DealDamageEffect implements IEffect {
+    - element:String
+    - ratio:DamageRatio
+    - source:DamageFormula
+  }
+  class HealEffect implements IEffect {
+    - percent:int | flat:int }
+  class SummonMechanismEffect implements IEffect {
+    - kind:MechanismType
+    - maxCharges:int
+  }
+  class AddChargeEffect implements IEffect {
+    - targetId:String
+    - amount:int
+    - max:int
+  }
+  class TriggerExplosionEffect implements IEffect {
+    - mechanismId:String
+    - scalingByCharges:boolean
+  }
+
+  enum MechanismType {
+    ROUAGE,
+    SINISTRO,
+    DIAL,
+    REGULATOR
+  }
+}
+
+package "domain.math" {
+  ' Strategy: interchangeable damage formulae
+  interface DamageFormula {
+    + compute(input:DamageInput) : DamageOutput
+  }
+
+  class StandardDamageFormula implements DamageFormula
+  class CritDamageFormula implements DamageFormula
+  ' Decorator
+  class BackstabDamageDecorator implements DamageFormula {
+    - inner:DamageFormula
+  }
+  class IndirectDamageDecorator implements DamageFormula {
+    - inner:DamageFormula
+  }
+  class ConditionalDIWrapper implements DamageFormula {
+    - inner:DamageFormula
+    - conds:List<ICondition>
+  }
+
+  class DamageInput {
+    - attackerStats:StatsAggregate
+    - targetResists:Map<String,Integer>
+    - element:String
+    - baseRatio:DamageRatio
+    - isCrit:boolean
+    - isBackstab:boolean
+    - isMelee:boolean
+    - isDistance:boolean
+    - isIndirect:boolean
+    - context:EffectContext
+  }
+  class DamageOutput {
+    - damage:int
+    - crit:boolean
+    - breakdown:Map<String,Number>
+  }
+}
+
+package "combat.model" {
+  class Board {
+    - cells:Map<Coord, Cell>
+    + getCell(c:Coord) : Cell
+  }
+  class Cell {
+    - coord:Coord
+    - hasDial:boolean
+    - entities:Set<EntityId>
+  }
+  class Coord {
+    - x:int
+    - y:int
+  }
+  class Orientation {
+    - facing:Facing
+  }
+
+  abstract class Entity {
+    - id:String
+    - pos:Coord
+    - orientation:Orientation
+  }
+  class Fighter extends Entity {
+    - build:Build
+    - resources:Resources
+  }
+  class Mechanism extends Entity {
+    - type:MechanismType
+    - charges:int
+    - maxCharges:int
+    - ownerId:String
+  }
+
+  class Resources {
+    - ap:int
+    - mp:int
+    - wp:int
+  }
+
+  ' State pattern for fight phases if needed
+  interface FightState {
+    + handle(event:GameEvent, ctx:FightContext):void
+  }
+  class PlayerTurnState implements FightState
+  class EnemyTurnState  implements FightState
+}
+
+package "combat.events" {
+  interface GameEvent
+  class TurnStarted implements GameEvent {
+    - fighterId:String
+  }
+  class TurnEnded   implements GameEvent {
+    - fighterId:String
+  }
+  class SpellCast   implements GameEvent {
+    - casterId:String
+    - spellId:String
+    - target:Coord
+  }
+  class Transpose   implements GameEvent {
+    - actorId:String
+    - from:Coord
+    - to:Coord
+  }
+  class HourWrapped implements GameEvent {}
+  class MechanismExploded implements GameEvent {
+    - mechanismId:String
+    - charges:int
+  }
+  class ChargesChanged implements GameEvent {
+    - mechanismId:String
+    - delta:int
+  }
+
+  interface EventSubscriber {
+    + onEvent(e:GameEvent, bus:EventBus):void
+  }
+  class EventBus {
+    - subscribers:List<EventSubscriber>
+    + publish(e:GameEvent):void
+    + subscribe(s:EventSubscriber):void
+  }
+}
+
+package "combat.commands" {
+  ' Command pattern: each combo step is a command
+  interface Command {
+    + execute(ctx:FightContext):void
+  }
+
+  class CastSpellCommand implements Command {
+    - casterId:String
+    - spellId:String
+    - target:Coord
+  }
+  class MoveCommand implements Command {
+    - entityId:String
+    - path:List<Coord>
+  }
+  class PlaceMechanismCommand implements Command {
+    - casterId:String
+    - kind:MechanismType
+    - target:Coord
+  }
+  class TransposeCommand implements Command {
+    - actorId:String
+    - withEntityId:String
+  }
+  class ChangeFacingCommand implements Command {
+    - entityId:String
+    - facing:Facing
+  }
+}
+
+package "simulation" {
+  class FightContext {
+    - board:Board
+    - fighters:Map<String,Fighter>
+    - mechanisms:Map<String,Mechanism>
+    - eventBus:EventBus
+    - rng:RandomProvider
+    - clock:BattleClock
+  }
+
+  class BattleClock {
+    - currentHour:int
+    - wraps:int
+  }
+  class RandomProvider {
+    + rollCrit(pct:int):boolean
+  }
+
+  class SimulationEngine {
+    - validator:CommandValidator
+    - resolver:ActionResolver
+    + run(combo:ComboScript, ctx:FightContext) : SimulationReport
+  }
+
+  class ComboScript {
+    - steps:List<Command>
+  }
+  class SimulationReport {
+    - timeline:List<ReportEntry>
+    - totalDamage:int
+    - resourceTrack:List<ResourceSnapshot>
+    - mechanismTrack:List<MechanismSnapshot>
+    - procDetails:List<ProcEntry>
+  }
+
+  class CommandValidator {
+    + validate(cmd:Command, ctx:FightContext):void
+  }
+  class ActionResolver implements EventSubscriber {
+    - damageCalc:DamageService
+    - procEngine:ProcEngine
+    + onEvent(e:GameEvent, bus:EventBus):void
+  }
+
+  class DamageService {
+    - critStrategy:CritStrategy
+    - baseFormulaFactory:DamageFormulaFactory
+    + computeDamage(input:DamageInput):DamageOutput
+  }
+
+  interface CritStrategy {
+    + isCrit(attacker:StatsAggregate, ctx:EffectContext):boolean
+  }
+  class PercentCritStrategy implements CritStrategy
+
+  class DamageFormulaFactory {
+    + buildFormula(input:DamageInput) : DamageFormula
+  }
+
+  class ProcEngine implements EventSubscriber {
+    - passiveHandlers:List<PassiveHandler>
+    - sublimationHandlers:List<SublimationHandler>
+    + onEvent(e:GameEvent, bus:EventBus):void
+  }
+
+  interface PassiveHandler extends EventSubscriber {
+    - passive:Passive
+  }
+  interface SublimationHandler extends EventSubscriber {
+    - sublimation:Sublimation
+  }
+}
+
+package "io" {
+  interface BuildParser {
+    + parse(json:String):Build
+  }
+  class JsonBuildParser implements BuildParser
+}
+
+package "repo" {
+  interface SpellRepository {
+    + findById(id:String):Spell
+  }
+  interface PassiveRepository {
+    + findById(id:String):Passive
+  }
+  interface SublimationRepository {
+    + findById(id:String):Sublimation
+  }
+  interface ClassRepository {
+    + findByName(name:String):CharacterClass
+  }
+}
+
+' ===========================
+' RELATIONS
+' ===========================
+
+' --- domain.character ---
+CharacterClass "1" o-- "*" Spell : baseSpells
+CharacterClass "1" o-- "*" Passive : basePassives
+
+Build "*" --> "1" CharacterClass
+Build *-- StatsAggregate
+Build "0..*" --> SpellRef : chosenSpells
+Build "0..*" --> PassiveRef : chosenPassives
+Build "0..*" --> SublimationRef : chosenSublimations
+
+SpellRef --> Spell : resolves
+PassiveRef --> Passive : resolves
+SublimationRef --> Sublimation : resolves
+
+' --- domain.stats ---
+StatsAggregate *-- ElementalMastery
+StatsAggregate *-- SecondaryMastery
+StatsAggregate *-- CombatStats
+
+' --- domain.spell ---
+ISpell <|.. Spell
+Spell *-- ResourceCost
+Spell *-- DamageRatio
+Spell o-- IEffect : producedEffects
+Spell ..> SpellType
+Spell ..> SpellTag
+Spell ..> FightContext : canCast(ctx)  ' via CastContext/Fight state
+
+' --- domain.passive ---
+Passive ..> ICondition : conditions
+Passive ..> IEffect : gains/removals
+
+' --- domain.sublimation ---
+Sublimation ..> ICondition : conditions
+Sublimation ..> IEffect : gains/removals
+Sublimation ..> SublimationType
+
+' --- domain.condition (Specification) ---
+ICondition <|.. AndCondition
+ICondition <|.. OrCondition
+ICondition <|.. NotCondition
+ICondition <|.. FacingCondition
+ICondition <|.. OnDialCellCondition
+ICondition <|.. ChargesAtLeastCondition
+ICondition <|.. TurnHourWrapCondition
+ICondition <|.. OnTransposeCondition
+ICondition <|.. CritProcCondition
+
+FacingCondition ..> Facing
+OnDialCellCondition ..> Cell
+ChargesAtLeastCondition ..> Mechanism
+TurnHourWrapCondition ..> BattleClock
+OnTransposeCondition ..> Transpose
+ICondition ..> ConditionContext : isSatisfied(ctx)
+
+' --- domain.effect (Composite) ---
+IEffect <|.. CompositeEffect
+IEffect <|.. ModifyResourceEffect
+IEffect <|.. ModifyStatEffect
+IEffect <|.. DealDamageEffect
+IEffect <|.. HealEffect
+IEffect <|.. SummonMechanismEffect
+IEffect <|.. AddChargeEffect
+IEffect <|.. TriggerExplosionEffect
+
+CompositeEffect o-- IEffect : children
+DealDamageEffect --> DamageRatio
+DealDamageEffect ..> DamageFormula
+SummonMechanismEffect ..> MechanismType
+AddChargeEffect ..> Mechanism
+TriggerExplosionEffect ..> Mechanism
+IEffect ..> EffectContext : apply(ctx)
+
+' --- domain.math (Strategy + Decorator) ---
+DamageFormula <|.. StandardDamageFormula
+DamageFormula <|.. CritDamageFormula
+DamageFormula <|.. BackstabDamageDecorator
+DamageFormula <|.. IndirectDamageDecorator
+DamageFormula <|.. ConditionalDIWrapper
+
+BackstabDamageDecorator o-- DamageFormula : inner
+IndirectDamageDecorator  o-- DamageFormula : inner
+ConditionalDIWrapper  o-- DamageFormula : inner
+DamageInput --> StatsAggregate : attackerStats
+DamageInput --> DamageRatio : baseRatio
+DamageFormulaFactory ..> DamageFormula : buildFormula()
+
+' --- combat.model ---
+Board *-- Cell
+Cell *-- Coord
+Entity <|-- Fighter
+Entity <|-- Mechanism
+Entity *-- Orientation
+Orientation --> Facing
+Fighter *-- Build
+Fighter *-- Resources
+Mechanism --> MechanismType
+Board o-- Entity : entities on board
+
+' --- combat.events (Pub/Sub) ---
+GameEvent <|.. TurnStarted
+GameEvent <|.. TurnEnded
+GameEvent <|.. SpellCast
+GameEvent <|.. Transpose
+GameEvent <|.. HourWrapped
+GameEvent <|.. MechanismExploded
+GameEvent <|.. ChargesChanged
+
+EventSubscriber <|.. ActionResolver
+EventSubscriber <|.. ProcEngine
+EventBus o-- EventSubscriber : subscribers
+EventBus ..> GameEvent : publish(e)
+
+' --- combat.commands (Command) ---
+Command <|.. CastSpellCommand
+Command <|.. MoveCommand
+Command <|.. PlaceMechanismCommand
+Command <|.. TransposeCommand
+Command <|.. ChangeFacingCommand
+
+CastSpellCommand --> Spell
+CastSpellCommand --> Coord : target
+MoveCommand --> Coord : path*
+PlaceMechanismCommand --> MechanismType
+TransposeCommand --> Entity : withEntity
+ChangeFacingCommand --> Facing
+
+' --- simulation (Engine, Services) ---
+FightContext *-- Board
+FightContext *-- EventBus
+FightContext o-- Fighter
+FightContext o-- Mechanism
+FightContext *-- RandomProvider
+FightContext *-- BattleClock
+
+SimulationEngine *-- CommandValidator
+SimulationEngine *-- ActionResolver
+SimulationEngine --> ComboScript
+SimulationEngine --> FightContext
+SimulationEngine --> SimulationReport
+
+ActionResolver ..|> EventSubscriber
+ActionResolver *-- DamageService
+ActionResolver *-- ProcEngine
+
+DamageService *-- CritStrategy
+DamageService *-- DamageFormulaFactory
+DamageService ..> DamageInput : compute()
+
+CritStrategy <|.. PercentCritStrategy
+
+ProcEngine ..|> EventSubscriber
+ProcEngine o-- PassiveHandler
+ProcEngine o-- SublimationHandler
+
+PassiveHandler ..|> EventSubscriber
+SublimationHandler ..|> EventSubscriber
+PassiveHandler --> Passive
+SublimationHandler --> Sublimation
+
+ComboScript o-- Command : steps
+CommandValidator ..> Command : validate(cmd)
+CommandValidator ..> FightContext
+
+' --- io & repo ---
+JsonBuildParser ..|> BuildParser
+BuildParser --> Build : parse(json)
+
+SpellRepository --> Spell
+PassiveRepository --> Passive
+SublimationRepository --> Sublimation
+ClassRepository --> CharacterClass
