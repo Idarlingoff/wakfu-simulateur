@@ -40,7 +40,7 @@ import {EnemyFormComponent} from './enemy-form.component';
             >
               <div class="build-name">{{ build.name }}</div>
               <div class="build-meta">
-                {{ build.classId }} • R{{ build.characterLevel }}
+                {{ build.classId }} • Lvl.{{ build.characterLevel }}
               </div>
               <div class="build-actions">
                 <button (click)="onEditBuild($event, build)" class="btn-edit">✏️</button>
@@ -800,8 +800,6 @@ export class DashboardComponent {
   }
 
   onClearBoard(): void {
-    // if (confirm('Êtes-vous sûr de vouloir effacer complètement le plateau ? Cette action est irréversible.')) {
-    // }
     this.boardService.clearBoard();
     this.timelineService.clearCurrentTimeline();
     alert('✓ Plateau et timeline complètement effacés !');
