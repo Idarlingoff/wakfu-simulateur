@@ -1,1 +1,122 @@
-/* You can add global styles to this file, and also import other style files */
+/**
+ * Global Styles and Theme Variables
+ */
+
+:root {
+  /* Theme Colors */
+  --bg: #0f1115;
+  --panel: #181b22;
+  --panel-2: #1d2230;
+  --muted: #8c9bb3;
+  --accent: #4cc9f0;
+  --good: #7bd88f;
+  --warn: #ffd166;
+  --bad: #ef476f;
+  --stroke: #2a2f3a;
+
+  /* Spacing */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 16px;
+
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: #e8ecf3;
+  font-family: Inter, Segoe UI, system-ui, -apple-system, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--stroke);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3a4555;
+}
+
+/* Base Form Elements */
+input,
+select,
+textarea {
+  background: var(--panel-2);
+  border: 1px solid var(--stroke);
+  color: #e8ecf3;
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(76, 201, 240, 0.2);
+}
+
+input::placeholder {
+  color: var(--muted);
+}
+
+/* Buttons */
+button {
+  background: #253044;
+  border: 1px solid var(--stroke);
+  color: #e8ecf3;
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+button:hover {
+  background: #2d3a4f;
+  opacity: 0.9;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+/* Utility Classes */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+

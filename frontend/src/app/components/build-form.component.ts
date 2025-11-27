@@ -1,0 +1,499 @@
+/**
+ * Build Form Component
+ * Form for creating and editing builds
+ */
+
+import { Component, inject, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { BuildService } from '../services/build.service';
+import { Build, BuildStats } from '../models/build.model';
+
+interface FormBuild {
+  name: string;
+  classId: string;
+  characterLevel: number;
+  description: string;
+  stats: BuildStats;
+}
+
+@Component({
+  selector: 'app-build-form',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <div class="modal-overlay" *ngIf="isOpen()" (click)="onClose()">
+      <div class="modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h2>{{ editingBuildId() ? 'Modifier Build' : 'Créer Build' }}</h2>
+          <button class="close" (click)="onClose()">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <form (ngSubmit)="onSubmit()">
+            <!-- Basic Info -->
+            <div class="form-section">
+              <h3>Informations de base</h3>
+
+              <div class="form-group">
+                <label>Nom du build *</label>
+                <input
+                  type="text"
+                  [(ngModel)]="form.name"
+                  name="name"
+                  placeholder="ex: Xélor - Rouage Cycle"
+                  required
+                />
+              </div>
+
+              <div class="form-group">
+                <label>Classe *</label>
+                <select [(ngModel)]="form.classId" name="classId" required>
+                  <option value="">-- Sélectionner --</option>
+                  <option value="xelor">Xélor</option>
+                  <option value="sacrier">Sacrier</option>
+                  <option value="osamodas">Osamodas</option>
+                  <option value="ecaflip">Écaflip</option>
+                  <option value="enutrof">Enutrof</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Niveau du personnage *</label>
+                <input
+                  type="number"
+                  [(ngModel)]="form.characterLevel"
+                  name="level"
+                  min="1"
+                  max="215"
+                  required
+                />
+              </div>
+
+              <div class="form-group">
+                <label>Description</label>
+                <textarea
+                  [(ngModel)]="form.description"
+                  name="description"
+                  placeholder="Description du build..."
+                  rows="3"
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="form-section">
+              <h3>Statistiques</h3>
+
+              <div class="stats-grid">
+                <div class="form-group">
+                  <label>Maîtrise Principale</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.masteryPrimary"
+                    name="masteryPrimary"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Maîtrise Secondaire</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.masterySecondary"
+                    name="masterySecondary"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Maîtrise Dos</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.backMastery"
+                    name="backMastery"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Dégâts Infligés</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.dommageInflict"
+                    name="dommageInflict"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Taux de Critique (%)</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.critRate"
+                    name="critRate"
+                    min="0"
+                    max="100"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Maîtrise Critique</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.critMastery"
+                    name="critMastery"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Résistance</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.resistance"
+                    name="resistance"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>AP (Action Points)</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.ap"
+                    name="ap"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>MP (Movement Points)</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.mp"
+                    name="mp"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>WP (Power Points)</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.wp"
+                    name="wp"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>Portée</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.range"
+                    name="range"
+                    min="0"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" (click)="onClose()">Annuler</button>
+              <button type="submit" class="btn-primary">
+                {{ editingBuildId() ? 'Modifier' : 'Créer' }}
+              </button>
+              <button
+                type="button"
+                class="btn-danger"
+                *ngIf="editingBuildId()"
+                (click)="onDelete()"
+              >
+                Supprimer
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `,
+  styles: [`
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .modal-header h2 {
+      margin: 0;
+      color: #cfe3ff;
+      font-size: 18px;
+    }
+
+    .close {
+      background: transparent;
+      border: none;
+      color: #e8ecf3;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .form-section {
+      margin-bottom: 24px;
+    }
+
+    .form-section h3 {
+      font-size: 14px;
+      color: var(--accent);
+      margin: 0 0 12px 0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      background: var(--panel-2);
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 14px;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 8px rgba(76, 201, 240, 0.2);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      padding-top: 16px;
+      border-top: 1px solid var(--stroke);
+      margin-top: 24px;
+    }
+
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #7aa2f7, #5ad7f0);
+      color: #0b1220;
+      flex: 1;
+    }
+
+    .btn-primary:hover {
+      opacity: 0.9;
+    }
+
+    .btn-secondary {
+      background: #253044;
+      color: #e8ecf3;
+      border: 1px solid var(--stroke);
+    }
+
+    .btn-secondary:hover {
+      background: #2d3a4f;
+    }
+
+    .btn-danger {
+      background: var(--bad);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      opacity: 0.9;
+    }
+  `]
+})
+export class BuildFormComponent {
+  buildService = inject(BuildService);
+
+  isOpen = signal(false);
+  editingBuildId = signal<string | null>(null);
+
+  form: FormBuild = {
+    name: '',
+    classId: '',
+    characterLevel: 185,
+    description: '',
+    stats: {
+      level: 185,
+      masteryPrimary: 0,
+      masterySecondary: 0,
+      backMastery: 0,
+      dommageInflict: 0,
+      critRate: 0,
+      critMastery: 0,
+      resistance: 0,
+      ap: 12,
+      mp: 3,
+      wp: 0,
+      range: 3
+    }
+  };
+
+  /**
+   * Open form for creating new build
+   */
+  openNew(): void {
+    this.editingBuildId.set(null);
+    this.form = {
+      name: '',
+      classId: '',
+      characterLevel: 185,
+      description: '',
+      stats: {
+        level: 185,
+        masteryPrimary: 0,
+        masterySecondary: 0,
+        backMastery: 0,
+        dommageInflict: 0,
+        critRate: 0,
+        critMastery: 0,
+        resistance: 0,
+        ap: 12,
+        mp: 3,
+        wp: 0,
+        range: 3
+      }
+    };
+    this.isOpen.set(true);
+  }
+
+  /**
+   * Open form for editing existing build
+   */
+  openEdit(build: Build): void {
+    this.editingBuildId.set(build.id);
+    this.form = {
+      name: build.name,
+      classId: build.classId,
+      characterLevel: build.characterLevel,
+      description: build.description || '',
+      stats: { ...build.stats }
+    };
+    this.isOpen.set(true);
+  }
+
+  /**
+   * Handle form submission
+   */
+  onSubmit(): void {
+    if (!this.form.name || !this.form.classId) {
+      alert('Veuillez remplir les champs obligatoires');
+      return;
+    }
+
+    if (this.editingBuildId()) {
+      // Update existing build
+      this.buildService.updateBuild(this.editingBuildId()!, this.form as Partial<Build>);
+      alert('Build modifié avec succès!');
+    } else {
+      // Create new build
+      const newBuild: Build = {
+        id: `build_${Date.now()}`,
+        name: this.form.name,
+        classId: this.form.classId,
+        characterLevel: this.form.characterLevel,
+        description: this.form.description,
+        spellBar: { spells: new Array(12).fill(null) },
+        passiveBar: { passives: new Array(6).fill(null) },
+        sublimationBar: { sublimations: new Array(12).fill(null) },
+        stats: this.form.stats,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      this.buildService.createBuild(newBuild);
+      alert('Build créé avec succès!');
+    }
+
+    this.onClose();
+  }
+
+  /**
+   * Delete current build
+   */
+  onDelete(): void {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce build?')) {
+      this.buildService.deleteBuild(this.editingBuildId()!);
+      alert('Build supprimé!');
+      this.onClose();
+    }
+  }
+
+  /**
+   * Close form
+   */
+  onClose(): void {
+    this.isOpen.set(false);
+    this.editingBuildId.set(null);
+  }
+}
+
