@@ -8,12 +8,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
+import { BoardService } from '../services/board.service';
 import { Timeline, TimelineStep } from '../models/timeline.model';
 
 interface FormStep {
   id: string;
   actionType: 'CastSpell' | 'Move' | 'Transpose' | 'ChangeFacing';
   spellId: string;
+  entityId?: string; // ID de l'entité à déplacer (optionnel, par défaut = joueur)
   targetX: number;
   targetY: number;
   facing: 'front' | 'side' | 'back';
@@ -90,6 +92,16 @@ interface FormStep {
                           <option value="Move">Déplacement</option>
                           <option value="Transpose">Transposition</option>
                           <option value="ChangeFacing">Changer direction</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group" *ngIf="step.actionType === 'Move' || step.actionType === 'Transpose'">
+                        <label>Entité à déplacer</label>
+                        <select [(ngModel)]="step.entityId" [name]="'entity_' + i">
+                          <option value="">🧙 Joueur (par défaut)</option>
+                          <option *ngFor="let entity of getEntities()" [value]="entity.id">
+                            {{ entity.type === 'player' ? '🧙' : '👹' }} {{ entity.name }}
+                          </option>
                         </select>
                       </div>
 
@@ -400,6 +412,7 @@ interface FormStep {
 export class TimelineFormComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
+  boardService = inject(BoardService);
 
   isOpen = signal(false);
   editingTimelineId = signal<string | null>(null);
@@ -444,6 +457,7 @@ export class TimelineFormComponent {
         id: step.id,
         actionType: (action?.type || 'CastSpell') as any,
         spellId: action?.spellId || '',
+        entityId: action?.entityId || '', // Extraire l'entityId
         targetX: action?.targetPosition?.x || 0,
         targetY: action?.targetPosition?.y || 0,
         facing: action?.targetFacing?.direction || 'front',
@@ -462,6 +476,7 @@ export class TimelineFormComponent {
       id: `action_${Date.now()}`,
       actionType: 'CastSpell',
       spellId: '',
+      entityId: '', // Par défaut vide = joueur
       targetX: 6,
       targetY: 10,
       facing: 'front',
@@ -487,15 +502,21 @@ export class TimelineFormComponent {
   }
 
   /**
+   * Get all entities from board (players and enemies)
+   */
+  getEntities() {
+    return this.boardService.state().entities;
+  }
+
+  /**
    * Handle form submission
    */
-  onSubmit(): void {
+  async onSubmit(): Promise<void> {
     if (!this.form.name || !this.form.buildId || this.steps.length === 0) {
       alert('Veuillez remplir les champs obligatoires et ajouter au moins une étape');
       return;
     }
 
-    // Convert form steps to timeline steps
     const timelineSteps: TimelineStep[] = this.steps.map((step, idx) => ({
       id: step.id,
       actions: [{
@@ -503,33 +524,47 @@ export class TimelineFormComponent {
         type: step.actionType,
         order: idx + 1,
         spellId: step.spellId || undefined,
+        entityId: step.entityId || undefined, // Ajouter l'entité à déplacer
         targetPosition: { x: step.targetX, y: step.targetY },
         targetFacing: { direction: step.facing }
       }],
       description: step.description
     }));
 
-    const timeline: Timeline = {
-      id: this.editingTimelineId() || `timeline_${Date.now()}`,
-      name: this.form.name,
-      buildId: this.form.buildId,
-      steps: timelineSteps,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-
     if (this.editingTimelineId()) {
-      // Update existing timeline
-      this.timelineService.updateTimeline(this.editingTimelineId()!, timeline);
-      console.log('✏️ Timeline updated:', this.editingTimelineId());
-      alert('Timeline modifiée avec succès!');
+      // Mode édition : mettre à jour uniquement les champs modifiés
+      const updated = await this.timelineService.updateTimeline(this.editingTimelineId()!, {
+        name: this.form.name,
+        buildId: this.form.buildId,
+        steps: timelineSteps
+      });
+      if (updated) {
+        console.log('✏️ Timeline updated:', this.editingTimelineId());
+        alert('Timeline modifiée avec succès!');
+      } else {
+        alert('Erreur lors de la modification de la timeline');
+        return;
+      }
     } else {
-      // Create new timeline
-      this.timelineService.createTimeline(timeline);
-      // Auto-load newly created timeline
-      this.timelineService.loadTimeline(timeline.id);
-      console.log('✅ Timeline created and loaded:', timeline.id);
-      alert('Timeline créée avec succès!');
+      // Mode création : créer une nouvelle timeline
+      const timeline: Timeline = {
+        id: `timeline_${Date.now()}`,
+        name: this.form.name,
+        buildId: this.form.buildId,
+        steps: timelineSteps,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      const created = await this.timelineService.createTimeline(timeline);
+      if (created) {
+        this.timelineService.loadTimeline(created.id);
+        console.log('✅ Timeline created and loaded:', created.id);
+        alert('Timeline créée avec succès!');
+      } else {
+        alert('Erreur lors de la création de la timeline');
+        return;
+      }
     }
 
     this.onClose();
@@ -538,11 +573,15 @@ export class TimelineFormComponent {
   /**
    * Delete current timeline
    */
-  onDelete(): void {
+  async onDelete(): Promise<void> {
     if (confirm('Êtes-vous sûr de vouloir supprimer cette timeline?')) {
-      this.timelineService.deleteTimeline(this.editingTimelineId()!);
-      alert('Timeline supprimée!');
-      this.onClose();
+      const deleted = await this.timelineService.deleteTimeline(this.editingTimelineId()!);
+      if (deleted) {
+        alert('Timeline supprimée!');
+        this.onClose();
+      } else {
+        alert('Erreur lors de la suppression de la timeline');
+      }
     }
   }
 

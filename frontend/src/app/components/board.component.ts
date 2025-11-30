@@ -3,11 +3,12 @@
  * Interactive combat map showing entities, mechanisms, and spell actions
  */
 
-import { Component, inject, computed, output } from '@angular/core';
+import { Component, inject, computed, output, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
+import { SimulationService } from '../services/simulation.service';
 import { BoardEntity } from '../models/board.model';
 
 interface BoardCell {
@@ -37,7 +38,7 @@ interface BoardCell {
             ◀ Étape Précédente
           </button>
           <span class="step-indicator">
-            Étape {{ currentStepIndex() + 1 }} / {{ totalSteps() }}
+            {{ currentStepIndex() === 0 ? 'État initial' : 'Étape ' + currentStepIndex() }} / {{ totalSteps() - 1 }}
           </span>
           <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1" class="btn-nav">
             Étape Suivante ▶
@@ -756,6 +757,7 @@ export class BoardComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
   boardService = inject(BoardService);
+  simulationService = inject(SimulationService);
 
   editPlayer = output<BoardEntity>();
   editEnemy = output<BoardEntity>();
@@ -765,14 +767,30 @@ export class BoardComponent {
 
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
 
+  constructor() {
+    // Nettoyer l'historique quand on change de timeline
+    effect(() => {
+      const timeline = this.currentTimeline();
+      if (timeline) {
+        this.boardService.clearHistory();
+        console.log('🗑️ Historique nettoyé pour la nouvelle timeline');
+      }
+    });
+  }
+
   currentStep = computed(() => {
     const timeline = this.currentTimeline();
     if (!timeline) return null;
     const idx = this.currentStepIndex();
-    return timeline.steps[idx] || null;
+    // idx = 0 → État initial (avant toute exécution)
+    // idx = 1, 2, 3... → Affiche l'étape correspondante (idx)
+    return idx > 0 && idx <= timeline.steps.length ? timeline.steps[idx - 1] || null : null;
   });
 
-  totalSteps = computed(() => this.currentTimeline()?.steps.length || 0);
+  totalSteps = computed(() => {
+    const stepsCount = this.currentTimeline()?.steps.length || 0;
+    return stepsCount + 1; // +1 pour l'état initial
+  });
 
   boardCells = computed(() => {
     const cells: BoardCell[] = [];
@@ -810,13 +828,17 @@ export class BoardComponent {
 
   /**
    * Get action at position
+   * Exclude Move and Transpose actions as they directly move entities
    */
   getActionAtPosition(x: number, y: number) {
     if (!this.currentStep()) return null;
 
     const actions = this.currentStep()?.actions || [];
     return actions.find(a =>
-      a.targetPosition?.x === x && a.targetPosition?.y === y
+      a.targetPosition?.x === x &&
+      a.targetPosition?.y === y &&
+      a.type !== 'Move' && // Ne pas afficher d'indicateur pour les déplacements
+      a.type !== 'Transpose' // Ne pas afficher d'indicateur pour les transpositions
     );
   }
 
@@ -834,27 +856,76 @@ export class BoardComponent {
 
   /**
    * Get spell name by ID
+   * Note: SpellReference ne contient que l'ID, pas le nom complet.
+   * Pour obtenir le nom, il faudrait charger les données complètes du sort
+   * depuis le service WakfuApiService.
    */
   getSpellName(spellId: string): string {
     const build = this.buildService.selectedBuildA();
     if (!build) return spellId;
-    const spell = build.spellBar.spells.find(s => s?.id === spellId);
-    return spell?.name || spellId;
+
+    // SpellReference contient spellId, pas id ni name
+    const spellRef = build.spellBar.spells.find(s => s?.spellId === spellId);
+
+    // Retourne l'ID car SpellReference ne contient pas le nom
+    return spellRef?.spellId || spellId;
   }
 
   /**
    * Navigation
    */
-  onNextStep(): void {
+  async onNextStep(): Promise<void> {
+    const timeline = this.currentTimeline();
+    const build = this.buildService.selectedBuildA();
+    const currentIndex = this.currentStepIndex();
+
+    if (!timeline || !build) {
+      console.warn('⚠️ Timeline ou Build manquant');
+      return;
+    }
+
+    // Si c'est le premier pas (état initial → étape 1), sauvegarder l'état initial
+    if (currentIndex === 0) {
+      this.boardService.saveInitialState();
+    }
+
+    // Passer à l'étape suivante d'abord
     this.timelineService.nextStep();
+
+    // Puis exécuter l'étape qu'on vient d'atteindre (si elle existe)
+    const newIndex = this.currentStepIndex();
+    if (newIndex > 0 && newIndex <= timeline.steps.length) {
+      const realStepIndex = newIndex - 1; // L'index réel dans le tableau steps
+      await this.simulationService.executeStep(build, timeline, realStepIndex);
+
+      // Sauvegarder l'état après l'exécution
+      this.boardService.pushState();
+    }
   }
 
   onPreviousStep(): void {
-    this.timelineService.previousStep();
+    const currentIndex = this.currentStepIndex();
+
+    if (currentIndex > 0) {
+      // Revenir à l'étape précédente
+      this.timelineService.previousStep();
+
+      // Restaurer l'état du plateau correspondant
+      const newIndex = this.currentStepIndex();
+      this.boardService.restoreStateAtIndex(newIndex);
+
+      console.log(`⬅️ Retour à l'étape ${newIndex === 0 ? 'initiale' : newIndex}`);
+    }
   }
 
   onReset(): void {
+    // Réinitialiser la timeline à l'étape 0
     this.timelineService.resetTimeline();
+
+    // Restaurer le plateau à son état initial
+    this.boardService.restoreInitialState();
+
+    console.log('🔄 Timeline et plateau réinitialisés');
   }
 
   /**
@@ -874,4 +945,3 @@ export class BoardComponent {
     }
   }
 }
-

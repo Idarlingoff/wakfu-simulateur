@@ -1,21 +1,14 @@
-export interface Spell {
-  id: string;
-  name: string;
-  classId: string;
-  level: number;
-  range: number;
-  pa: number;
-  pw: number;
-  description: string;
+
+// Simple references for build (full data comes from spell.model and passive.model)
+export interface SpellReference {
+  spellId: string;
+  level?: number;
   icon?: string;
 }
 
-export interface Passive {
-  id: string;
-  name: string;
-  classId: string;
-  unlockedAtLevel: number;
-  description: string;
+export interface PassiveReference {
+  passiveId: string;
+  unlockedAtLevel?: number;
   icon?: string;
 }
 
@@ -29,11 +22,11 @@ export interface Sublimation {
 }
 
 export interface SpellBar {
-  spells: (Spell | null)[]; // 12 slots
+  spells: (SpellReference | null)[]; // 12 slots
 }
 
 export interface PassiveBar {
-  passives: (Passive | null)[]; // 6 slots with level locks
+  passives: (PassiveReference | null)[]; // 6 slots with level locks
 }
 
 export interface SublimationBar {

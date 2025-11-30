@@ -1,22 +1,23 @@
-/**
- * Build Service - IMPLEMENTATION
- * Gère l'état des builds avec logique métier
- */
-
-import { Injectable, signal, computed, effect } from '@angular/core';
-import { Build, Spell, BuildStats, SpellBar, PassiveBar, SublimationBar } from '../models/build.model';
+import { Injectable, signal, computed } from '@angular/core';
+import { Build, BuildStats, SpellBar, PassiveBar, SublimationBar, SpellReference } from '../models/build.model';
+import { WakfuApiService } from './wakfu-api.service';
+import { firstValueFrom } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class BuildService {
   // State Signals
-  private builds = signal<Build[]>([]);
-  private selectedBuildIdA = signal<string | null>(null);
-  private selectedBuildIdB = signal<string | null>(null);
+  private readonly builds = signal<Build[]>([]);
+  private readonly selectedBuildIdA = signal<string | null>(null);
+  private readonly selectedBuildIdB = signal<string | null>(null);
+  private readonly isLoading = signal<boolean>(false);
+  private readonly loadError = signal<string | null>(null);
 
   // Computed Selectors
   public allBuilds = computed(() => this.builds());
+  public loading = computed(() => this.isLoading());
+  public error = computed(() => this.loadError());
 
   public selectedBuildA = computed(() => {
     const id = this.selectedBuildIdA();
@@ -34,78 +35,36 @@ export class BuildService {
     return (a && b) ? { buildA: a, buildB: b } : null;
   });
 
-  constructor() {
-    this.initializeMockData();
-    // Auto-persist on changes
-    effect(() => {
-      this.saveToPersistence();
-    });
+  constructor(private readonly api: WakfuApiService) {
+    // Charger depuis le backend au démarrage
+    // Note: Appel async dans le constructeur - à améliorer si nécessaire
+    this.loadFromBackend();
   }
 
   /**
-   * Initialize with mock data for testing
+   * Charger les builds depuis le backend
    */
-  private initializeMockData(): void {
-    const mockBuilds: Build[] = [
-      {
-        id: 'build_1',
-        name: 'Xélor - Rouage Cycle',
-        classId: 'xelor',
-        characterLevel: 185,
-        spellBar: {
-          spells: [
-            { id: 'vol_du_temps', name: 'Vol du Temps', classId: 'xelor', level: 1, range: 3, pa: 2, pw: 0, description: 'Inflige dégâts' },
-            { id: 'rouage', name: 'Rouage', classId: 'xelor', level: 1, range: 2, pa: 2, pw: 1, description: 'Place un rouage' },
-            { id: 'distorsion', name: 'Distorsion', classId: 'xelor', level: 6, range: 1, pa: 2, pw: 1, description: 'Transpose et augmente dégâts' },
-            { id: 'cadran', name: 'Cadran', classId: 'xelor', level: 1, range: 2, pa: 2, pw: 0, description: 'Place le cadran' },
-            null, null, null, null, null, null, null, null
-          ]
-        },
-        passiveBar: {
-          passives: [
-            { id: 'p1', name: 'Maître du Cadran', classId: 'xelor', unlockedAtLevel: 1, description: 'Passive 1' },
-            { id: 'p2', name: 'Cours du temps', classId: 'xelor', unlockedAtLevel: 1, description: 'Passive 2' },
-            null, null, null, null
-          ]
-        },
-        sublimationBar: {
-          sublimations: [
-            // 10 classic
-            { id: 's1', name: 'Rune Classique 1', rarity: 'classic', stats: { dommageInflict: 50 }, description: 'Subli 1' },
-            { id: 's2', name: 'Rune Classique 2', rarity: 'classic', stats: { dommageInflict: 50 }, description: 'Subli 2' },
-            { id: 's3', name: 'Rune Classique 3', rarity: 'classic', stats: { masteryPrimary: 10 }, description: 'Subli 3' },
-            { id: 's4', name: 'Rune Classique 4', rarity: 'classic', stats: { masteryPrimary: 10 }, description: 'Subli 4' },
-            { id: 's5', name: 'Rune Classique 5', rarity: 'classic', stats: { ap: 1 }, description: 'Subli 5' },
-            null,
-            null,
-            null,
-            null,
-            null,
-            // 1 epic
-            { id: 's_epic', name: 'Rune Épique', rarity: 'epic', stats: { dommageInflict: 100, masteryPrimary: 20 }, description: 'Epic Subli' },
-            // 1 relic
-            { id: 's_relic', name: 'Rune Relique', rarity: 'relic', stats: { dommageInflict: 200, critRate: 10 }, description: 'Relic Subli' }
-          ]
-        },
-        stats: {
-          level: 185,
-          masteryPrimary: 300,        // Feu
-          masterySecondary: 150,      // Eau
-          backMastery: 100,           // Dos
-          dommageInflict: 150,        // Dégâts infligés
-          critRate: 25,               // Taux de critique (%)
-          critMastery: 50,            // Maîtrise critique
-          resistance: 10,             // Résistance
-          ap: 12,                     // Action Points
-          mp: 3,                      // Movement Points
-          wp: 0,                      // Power Points
-          range: 3                    // Portée
-        },
-        description: 'Build de test Xélor - Rouage/Distorsion',
-        createdAt: new Date()
-      }
-    ];
-    this.builds.set(mockBuilds);
+  async loadFromBackend(): Promise<void> {
+    this.isLoading.set(true);
+    this.loadError.set(null);
+
+    // Charger d'abord depuis localStorage
+    this.loadFromPersistence();
+
+    try {
+      const backendBuilds = await firstValueFrom(this.api.getAllBuilds());
+      this.builds.set(backendBuilds);
+      this.saveToPersistence();
+      console.log('✅ Builds chargés depuis le backend:', backendBuilds.length);
+    } catch (error: any) {
+      const errorMsg = `Erreur de chargement depuis le backend: ${error.message}`;
+      this.loadError.set(errorMsg);
+      console.error('❌', errorMsg);
+      console.warn('⚠️ Utilisation des builds depuis localStorage');
+      // Les builds de localStorage sont déjà chargés
+    } finally {
+      this.isLoading.set(false);
+    }
   }
 
   /**
@@ -134,34 +93,109 @@ export class BuildService {
     }
   }
 
+  // ============ Helper Methods ============
+
+  /**
+   * Prépare un build pour l'envoi au backend
+   * Convertit les objets Date en ISO strings
+   */
+  private prepareBuildForBackend(build: Build): any {
+    return {
+      ...build,
+      createdAt: build.createdAt ? new Date(build.createdAt).toISOString() : undefined,
+      updatedAt: build.updatedAt ? new Date(build.updatedAt).toISOString() : undefined
+    };
+  }
+
+  /**
+   * Convertit un build reçu du backend en objet Build
+   */
+  private parseBuildFromBackend(data: any): Build {
+    return {
+      ...data,
+      createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
+      updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined
+    };
+  }
+
   // ============ CRUD Operations ============
 
-  public createBuild(build: Build): Build {
-    const newBuild: Build = {
-      ...build,
-      id: build.id || `build_${Date.now()}`,
-      createdAt: new Date(),
-      updatedAt: new Date()
-    };
-    this.builds.update(builds => [...builds, newBuild]);
-    return newBuild;
+  public async createBuild(build: Build): Promise<Build | null> {
+    // Ajouter immédiatement au state local
+    this.builds.update(builds => [...builds, build]);
+    this.saveToPersistence();
+    console.log('✅ Build créé localement:', build.id);
+
+    // Tenter de synchroniser avec le backend en arrière-plan
+    try {
+      const buildForBackend = this.prepareBuildForBackend(build);
+      const created = await firstValueFrom(this.api.createBuild(buildForBackend));
+      const parsedBuild = this.parseBuildFromBackend(created);
+
+      // Remplacer par la version backend si elle diffère
+      this.builds.update(builds =>
+        builds.map(b => b.id === build.id ? parsedBuild : b)
+      );
+      this.saveToPersistence();
+      console.log('✅ Build synchronisé avec le backend:', created.id);
+      return parsedBuild;
+    } catch (error) {
+      console.warn('⚠️ Impossible de synchroniser avec le backend, build gardé en local:', error);
+      return build; // Retourner le build local même si backend échoue
+    }
   }
 
-  public updateBuild(buildId: string, updates: Partial<Build>): void {
+  public async updateBuild(buildId: string, updates: Partial<Build>): Promise<boolean> {
+    const build = this.builds().find(b => b.id === buildId);
+    if (!build) return false;
+
+    const updated = { ...build, ...updates, updatedAt: new Date() } as Build;
+
+    // Mettre à jour immédiatement en local
     this.builds.update(builds =>
-      builds.map(b =>
-        b.id === buildId
-          ? { ...b, ...updates, updatedAt: new Date() }
-          : b
-      )
+      builds.map(b => b.id === buildId ? updated : b)
     );
+    this.saveToPersistence();
+    console.log('✅ Build mis à jour localement:', buildId);
+
+    // Tenter de synchroniser avec le backend en arrière-plan
+    try {
+      const buildForBackend = this.prepareBuildForBackend(updated);
+      const result = await firstValueFrom(this.api.updateBuild(buildId, buildForBackend));
+      const parsedBuild = this.parseBuildFromBackend(result);
+
+      this.builds.update(builds =>
+        builds.map(b => b.id === buildId ? parsedBuild : b)
+      );
+      this.saveToPersistence();
+      console.log('✅ Build synchronisé avec le backend:', buildId);
+      return true;
+    } catch (error) {
+      console.warn('⚠️ Impossible de synchroniser avec le backend, build gardé en local:', error);
+      return true; // Retourner true car la mise à jour locale a réussi
+    }
   }
 
-  public deleteBuild(buildId: string): void {
+  public async deleteBuild(buildId: string): Promise<boolean> {
+    // Supprimer immédiatement en local
     this.builds.update(builds => builds.filter(b => b.id !== buildId));
+
     // Clear selection if deleted
     if (this.selectedBuildIdA() === buildId) this.selectedBuildIdA.set(null);
     if (this.selectedBuildIdB() === buildId) this.selectedBuildIdB.set(null);
+
+    this.saveToPersistence();
+    console.log('✅ Build supprimé localement:', buildId);
+
+    // Tenter de synchroniser avec le backend en arrière-plan
+    try {
+      await firstValueFrom(this.api.deleteBuild(buildId));
+      console.log('✅ Build supprimé du backend:', buildId);
+      return true;
+    } catch (error) {
+      console.warn('⚠️ Impossible de synchroniser avec le backend, build supprimé en local:', error);
+      return true; // Retourner true car la suppression locale a réussi
+    }
   }
 
   public getBuildById(buildId: string): Build | undefined {
@@ -198,11 +232,11 @@ export class BuildService {
     this.updateBuild(buildId, { sublimationBar });
   }
 
-  public addSpellToBar(buildId: string, spell: Spell, slotIndex: number): void {
+  public addSpellToBar(buildId: string, spellReference: SpellReference, slotIndex: number): void {
     const build = this.getBuildById(buildId);
     if (build && slotIndex >= 0 && slotIndex < 12) {
       const newSpells = [...build.spellBar.spells];
-      newSpells[slotIndex] = spell;
+      newSpells[slotIndex] = spellReference;
       this.updateSpellBar(buildId, { spells: newSpells });
     }
   }
@@ -222,13 +256,13 @@ export class BuildService {
     let stats: BuildStats = { ...build.stats };
 
     // Add subli bonuses
-    build.sublimationBar.sublimations.forEach(subli => {
+    for (const subli of build.sublimationBar.sublimations) {
       if (subli) {
-        Object.entries(subli.stats).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(subli.stats)) {
           stats[key] = (stats[key] as number || 0) + value;
-        });
+        }
       }
-    });
+    }
 
     return stats;
   }
@@ -241,12 +275,13 @@ export class BuildService {
     return JSON.stringify(build, null, 2);
   }
 
-  public importBuild(jsonString: string): Build {
+  public async importBuild(jsonString: string): Promise<Build | null> {
     try {
       const build = JSON.parse(jsonString) as Build;
-      return this.createBuild(build);
+      return await this.createBuild(build);
     } catch (e) {
-      throw new Error('Invalid JSON format');
+      console.error('Invalid JSON format:', e);
+      return null;
     }
   }
 }

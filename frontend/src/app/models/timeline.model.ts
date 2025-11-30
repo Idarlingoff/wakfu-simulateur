@@ -19,6 +19,7 @@ export interface TimelineAction {
   type: ActionType;
   order: number;
   spellId?: string;
+  entityId?: string;
   targetPosition?: Position;
   targetFacing?: Facing;
   details?: Record<string, any>;
