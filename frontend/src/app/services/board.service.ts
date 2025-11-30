@@ -21,6 +21,12 @@ export class BoardService {
     draggedEntity: undefined
   });
 
+  // État initial du plateau (sauvegardé avant toute exécution)
+  private initialState = signal<InteractiveBoardState | null>(null);
+
+  // Historique des états pour le undo
+  private stateHistory = signal<InteractiveBoardState[]>([]);
+
   // Computed Selectors
   public state = computed(() => this.boardState());
 
@@ -123,7 +129,10 @@ export class BoardService {
 
   public updateEntityPosition(entityId: string, position: Position): void {
     const entity = this.getEntity(entityId);
-    if (!entity) return;
+    if (!entity) {
+      console.error(`❌ BoardService: Entity not found: ${entityId}`);
+      return;
+    }
 
     // Validate bounds
     const state = this.boardState();
@@ -132,12 +141,16 @@ export class BoardService {
       return;
     }
 
+    console.log(`📍 BoardService: Updating ${entity.name} position to (${position.x}, ${position.y})`);
+
     this.boardState.update(s => ({
       ...s,
       entities: s.entities.map(e =>
         e.id === entityId ? { ...e, position } : e
       )
     }));
+
+    console.log(`✅ BoardService: Position updated for ${entity.name}`);
   }
 
   public updateEntityFacing(entityId: string, facing: Facing): void {
@@ -240,5 +253,87 @@ export class BoardService {
   public resetToDefault(): void {
     this.initializeBoard();
   }
-}
 
+  // ============ State Management (Undo/Redo) ============
+
+  /**
+   * Sauvegarde l'état initial du plateau (avant toute exécution)
+   */
+  public saveInitialState(): void {
+    const currentState = this.deepCloneState(this.boardState());
+    this.initialState.set(currentState);
+    this.stateHistory.set([currentState]);
+    console.log('💾 État initial du plateau sauvegardé');
+  }
+
+  /**
+   * Sauvegarde l'état actuel dans l'historique
+   */
+  public pushState(): void {
+    const currentState = this.deepCloneState(this.boardState());
+    this.stateHistory.update(history => [...history, currentState]);
+    console.log(`💾 État sauvegardé (${this.stateHistory().length} états dans l'historique)`);
+  }
+
+  /**
+   * Restaure l'état à un index donné de l'historique
+   */
+  public restoreStateAtIndex(index: number): void {
+    const history = this.stateHistory();
+    if (index >= 0 && index < history.length) {
+      const stateToRestore = this.deepCloneState(history[index]);
+      this.boardState.set(stateToRestore);
+      console.log(`♻️ État restauré à l'index ${index}`);
+    } else {
+      console.warn(`⚠️ Index d'historique invalide: ${index}`);
+    }
+  }
+
+  /**
+   * Restaure l'état initial du plateau
+   */
+  public restoreInitialState(): void {
+    const initial = this.initialState();
+    if (initial) {
+      this.boardState.set(this.deepCloneState(initial));
+      console.log('♻️ Plateau réinitialisé à l\'état initial');
+    } else {
+      console.warn('⚠️ Aucun état initial sauvegardé, réinitialisation par défaut');
+      this.resetToDefault();
+    }
+  }
+
+  /**
+   * Efface l'historique
+   */
+  public clearHistory(): void {
+    this.stateHistory.set([]);
+    this.initialState.set(null);
+    console.log('🗑️ Historique effacé');
+  }
+
+  /**
+   * Clone profond d'un état (pour éviter les références partagées)
+   */
+  private deepCloneState(state: InteractiveBoardState): InteractiveBoardState {
+    return {
+      ...state,
+      entities: state.entities.map(e => ({
+        ...e,
+        position: { ...e.position },
+        facing: { ...e.facing }
+      })),
+      mechanisms: state.mechanisms.map(m => ({
+        ...m,
+        position: { ...m.position }
+      }))
+    };
+  }
+
+  /**
+   * Obtient la taille de l'historique
+   */
+  public getHistorySize(): number {
+    return this.stateHistory().length;
+  }
+}
