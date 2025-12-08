@@ -6,7 +6,7 @@
 import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Spell } from '../../models/build.model';
+import { Spell } from '../../models/spell.model';
 
 @Component({
   selector: 'app-spell-modal',
@@ -40,7 +40,7 @@ import { Spell } from '../../models/build.model';
               <div class="spell-info">
                 <b>{{ spell.name }}</b>
                 <span class="spell-meta">
-                  PA: {{ spell.pa }} • PW: {{ spell.pw }} • Range: {{ spell.range }}
+                  ⚡ {{ spell.paCost || 0 }} PA • 💠 {{ spell.pwCost || 0 }} PW • 🎯 Range: {{ spell.poMax }} • 📊 Total: {{ (spell.paCost || 0) + (spell.pwCost || 0) }}
                 </span>
                 <span class="spell-desc">{{ spell.description }}</span>
               </div>
@@ -64,31 +64,64 @@ export class SpellModalComponent {
     {
       id: 'vol_du_temps',
       name: 'Vol du temps',
-      classId: 'xelor',
-      level: 1,
-      range: 3,
-      pa: 2,
-      pw: 0,
+      classId: 'XEL',
+      spellType: 'damage',
+      element: 'fire',
+      paCost: 2,
+      pwCost: 0,
+      poMin: 1,
+      poMax: 3,
+      poModifiable: true,
+      lineOfSight: true,
+      cooldown: 0,
+      usePerTurn: 0,
+      usePerTarget: 0,
+      direction: 'any',
+      ratioEvalMode: 'standard',
+      variants: [],
+      breakpoints: [],
       description: 'Inflige des dégâts, pose Cadran'
     },
     {
       id: 'rouage',
       name: 'Rouage',
-      classId: 'xelor',
-      level: 1,
-      range: 2,
-      pa: 2,
-      pw: 1,
+      classId: 'XEL',
+      spellType: 'mechanism',
+      element: 'time',
+      paCost: 2,
+      pwCost: 1,
+      poMin: 0,
+      poMax: 2,
+      poModifiable: true,
+      lineOfSight: false,
+      cooldown: 0,
+      usePerTurn: 0,
+      usePerTarget: 0,
+      direction: 'any',
+      ratioEvalMode: 'standard',
+      variants: [],
+      breakpoints: [],
       description: 'Pose un rouage sur la carte'
     },
     {
       id: 'distorsion',
       name: 'Distorsion',
-      classId: 'xelor',
-      level: 6,
-      range: 1,
-      pa: 2,
-      pw: 1,
+      classId: 'XEL',
+      spellType: 'utility',
+      element: 'time',
+      paCost: 2,
+      pwCost: 1,
+      poMin: 0,
+      poMax: 1,
+      poModifiable: false,
+      lineOfSight: false,
+      cooldown: 0,
+      usePerTurn: 0,
+      usePerTarget: 0,
+      direction: 'any',
+      ratioEvalMode: 'standard',
+      variants: [],
+      breakpoints: [],
       description: 'Transpose et augmente les dégâts'
     }
   ];
@@ -99,7 +132,7 @@ export class SpellModalComponent {
     const query = this.searchQuery().toLowerCase();
     return this.availableSpells.filter(spell =>
       spell.name.toLowerCase().includes(query) ||
-      spell.description.toLowerCase().includes(query)
+      (spell.description?.toLowerCase().includes(query) ?? false)
     );
   };
 

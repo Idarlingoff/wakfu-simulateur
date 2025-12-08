@@ -3,12 +3,14 @@
  * Interactive combat map showing entities, mechanisms, and spell actions
  */
 
-import { Component, inject, computed, output } from '@angular/core';
+import { Component, inject, computed, output, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
+import { SimulationService } from '../services/simulation.service';
 import { BoardEntity } from '../models/board.model';
+import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism} from '../utils/mechanism-utils';
 
 interface BoardCell {
   x: number;
@@ -37,7 +39,7 @@ interface BoardCell {
             ◀ Étape Précédente
           </button>
           <span class="step-indicator">
-            Étape {{ currentStepIndex() + 1 }} / {{ totalSteps() }}
+            {{ currentStepIndex() === 0 ? 'État initial' : 'Étape ' + currentStepIndex() }} / {{ totalSteps() - 1 }}
           </span>
           <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1" class="btn-nav">
             Étape Suivante ▶
@@ -96,19 +98,37 @@ interface BoardCell {
               <span class="entity-label">{{ entity.name }}</span>
             </div>
 
+            <!-- Dial Hours (zones visuelles/de déplacement) -->
+            <div
+              *ngIf="getDialHourAtPosition(cell.x, cell.y) as dialHour"
+              class="dial-hour"
+              [title]="'Cadran - ' + dialHour.hour + 'h'"
+            >
+              <img
+                [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'"
+                [alt]="'Heure ' + dialHour.hour"
+                class="dial-hour-image"
+              />
+            </div>
+
             <!-- Mechanism -->
             <div
               *ngIf="getMechanismAtPosition(cell.x, cell.y) as mech"
               class="mechanism"
               [class]="mech.type"
-              [title]="mech.type"
+              [title]="getMechanismTitle(mech.type)"
             >
-              {{ getMechanismIcon(mech.type) }}
+              <img
+                [src]="getMechanismImage(mech.type, mech.charges)"
+                [alt]="getMechanismTitle(mech.type)"
+                class="mechanism-image"
+              />
             </div>
 
             <!-- Spell Action Indicator -->
+            <!-- N'affiche l'indicateur QUE si aucun mécanisme n'est présent -->
             <div
-              *ngIf="getActionAtPosition(cell.x, cell.y) as action"
+              *ngIf="!getMechanismAtPosition(cell.x, cell.y) && getActionAtPosition(cell.x, cell.y) as action"
               class="action-indicator"
               [class]="action.type"
               [title]="action.type"
@@ -182,9 +202,15 @@ interface BoardCell {
         <h3>⚙️ Mécanismes</h3>
         <div class="mechanisms-list">
           <div class="mechanism-info" *ngFor="let mech of boardService.mechanisms()">
-            <span class="mech-icon">{{ getMechanismIcon(mech.type) }}</span>
+            <div class="mech-icon">
+              <img
+                [src]="getMechanismImage(mech.type, mech.charges)"
+                [alt]="getMechanismTitle(mech.type)"
+                class="mech-icon-image"
+              />
+            </div>
             <div class="mech-details">
-              <strong>{{ mech.type }}</strong>
+              <strong>{{ getMechanismTitle(mech.type) }}</strong>
               <span>Position: ({{ mech.position.x }}, {{ mech.position.y }})</span>
               <span>Charges: {{ mech.charges || 0 }}</span>
             </div>
@@ -483,27 +509,93 @@ interface BoardCell {
       background: #ffd166;
     }
 
-    /* Après : ne s'applique qu'aux mécanismes dans le board */
+    /* Mécanismes dans le board */
     .board .mechanism {
-      font-size: 1em;
       position: absolute;
-      z-index: 1;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
       animation: pulse 1.5s ease-in-out infinite;
     }
 
-    .board .mechanism.gear {
-      color: #ffd166;
-      filter: drop-shadow(0 0 4px #ffd166);
+    .board .mechanism-image {
+      width: 80%;
+      height: 80%;
+      object-fit: contain;
+      filter: drop-shadow(0 0 4px rgba(255, 209, 102, 0.6));
     }
 
-    .board .mechanism.dial {
-      color: #a78bfa;
-      filter: drop-shadow(0 0 4px #a78bfa);
+    .board .mechanism.cog .mechanism-image {
+      filter: drop-shadow(0 0 4px rgba(255, 209, 102, 0.8));
     }
 
+    /* Rouage (cog) - TOUJOURS au premier plan */
+    .board .mechanism.cog {
+      z-index: 3 !important; /* Au-dessus de tout */
+    }
+
+    /* Cadran central - reste au premier plan avec les autres mécanismes */
+    .board .mechanism.dial .mechanism-image {
+      filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.9));
+    }
+
+    /* Cadran central (sans heures) - z-index explicite */
+    .board .mechanism.dial:not(.dial-hour) {
+      z-index: 3 !important; /* Au-dessus de tout */
+    }
+
+    /* Heures du cadran - ZONES VISUELLES (pas des mécanismes) */
+    /* Les heures sont des éléments séparés avec leur propre rendu */
+    .board .dial-hour {
+      position: absolute;
+      z-index: 0 !important; /* Passe derrière tout le reste */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      pointer-events: none; /* Les heures ne bloquent pas les clics */
+    }
+
+    .board .dial-hour-image {
+      width: 60%;
+      height: 60%;
+      opacity: 0.5; /* Opacité réduite pour être plus discrètes */
+      object-fit: contain;
+      filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.5));
+      animation: hourGlow 3s ease-in-out infinite; /* Animation plus lente et douce */
+    }
+
+    @keyframes hourGlow {
+      0%, 100% {
+        opacity: 0.4; /* Plus transparentes */
+        filter: drop-shadow(0 0 2px rgba(167, 139, 250, 0.4));
+      }
+      50% {
+        opacity: 0.6; /* Légère augmentation */
+        filter: drop-shadow(0 0 4px rgba(167, 139, 250, 0.6));
+      }
+    }
+
+    /* Sinistro - TOUJOURS au premier plan */
     .board .mechanism.sinistro {
-      color: #ff6b6b;
-      filter: drop-shadow(0 0 4px #ff6b6b);
+      z-index: 3 !important; /* Au-dessus de tout */
+    }
+
+    .board .mechanism.sinistro .mechanism-image {
+      filter: drop-shadow(0 0 4px rgba(255, 107, 107, 0.8));
+    }
+
+    /* Régulateur - TOUJOURS au premier plan */
+    .board .mechanism.regulateur {
+      z-index: 3 !important; /* Au-dessus de tout */
+    }
+
+    .board .mechanism.regulateur .mechanism-image {
+      filter: drop-shadow(0 0 4px rgba(76, 201, 240, 0.8));
     }
 
     @keyframes pulse {
@@ -726,7 +818,19 @@ interface BoardCell {
     }
 
     .mech-icon {
-      font-size: 20px;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .mech-icon-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 0 2px rgba(255, 209, 102, 0.5));
     }
 
     .mech-details {
@@ -756,6 +860,7 @@ export class BoardComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
   boardService = inject(BoardService);
+  simulationService = inject(SimulationService);
 
   editPlayer = output<BoardEntity>();
   editEnemy = output<BoardEntity>();
@@ -765,14 +870,29 @@ export class BoardComponent {
 
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
 
+  constructor() {
+    // Nettoyer l'historique quand on change de timeline
+    effect(() => {
+      const timeline = this.currentTimeline();
+      if (timeline) {
+        console.log('🗑️ Timeline changée:', timeline.name);
+      }
+    });
+  }
+
   currentStep = computed(() => {
     const timeline = this.currentTimeline();
     if (!timeline) return null;
     const idx = this.currentStepIndex();
-    return timeline.steps[idx] || null;
+    // idx = 0 → État initial (avant toute exécution)
+    // idx = 1, 2, 3... → Affiche l'étape correspondante (idx)
+    return idx > 0 && idx <= timeline.steps.length ? timeline.steps[idx - 1] || null : null;
   });
 
-  totalSteps = computed(() => this.currentTimeline()?.steps.length || 0);
+  totalSteps = computed(() => {
+    const stepsCount = this.currentTimeline()?.steps.length || 0;
+    return stepsCount + 1; // +1 pour l'état initial
+  });
 
   boardCells = computed(() => {
     const cells: BoardCell[] = [];
@@ -809,27 +929,90 @@ export class BoardComponent {
   }
 
   /**
+   * Get dial hour at position
+   */
+  getDialHourAtPosition(x: number, y: number) {
+    return this.boardService.dialHours().find(
+      h => h.position.x === x && h.position.y === y
+    );
+  }
+
+  /**
    * Get action at position
+   * Exclude Move, Transpose, and mechanism spells as they have their own visual representation
    */
   getActionAtPosition(x: number, y: number) {
     if (!this.currentStep()) return null;
 
     const actions = this.currentStep()?.actions || [];
-    return actions.find(a =>
-      a.targetPosition?.x === x && a.targetPosition?.y === y
-    );
+    return actions.find(a => {
+      // Vérifier la position
+      if (a.targetPosition?.x !== x || a.targetPosition?.y !== y) {
+        return false;
+      }
+
+      // Exclure les déplacements et transpositions
+      if (a.type === 'Move' || a.type === 'Transpose') {
+        return false;
+      }
+
+      // Exclure les sorts qui créent des mécanismes (ils ont leur propre représentation visuelle)
+      if (a.type === 'CastSpell' && a.spellId && isSpellMechanism(a.spellId)) {
+        return false;
+      }
+
+      return true;
+    });
   }
 
   /**
-   * Get mechanism icon
+   * Get mechanism icon (deprecated - kept for backward compatibility)
    */
   getMechanismIcon(type: string): string {
     switch(type) {
+      case 'cog':
       case 'gear': return '⚙️';
       case 'dial': return '⏰';
       case 'sinistro': return '💀';
+      case 'regulateur': return '🔧';
       default: return '⚡';
     }
+  }
+
+  /**
+   * Get mechanism image path
+   */
+  getMechanismImage(type: string, charges?: number): string {
+    return 'http://localhost:8080/' + getMechanismImagePath(type, charges);
+  }
+
+  /**
+   * Get mechanism image URL (gère les heures du cadran)
+   */
+  getMechanismImageUrl(mechanism: any): string {
+    // Si c'est une heure du cadran (a une propriété hour et un dialId)
+    if (mechanism.type === 'dial' && mechanism.hour && mechanism.dialId) {
+      return `http://localhost:8080/resources/dial/dial_hours-${mechanism.hour}.png`;
+    }
+    // Sinon, utiliser l'image normale du mécanisme
+    return this.getMechanismImage(mechanism.type, mechanism.charges);
+  }
+
+  /**
+   * Get mechanism title (localized name)
+   */
+  getMechanismTitle(type: string): string {
+    return getMechanismDisplayName(type);
+  }
+
+  /**
+   * Get mechanism title with hour (pour les heures du cadran)
+   */
+  getMechanismTitleWithHour(mechanism: any): string {
+    if (mechanism.type === 'dial' && mechanism.hour) {
+      return `Cadran - ${mechanism.hour}h`;
+    }
+    return this.getMechanismTitle(mechanism.type);
   }
 
   /**
@@ -838,23 +1021,70 @@ export class BoardComponent {
   getSpellName(spellId: string): string {
     const build = this.buildService.selectedBuildA();
     if (!build) return spellId;
-    const spell = build.spellBar.spells.find(s => s?.id === spellId);
-    return spell?.name || spellId;
+
+    // SpellReference contient spellId, pas id ni name
+    const spellRef = build.spellBar.spells.find(s => s?.spellId === spellId);
+
+    // Retourne l'ID car SpellReference ne contient pas le nom
+    return spellRef?.spellId || spellId;
   }
 
   /**
    * Navigation
    */
-  onNextStep(): void {
+  async onNextStep(): Promise<void> {
+    const timeline = this.currentTimeline();
+    const build = this.buildService.selectedBuildA();
+    const currentIndex = this.currentStepIndex();
+
+    if (!timeline || !build) {
+      console.warn('⚠️ Timeline ou Build manquant');
+      return;
+    }
+
+    // Si c'est la première étape (index 0 → 1), sauvegarder l'état initial
+    if (currentIndex === 0) {
+      this.boardService.saveInitialState();
+      console.log('💾 État initial du board sauvegardé');
+    }
+
+    // Passer à l'étape suivante d'abord
     this.timelineService.nextStep();
+
+    // Puis exécuter l'étape qu'on vient d'atteindre (si elle existe)
+    const newIndex = this.currentStepIndex();
+    if (newIndex > 0 && newIndex <= timeline.steps.length) {
+      const realStepIndex = newIndex - 1; // L'index réel dans le tableau steps
+      await this.simulationService.executeStep(build, timeline, realStepIndex);
+
+      // Sauvegarder l'état après l'exécution pour l'historique
+      this.boardService.pushState();
+    }
   }
 
   onPreviousStep(): void {
-    this.timelineService.previousStep();
+    const currentIndex = this.currentStepIndex();
+
+    if (currentIndex > 0) {
+      // Revenir à l'étape précédente
+      this.timelineService.previousStep();
+
+      // Restaurer l'état du board à l'étape précédente
+      const newIndex = this.currentStepIndex();
+      this.boardService.restoreStateAtIndex(newIndex);
+
+      console.log(`⏮️ Retour à l'étape ${newIndex}`);
+    }
   }
 
   onReset(): void {
+    // Réinitialiser la timeline à l'étape 0
     this.timelineService.resetTimeline();
+
+    // Restaurer l'état initial du board
+    this.boardService.restoreInitialState();
+
+    console.log('🔄 Timeline et Board réinitialisés');
   }
 
   /**
@@ -874,4 +1104,3 @@ export class BoardComponent {
     }
   }
 }
-

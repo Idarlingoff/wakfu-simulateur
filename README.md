@@ -10,23 +10,6 @@
 * et les **procs automatiques** (passifs, distorsion, horloge double, etc.).
 
 Le but n’est **pas de reproduire un builder existant**, mais de fournir un **simulateur précis et dynamique** permettant d’évaluer la **performance réelle d’un combo** ou d’une **rotation complète** en combat.
-
----
-
-## 🧱 Architecture globale
-
-L’application repose sur une architecture **Full Stack** :
-
-* **Backend** : Java / Spring Boot
-* **Frontend** : Angular
-* **Base de données** : H2 (embarquée, simulation locale)
-
-### Schéma :
-
-```
-wakfu-simulator/
-├── backend/   → logique métier, simulation, gestion des sorts / effets
-│   ├── src/
 │   ├── pom.xml
 │   └── Dockerfile
 │

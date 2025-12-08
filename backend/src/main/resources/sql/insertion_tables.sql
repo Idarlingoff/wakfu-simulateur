@@ -151,7 +151,8 @@ INSERT INTO effect_condition_group (op) VALUES ('AND');
 
 -- Condition: le lanceur possède le passif XEL_CONNAISSANCE_PASSE
 INSERT INTO effect_condition (group_id, cond_type, params_json)
-VALUES (3, 'HAS_PASSIVE', '{ "passiveId":"XEL_CONNAISSANCE_PASSE" }');
+SELECT MAX(id), 'HAS_PASSIVE', '{ "passiveId":"XEL_CONNAISSANCE_PASSE" }'
+FROM effect_condition_group;
 
 -- Effet: coût supplémentaire en PW (+2)
 INSERT INTO spell_effect
@@ -299,7 +300,8 @@ VALUES ('XEL_DESYNCHRO', 185, 78);
 INSERT INTO EFFECT_CONDITION_GROUP (OP) values ( 'AND' );
 
 INSERT INTO effect_condition (group_id, cond_type, params_json)
-VALUES (2, 'ON_DIAL_CELL', '{}');
+SELECT MAX(id), 'ON_DIAL_CELL', '{}'
+FROM effect_condition_group;
 
 INSERT INTO spell_variant (spell_id, kind) VALUES
                                                ('XEL_DESYNCHRO', 'NORMAL'),
@@ -624,15 +626,37 @@ VALUES
     ('XEL_POINTE_HEURE', 'NORMAL'),
     ('XEL_POINTE_HEURE', 'CRIT');
 
-INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-VALUES
-    (1, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":46, "element":"AIR"}'),
-    (1, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}');
+-- Effets variant NORMAL : dégâts 46 AIR + TP 2 cases en arrière
 
-INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-VALUES
-    (2, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":57, "element":"AIR"}'),
-    (2, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}');
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET',
+       '{"amount":46, "element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET',
+       '{"cells":2, "direction":"BACK"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
+
+-- Effets variant CRIT : dégâts 57 AIR + TP 2 cases en arrière
+
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET',
+       '{"amount":57, "element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
+
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET',
+       '{"cells":2, "direction":"BACK"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
 
 -- =========================================
 -- RALENTISSEMENT
@@ -805,15 +829,30 @@ VALUES ('XEL_RETOUR_SPONTANE','NORMAL'),
 
 INSERT INTO effect_condition_group(op) VALUES ('AND');
 
+-- Condition: le lanceur possède le passif XEL_CONNAISSANCE_PASSE
 INSERT INTO effect_condition (group_id, cond_type, params_json)
-VALUES (1, 'LAST_MOVE_EXISTS', '{}');
+SELECT MAX(id), 'LAST_MOVE_EXISTS', '{}'
+FROM effect_condition_group;
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
-VALUES
-    (3, 'ON_CAST',0,'DEAL_DAMAGE','TARGET',null, '{"amount":75,"element":"AIR"}'),
-    (3, 'ON_CAST',1,'REWIND_LAST_MOVE','TARGET',1, '{}'),
-    (4, 'ON_CAST',0,'DEAL_DAMAGE','TARGET',null, '{"amount":94,"element":"AIR"}'),
-    (4, 'ON_CAST',1,'REWIND_LAST_MOVE','TARGET',1, '{}');
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', null, '{"amount":75,"element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
+SELECT v.id, 'ON_CAST', 1, 'REWIND_LAST_MOVE', 'TARGET', 1,'{}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
+SELECT v.id, 'ON_CAST',0,'DEAL_DAMAGE','TARGET',null, '{"amount":94,"element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='CRIT';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
+SELECT v.id, 'ON_CAST',1,'REWIND_LAST_MOVE','TARGET',1, '{}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='CRIT';
 
 
 -- ============================

@@ -7,7 +7,10 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BuildService } from '../services/build.service';
-import { Build, BuildStats } from '../models/build.model';
+import { Build, BuildStats, SpellReference, PassiveReference, Sublimation } from '../models/build.model';
+import { SpellSelectorComponent } from './spell-selector.component';
+import { PassiveSelectorComponent } from './passive-selector.component';
+import { SublimationSelectorComponent } from './sublimation-selector.component';
 
 interface FormBuild {
   name: string;
@@ -15,12 +18,15 @@ interface FormBuild {
   characterLevel: number;
   description: string;
   stats: BuildStats;
+  spells: (SpellReference | null)[];
+  passives: (PassiveReference | null)[];
+  sublimations: (Sublimation | null)[];
 }
 
 @Component({
   selector: 'app-build-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, SpellSelectorComponent, PassiveSelectorComponent, SublimationSelectorComponent],
   template: `
     <div class="modal-overlay" *ngIf="isOpen()" (click)="onClose()">
       <div class="modal" (click)="$event.stopPropagation()">
@@ -50,7 +56,7 @@ interface FormBuild {
                 <label>Classe *</label>
                 <select [(ngModel)]="form.classId" name="classId" required>
                   <option value="">-- Sélectionner --</option>
-                  <option value="xelor">Xélor</option>
+                  <option value="XEL">Xélor</option>
                   <option value="sacrier">Sacrier</option>
                   <option value="osamodas">Osamodas</option>
                   <option value="ecaflip">Écaflip</option>
@@ -60,14 +66,10 @@ interface FormBuild {
 
               <div class="form-group">
                 <label>Niveau du personnage *</label>
-                <input
-                  type="number"
-                  [(ngModel)]="form.characterLevel"
-                  name="level"
-                  min="1"
-                  max="215"
-                  required
-                />
+                <select [(ngModel)]="form.characterLevel" name="level" required>
+                  <option value="">-- Sélectionner --</option>
+                  <option *ngFor="let level of availableLevels" [value]="level">{{ level }}</option>
+                </select>
               </div>
 
               <div class="form-group">
@@ -79,6 +81,33 @@ interface FormBuild {
                   rows="3"
                 ></textarea>
               </div>
+            </div>
+
+            <!-- Sorts -->
+            <div class="form-section">
+              <app-spell-selector
+                [classId]="form.classId"
+                [selectedSpells]="form.spells"
+                (spellsChange)="onSpellsChange($event)"
+              ></app-spell-selector>
+            </div>
+
+            <!-- Passifs -->
+            <div class="form-section">
+              <app-passive-selector
+                [classId]="form.classId"
+                [characterLevel]="form.characterLevel"
+                [selectedPassives]="form.passives"
+                (passivesChange)="onPassivesChange($event)"
+              ></app-passive-selector>
+            </div>
+
+            <!-- Sublimations -->
+            <div class="form-section">
+              <app-sublimation-selector
+                [selectedSublimations]="form.sublimations"
+                (sublimationsChange)="onSublimationsChange($event)"
+              ></app-sublimation-selector>
             </div>
 
             <!-- Stats -->
@@ -378,6 +407,9 @@ export class BuildFormComponent {
   isOpen = signal(false);
   editingBuildId = signal<string | null>(null);
 
+  // Niveaux disponibles pour la création de build
+  readonly availableLevels = [20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215, 230, 245];
+
   form: FormBuild = {
     name: '',
     classId: '',
@@ -396,7 +428,10 @@ export class BuildFormComponent {
       mp: 3,
       wp: 0,
       range: 3
-    }
+    },
+    spells: new Array(12).fill(null),
+    passives: new Array(6).fill(null),
+    sublimations: new Array(12).fill(null)
   };
 
   /**
@@ -422,7 +457,10 @@ export class BuildFormComponent {
         mp: 3,
         wp: 0,
         range: 3
-      }
+      },
+      spells: new Array(12).fill(null),
+      passives: new Array(6).fill(null),
+      sublimations: new Array(12).fill(null)
     };
     this.isOpen.set(true);
   }
@@ -437,9 +475,33 @@ export class BuildFormComponent {
       classId: build.classId,
       characterLevel: build.characterLevel,
       description: build.description || '',
-      stats: { ...build.stats }
+      stats: { ...build.stats },
+      spells: [...build.spellBar.spells],
+      passives: [...build.passiveBar.passives],
+      sublimations: [...build.sublimationBar.sublimations]
     };
     this.isOpen.set(true);
+  }
+
+  /**
+   * Handle spells change
+   */
+  onSpellsChange(spells: (SpellReference | null)[]): void {
+    this.form.spells = spells;
+  }
+
+  /**
+   * Handle passives change
+   */
+  onPassivesChange(passives: (PassiveReference | null)[]): void {
+    this.form.passives = passives;
+  }
+
+  /**
+   * Handle sublimations change
+   */
+  onSublimationsChange(sublimations: (Sublimation | null)[]): void {
+    this.form.sublimations = sublimations;
   }
 
   /**
@@ -451,9 +513,22 @@ export class BuildFormComponent {
       return;
     }
 
+    console.log('[BuildForm] onSubmit - classId:', this.form.classId);
+
     if (this.editingBuildId()) {
       // Update existing build
-      this.buildService.updateBuild(this.editingBuildId()!, this.form as Partial<Build>);
+      const updates: Partial<Build> = {
+        name: this.form.name,
+        classId: this.form.classId,
+        characterLevel: this.form.characterLevel,
+        description: this.form.description,
+        spellBar: { spells: this.form.spells },
+        passiveBar: { passives: this.form.passives },
+        sublimationBar: { sublimations: this.form.sublimations },
+        stats: this.form.stats
+      };
+      console.log('[BuildForm] Mise à jour du build avec classId:', updates.classId);
+      this.buildService.updateBuild(this.editingBuildId()!, updates);
       alert('Build modifié avec succès!');
     } else {
       // Create new build
@@ -463,13 +538,14 @@ export class BuildFormComponent {
         classId: this.form.classId,
         characterLevel: this.form.characterLevel,
         description: this.form.description,
-        spellBar: { spells: new Array(12).fill(null) },
-        passiveBar: { passives: new Array(6).fill(null) },
-        sublimationBar: { sublimations: new Array(12).fill(null) },
+        spellBar: { spells: this.form.spells },
+        passiveBar: { passives: this.form.passives },
+        sublimationBar: { sublimations: this.form.sublimations },
         stats: this.form.stats,
         createdAt: new Date(),
         updatedAt: new Date()
       };
+      console.log('[BuildForm] Création du nouveau build avec classId:', newBuild.classId);
       this.buildService.createBuild(newBuild);
       alert('Build créé avec succès!');
     }

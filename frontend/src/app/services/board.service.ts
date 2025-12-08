@@ -4,9 +4,8 @@
  */
 
 import { Injectable, signal, computed } from '@angular/core';
-import { InteractiveBoardState, BoardEntity, Mechanism } from '../models/board.model';
+import { InteractiveBoardState, BoardEntity, Mechanism, DialHour } from '../models/board.model';
 import { Position, Facing } from '../models/timeline.model';
-
 @Injectable({
   providedIn: 'root'
 })
@@ -17,9 +16,15 @@ export class BoardService {
     rows: 13,
     entities: [],
     mechanisms: [],
+    dialHours: [], // Heures du cadran (zones visuelles)
     selectedEntityId: undefined,
-    draggedEntity: undefined
   });
+
+  // État initial du plateau (sauvegardé avant toute exécution)
+  private initialState = signal<InteractiveBoardState | null>(null);
+
+  // Historique des états pour le undo
+  private stateHistory = signal<InteractiveBoardState[]>([]);
 
   // Computed Selectors
   public state = computed(() => this.boardState());
@@ -47,6 +52,10 @@ export class BoardService {
     return this.boardState().mechanisms;
   });
 
+  public dialHours = computed(() => {
+    return this.boardState().dialHours;
+  });
+
   constructor() {
     this.initializeBoard();
   }
@@ -63,7 +72,7 @@ export class BoardService {
           id: 'player_1',
           type: 'player',
           name: 'Xélor',
-          classId: 'xelor',
+          classId: 'XEL',
           position: { x: 6, y: 10 },
           facing: { direction: 'front' }
         },
@@ -83,15 +92,18 @@ export class BoardService {
         }
       ],
       mechanisms: [],
+      dialHours: [],
       selectedEntityId: undefined
     };
-
     this.boardState.set(boardState);
   }
 
   // ============ Entity Management ============
 
   public addEntity(entity: BoardEntity): void {
+    if ('classId' in entity) {
+      console.log('[BoardService] addEntity - classId:', entity.classId, 'name:', entity.name);
+    }
     this.boardState.update(state => ({
       ...state,
       entities: [...state.entities, entity]
@@ -99,6 +111,9 @@ export class BoardService {
   }
 
   public updateEntity(entityId: string, updates: Partial<BoardEntity>): void {
+    if ('classId' in updates) {
+      console.log('[BoardService] updateEntity - entityId:', entityId, 'classId:', updates.classId);
+    }
     this.boardState.update(state => ({
       ...state,
       entities: state.entities.map(e =>
@@ -123,7 +138,10 @@ export class BoardService {
 
   public updateEntityPosition(entityId: string, position: Position): void {
     const entity = this.getEntity(entityId);
-    if (!entity) return;
+    if (!entity) {
+      console.error(`BoardService: Entity not found: ${entityId}`);
+      return;
+    }
 
     // Validate bounds
     const state = this.boardState();
@@ -132,12 +150,16 @@ export class BoardService {
       return;
     }
 
+    console.log(`BoardService: Updating ${entity.name} position to (${position.x}, ${position.y})`);
+
     this.boardState.update(s => ({
       ...s,
       entities: s.entities.map(e =>
         e.id === entityId ? { ...e, position } : e
       )
     }));
+
+    console.log(`BoardService: Position updated for ${entity.name}`);
   }
 
   public updateEntityFacing(entityId: string, facing: Facing): void {
@@ -163,8 +185,6 @@ export class BoardService {
     }));
   }
 
-  // ============ Mechanism Management ============
-
   public addMechanism(mechanism: Mechanism): void {
     // Validate position
     const state = this.boardState();
@@ -180,6 +200,10 @@ export class BoardService {
     }));
   }
 
+  public getMechanism(mechanismId: string): Mechanism | undefined {
+    return this.boardState().mechanisms.find(m => m.id === mechanismId);
+  }
+
   public removeMechanism(mechanismId: string): void {
     this.boardState.update(state => ({
       ...state,
@@ -187,58 +211,135 @@ export class BoardService {
     }));
   }
 
-  public updateMechanism(mechanismId: string, updates: Partial<Mechanism>): void {
-    this.boardState.update(state => ({
-      ...state,
-      mechanisms: state.mechanisms.map(m =>
-        m.id === mechanismId ? { ...m, ...updates } : m
-      )
+  // ============ Dial Hours Management ============
+
+  public addDialHour(dialHour: DialHour): void {
+    const state = this.boardState();
+    // Validate position
+    if (dialHour.position.x < 0 || dialHour.position.x >= state.cols ||
+        dialHour.position.y < 0 || dialHour.position.y >= state.rows) {
+      console.warn(`Dial hour position out of bounds: (${dialHour.position.x}, ${dialHour.position.y})`);
+      return;
+    }
+
+    this.boardState.update(s => ({
+      ...s,
+      dialHours: [...s.dialHours, dialHour]
     }));
   }
 
-  public getMechanism(mechanismId: string): Mechanism | undefined {
-    return this.boardState().mechanisms.find(m => m.id === mechanismId);
-  }
-
-  public getMechanismsAtPosition(position: Position): Mechanism[] {
-    return this.boardState().mechanisms.filter(m =>
-      m.position.x === position.x && m.position.y === position.y
-    );
-  }
-
-  // ============ Queries ============
-
-  public getEntitiesAtPosition(position: Position): BoardEntity[] {
-    return this.boardState().entities.filter(e =>
-      e.position.x === position.x && e.position.y === position.y
-    );
-  }
-
-  public calculateDistance(pos1: Position, pos2: Position): number {
-    return Math.max(
-      Math.abs(pos1.x - pos2.x),
-      Math.abs(pos1.y - pos2.y)
-    );
-  }
-
-  public isAdjacent(pos1: Position, pos2: Position): boolean {
-    return this.calculateDistance(pos1, pos2) === 1;
-  }
-
-  // ============ Reset ============
-
-  public clearBoard(): void {
+  public removeDialHoursForDial(dialId: string): void {
     this.boardState.update(state => ({
       ...state,
-      entities: [],
-      mechanisms: [],
-      selectedEntityId: undefined,
-      draggedEntity: undefined
+      dialHours: state.dialHours.filter(h => h.dialId !== dialId)
     }));
   }
 
   public resetToDefault(): void {
+    this.boardState.set({
+      cols: 13,
+      rows: 13,
+      entities: [],
+      mechanisms: [],
+      dialHours: [],
+      selectedEntityId: undefined,
+      draggedEntity: undefined
+    });
+  }
+
+  /**
+   * Efface complètement le plateau (entités et mécanismes)
+   * Réinitialise le plateau avec les entités par défaut
+   */
+  public clearBoard(): void {
     this.initializeBoard();
+    console.log('✅ Plateau effacé et réinitialisé avec les entités par défaut');
+  }
+
+  // ============ State Management (Undo/Redo) ============
+
+  /**
+   * Sauvegarde l'état initial du plateau (avant toute exécution)
+   */
+  public saveInitialState(): void {
+    const currentState = this.deepCloneState(this.boardState());
+    this.initialState.set(currentState);
+    this.stateHistory.set([currentState]);
+    console.log('État initial du plateau sauvegardé');
+  }
+
+  /**
+   * Ajoute l'état actuel du plateau à l'historique
+   */
+  public pushState(): void {
+    const currentState = this.deepCloneState(this.boardState());
+    const history = this.stateHistory();
+    this.stateHistory.set([...history, currentState]);
+    console.log(`État du plateau ajouté à l'historique (total: ${history.length + 1})`);
+  }
+
+  /**
+   * Restaure l'état à un index donné de l'historique
+   */
+  public restoreStateAtIndex(index: number): void {
+    const history = this.stateHistory();
+    if (index >= 0 && index < history.length) {
+      const stateToRestore = this.deepCloneState(history[index]);
+      this.boardState.set(stateToRestore);
+      console.log(`État restauré à l'index ${index}`);
+    } else {
+      console.warn(`Index d'historique invalide: ${index}`);
+    }
+  }
+
+  /**
+   * Restaure l'état initial du plateau
+   */
+  public restoreInitialState(): void {
+    const initial = this.initialState();
+    if (initial) {
+      this.boardState.set(this.deepCloneState(initial));
+      console.log('Plateau réinitialisé à l\'état initial');
+    } else {
+      console.warn('Aucun état initial sauvegardé, réinitialisation par défaut');
+      this.resetToDefault();
+    }
+  }
+  /**
+   * Efface l'historique
+   */
+  public clearHistory(): void {
+    this.stateHistory.set([]);
+    this.initialState.set(null);
+    console.log('Historique effacé');
+  }
+
+  /**
+   * Clone profond d'un état (pour éviter les références partagées)
+   */
+  private deepCloneState(state: InteractiveBoardState): InteractiveBoardState {
+    return {
+      ...state,
+      entities: state.entities.map(e => ({
+        ...e,
+        position: { ...e.position },
+        facing: { ...e.facing }
+      })),
+      mechanisms: state.mechanisms.map(m => ({
+        ...m,
+        position: { ...m.position }
+      })),
+      dialHours: state.dialHours ? state.dialHours.map(h => ({
+        ...h,
+        position: { ...h.position }
+      })) : []
+    };
+  }
+
+  /**
+   * Obtient la taille de l'historique
+   */
+  public getHistorySize(): number {
+    return this.stateHistory().length;
   }
 }
-

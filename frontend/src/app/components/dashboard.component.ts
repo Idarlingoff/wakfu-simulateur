@@ -14,11 +14,12 @@ import {TimelineFormComponent} from './timeline-form.component';
 import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
+import {TimelineSummaryComponent} from './timeline-summary.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent],
+  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -175,6 +176,11 @@ import {EnemyFormComponent} from './enemy-form.component';
               (editPlayer)="onEditPlayerFromBoard($event)"
               (editEnemy)="onEditEnemyFromBoard($event)"
             ></app-board>
+          </section>
+
+          <!-- Timeline Summary -->
+          <section class="section timeline-summary-section">
+            <app-timeline-summary></app-timeline-summary>
           </section>
         </main>
 
@@ -695,7 +701,6 @@ export class DashboardComponent {
   timelineService = inject(TimelineService);
   boardService = inject(BoardService);
 
-  // Signal for build section collapse/expand state
   buildSectionExpanded = signal<boolean>(true);
 
 
@@ -827,7 +832,6 @@ export class DashboardComponent {
     }
   }
 
-  // Timeline Methods
   onCreateTimeline(): void {
     this.timelineForm.openNew();
   }
@@ -837,11 +841,15 @@ export class DashboardComponent {
     this.timelineForm.openEdit(timeline);
   }
 
-  onDeleteTimeline(event: any, timeline: any): void {
+  async onDeleteTimeline(event: any, timeline: any): Promise<void> {
     event.stopPropagation();
     if (confirm(`Supprimer la timeline "${timeline.name}"?`)) {
-      this.timelineService.deleteTimeline(timeline.id);
-      alert('Timeline supprimée!');
+      const deleted = await this.timelineService.deleteTimeline(timeline.id);
+      if (deleted) {
+        alert('Timeline supprimée!');
+      } else {
+        alert('Erreur lors de la suppression de la timeline');
+      }
     }
   }
 
