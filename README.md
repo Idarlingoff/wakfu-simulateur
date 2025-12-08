@@ -1,3 +1,5 @@
+# ⚠️ IN PROGRESS
+
 # 🧮 Wakfu Combo Simulator
 
 ### ⚔️ Présentation
