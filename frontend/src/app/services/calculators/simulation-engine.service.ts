@@ -9,16 +9,22 @@ import { DamageCalculatorService, DamageCalculationParams } from './damage-calcu
 import { StatsCalculatorService, TotalStats } from './stats-calculator.service';
 import { BoardService } from '../board.service';
 import { Build } from '../../models/build.model';
-import { Timeline, TimelineStep, TimelineAction } from '../../models/timeline.model';
+import { Timeline, TimelineStep, TimelineAction, Position } from '../../models/timeline.model';
 import { Spell } from '../../models/spell.model';
+import { BoardEntity, Mechanism } from '../../models/board.model';
+import { isSpellMechanism, getSpellMechanismType, getMechanismImagePath } from '../../utils/mechanism-utils';
 
 export interface SimulationContext {
   availablePa: number;
   availablePw: number;
   availableMp: number;
-  currentPosition?: { x: number; y: number };
+  currentPosition?: Position;
+  playerPosition?: Position;
+  entities?: BoardEntity[];
+  mechanisms?: Mechanism[];
   buffs?: any[];
   debuffs?: any[];
+  turn?: number;
 }
 
 export interface SimulationActionResult {
@@ -64,12 +70,12 @@ export interface SimulationResult {
 export class SimulationEngineService {
 
   // Cache pour les sorts complets (sera rempli par un service externe)
-  private spellsCache = new Map<string, Spell>();
-  private boardService = inject(BoardService);
+  private readonly spellsCache = new Map<string, Spell>();
+  private readonly boardService = inject(BoardService);
 
   constructor(
-    private damageCalculator: DamageCalculatorService,
-    private statsCalculator: StatsCalculatorService
+    private readonly damageCalculator: DamageCalculatorService,
+    private readonly statsCalculator: StatsCalculatorService
   ) {}
 
   /**
@@ -84,17 +90,30 @@ export class SimulationEngineService {
    * Exécute une simulation complète
    */
   runSimulation(build: Build, timeline: Timeline): SimulationResult {
-    // Calculer les stats totales du build
-    const buildStats = this.statsCalculator.calculateTotalStats(build);
+    // Calculer les stats totales du build avec les passifs
+    let buildStats = this.statsCalculator.calculateTotalStats(build);
+
+    // Récupérer les entités et mécanismes du plateau
+    const boardState = this.boardService.state();
+    const entities = boardState.entities || [];
+    const mechanisms: Mechanism[] = this.boardService.mechanisms();
+
+    // Trouver la position du joueur
+    const playerEntity = entities.find((e: BoardEntity) => e.type === 'player');
+    const playerPosition = playerEntity?.position || { x: 7, y: 7 };
 
     // Créer le contexte initial
     const initialContext: SimulationContext = {
       availablePa: buildStats.ap,
       availablePw: buildStats.wp,
       availableMp: buildStats.mp,
-      currentPosition: { x: 7, y: 7 }, // Position par défaut au centre
+      currentPosition: playerPosition,
+      playerPosition: playerPosition,
+      entities: entities,
+      mechanisms: mechanisms,
       buffs: [],
-      debuffs: []
+      debuffs: [],
+      turn: 1
     };
 
     const steps: SimulationStepResult[] = [];
@@ -160,6 +179,7 @@ export class SimulationEngineService {
     let currentContext = { ...context };
     let stepSuccess = true;
 
+
     // Exécuter chaque action du step
     for (const action of step.actions) {
       const actionResult = this.executeAction(action, currentContext, build, buildStats);
@@ -170,6 +190,11 @@ export class SimulationEngineService {
         currentContext.availablePa -= actionResult.paCost;
         currentContext.availablePw -= actionResult.pwCost;
         currentContext.availableMp -= actionResult.mpCost;
+
+        // Mettre à jour la position si c'était un déplacement
+        if (action.type === 'Move' && action.targetPosition) {
+          this.updateContextPosition(currentContext, action.targetPosition);
+        }
       } else {
         stepSuccess = false;
         break; // Arrêter le step si une action échoue
@@ -257,6 +282,24 @@ export class SimulationEngineService {
     const paCost = spell.paCost || 0;
     const pwCost = spell.pwCost || 0;
 
+    // Déterminer la position de la cible
+    const targetPosition = action.targetPosition || context.currentPosition;
+    const casterPosition = context.playerPosition || context.currentPosition;
+
+    if (!targetPosition || !casterPosition) {
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost,
+        pwCost,
+        mpCost: 0,
+        message: 'Position invalide pour lancer le sort'
+      };
+    }
+
     // Vérifier les ressources
     if (context.availablePa < paCost) {
       return {
@@ -286,21 +329,32 @@ export class SimulationEngineService {
       };
     }
 
-    // Calculer les dégâts (utilisez les effets du sort pour obtenir le baseDamage)
+    // Vérifier si c'est un sort de mécanisme
+    const isMechanism = isSpellMechanism(spell.id);
+
+    if (isMechanism) {
+      return this.executeMechanismSpell(action, context, spell, paCost, pwCost);
+    }
+
+    // Utiliser les stats du build directement (les passifs sont déjà appliqués)
+    const contextualStats = buildStats;
+
+    // Calculer les dégâts
     const baseDamage = this.extractBaseDamageFromSpell(spell);
 
     const damageParams: DamageCalculationParams = {
       baseDamage,
-      masteryPrimary: buildStats.masteryPrimary,
-      masterySecondary: buildStats.masterySecondary,
-      backMastery: buildStats.backMastery,
-      dommageInflict: buildStats.dommageInflict,
-      critRate: buildStats.critRate,
-      critMastery: buildStats.critMastery,
+      masteryPrimary: contextualStats.masteryPrimary,
+      masterySecondary: contextualStats.masterySecondary,
+      backMastery: contextualStats.backMastery,
+      dommageInflict: contextualStats.dommageInflict,
+      critRate: contextualStats.critRate,
+      critMastery: contextualStats.critMastery,
       resistance: 0 // La résistance de l'ennemi sera ajoutée plus tard
     };
 
     const damageResult = this.damageCalculator.calculateDamage(damageParams);
+
 
     return {
       success: true,
@@ -315,7 +369,8 @@ export class SimulationEngineService {
       message: `Cast ${spell.name} for ${damageResult.finalDamage} damage${damageResult.isCritical ? ' (CRITICAL!)' : ''}`,
       details: {
         damageBreakdown: damageResult.breakdown,
-        isCritical: damageResult.isCritical
+        isCritical: damageResult.isCritical,
+        lineOfSight: spell.lineOfSight
       }
     };
   }
@@ -381,10 +436,158 @@ export class SimulationEngineService {
   /**
    * Extrait les dégâts de base d'un sort
    */
-  private extractBaseDamageFromSpell(spell: Spell): number {
+  private extractBaseDamageFromSpell(_spell: Spell): number {
     // Pour l'instant, utiliser une valeur par défaut
     // TODO: Analyser les effets du sort pour extraire les dégâts réels
     return 100;
+  }
+
+  /**
+   * Exécute un sort de mécanisme (Rouage, Sinistro, Cadran, Régulateur)
+   */
+  private executeMechanismSpell(
+    action: TimelineAction,
+    context: SimulationContext,
+    spell: Spell,
+    paCost: number,
+    pwCost: number
+  ): SimulationActionResult {
+    console.log(`🔧 [MECHANISM] executeMechanismSpell called for spell: ${spell.id} (${spell.name})`);
+
+    const mechanismType = getSpellMechanismType(spell.id);
+
+    if (!mechanismType) {
+      console.error(`❌ [MECHANISM] Type not found for spell: ${spell.id}`);
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost,
+        pwCost,
+        mpCost: 0,
+        message: `Mechanism type not found for ${spell.name}`
+      };
+    }
+
+    const imageUrl = 'http://localhost:8080/' + getMechanismImagePath(mechanismType, 0);
+
+    console.log(`✅ [MECHANISM] Type found:`, {
+      type: mechanismType,
+      imageUrl: imageUrl
+    });
+
+    // Vérifier que la position cible est fournie
+    if (!action.targetPosition) {
+      console.error(`❌ [MECHANISM] No target position for spell ${spell.name}`);
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost,
+        pwCost,
+        mpCost: 0,
+        message: `No target position for mechanism ${spell.name}`
+      };
+    }
+
+    console.log(`📍 [MECHANISM] Target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+    // Créer le mécanisme
+    const mechanism: Mechanism = {
+      id: `${mechanismType}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+      type: mechanismType,
+      position: action.targetPosition,
+      charges: 0,
+      spellId: spell.id
+    };
+
+    console.log(`🏗️ [MECHANISM] Mechanism object created:`, mechanism);
+
+    // Ajouter le mécanisme au plateau via le BoardService
+    this.boardService.addMechanism(mechanism);
+
+    console.log(`✅ [MECHANISM] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+    // Si c'est un cadran, créer les 12 heures autour
+    if (mechanismType === 'dial') {
+      this.createDialHours(mechanism.id, action.targetPosition);
+    }
+
+    // Consommer les ressources
+    context.availablePa -= paCost;
+    context.availablePw -= pwCost;
+
+    return {
+      success: true,
+      actionId: action.id || '',
+      actionType: 'CastSpell',
+      spellId: spell.id,
+      spellName: spell.name,
+      paCost,
+      pwCost,
+      mpCost: 0,
+      message: `Placed ${spell.name} at (${action.targetPosition.x}, ${action.targetPosition.y})`,
+      details: {
+        mechanismType: mechanismType,
+        mechanismId: mechanism.id
+      }
+    };
+  }
+
+  /**
+   * Crée les 12 heures autour d'un cadran
+   */
+  private createDialHours(dialId: string, centerPosition: Position): void {
+    console.log(`🕐 [DIAL_HOURS] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
+
+    // Positions relatives des heures par rapport au centre (3 cases de distance)
+    const hourPositions = [
+      { hour: 12, offsetX: 0, offsetY: +3 },   // 12h - Sud (attention: Y+ = vers le bas)
+      { hour: 1, offsetX: +1, offsetY: +2 },   // 1h
+      { hour: 2, offsetX: +2, offsetY: +1 },   // 2h
+      { hour: 3, offsetX: +3, offsetY: 0 },    // 3h - Est
+      { hour: 4, offsetX: +2, offsetY: -1 },   // 4h
+      { hour: 5, offsetX: +1, offsetY: -2 },   // 5h
+      { hour: 6, offsetX: 0, offsetY: -3 },    // 6h - Nord
+      { hour: 7, offsetX: -1, offsetY: -2 },   // 7h
+      { hour: 8, offsetX: -2, offsetY: -1 },   // 8h
+      { hour: 9, offsetX: -3, offsetY: 0 },    // 9h - Ouest
+      { hour: 10, offsetX: -2, offsetY: +1 },  // 10h
+      { hour: 11, offsetX: -1, offsetY: +2 }   // 11h
+    ];
+
+    let hoursCreated = 0;
+
+    hourPositions.forEach(({ hour, offsetX, offsetY }) => {
+      const hourPosition: Position = {
+        x: centerPosition.x + offsetX,
+        y: centerPosition.y + offsetY
+      };
+
+      // Vérifier que la position est dans les limites du plateau (13x13)
+      if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
+        const hourMechanism: Mechanism = {
+          id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          type: 'dial',
+          position: hourPosition,
+          charges: 0,
+          dialId: dialId,  // Référence au cadran central
+          hour: hour       // Numéro de l'heure (1-12)
+        };
+
+        this.boardService.addMechanism(hourMechanism);
+        hoursCreated++;
+        console.log(`  ✅ Hour ${hour} created at (${hourPosition.x}, ${hourPosition.y})`);
+      } else {
+        console.warn(`  ⚠️ Hour ${hour} skipped - position out of bounds: (${hourPosition.x}, ${hourPosition.y})`);
+      }
+    });
+
+    console.log(`🕐 [DIAL_HOURS] Created ${hoursCreated}/12 hours around dial ${dialId}`);
   }
 
   /**
@@ -417,7 +620,7 @@ export class SimulationEngineService {
         // Si un entityId est spécifié, utiliser cette entité
         entityToMove = this.boardService.getEntity(action.entityId);
         if (!entityToMove) {
-          console.error(`❌ Entité introuvable: ${action.entityId}`);
+          console.error(`Entité introuvable: ${action.entityId}`);
           return {
             success: false,
             actionId: action.id || '',
@@ -432,7 +635,7 @@ export class SimulationEngineService {
         // Sinon, déplacer le joueur par défaut
         entityToMove = this.boardService.player();
         if (!entityToMove) {
-          console.error(`❌ Aucun joueur trouvé sur le plateau`);
+          console.error(`Aucun joueur trouvé sur le plateau`);
           return {
             success: false,
             actionId: action.id || '',
@@ -447,12 +650,17 @@ export class SimulationEngineService {
 
       // Effectuer le déplacement
       this.boardService.updateEntityPosition(entityToMove.id, action.targetPosition);
-      console.log(`🚶 ${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
+      console.log(`${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+      // Mettre à jour le contexte si c'est le joueur
+      if (entityToMove.type === 'player') {
+        this.updateContextPosition(context, action.targetPosition);
+      }
 
       // Mettre à jour la direction si spécifiée
       if (action.targetFacing) {
         this.boardService.updateEntityFacing(entityToMove.id, action.targetFacing);
-        console.log(`🔄 ${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
+        console.log(`${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
       }
 
       return {
@@ -493,5 +701,21 @@ export class SimulationEngineService {
       message: 'Waited for next turn'
     };
   }
-}
 
+
+  /**
+   * Met à jour la position du joueur dans le contexte après un déplacement
+   */
+  private updateContextPosition(context: SimulationContext, newPosition: Position): void {
+    context.currentPosition = newPosition;
+    context.playerPosition = newPosition;
+
+    // Mettre à jour aussi dans les entités
+    if (context.entities) {
+      const playerEntity = context.entities.find(e => e.type === 'player');
+      if (playerEntity) {
+        playerEntity.position = newPosition;
+      }
+    }
+  }
+}

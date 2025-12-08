@@ -55,12 +55,12 @@ export class BuildService {
       const backendBuilds = await firstValueFrom(this.api.getAllBuilds());
       this.builds.set(backendBuilds);
       this.saveToPersistence();
-      console.log('✅ Builds chargés depuis le backend:', backendBuilds.length);
+      console.log('Builds chargés depuis le backend:', backendBuilds.length);
     } catch (error: any) {
       const errorMsg = `Erreur de chargement depuis le backend: ${error.message}`;
       this.loadError.set(errorMsg);
-      console.error('❌', errorMsg);
-      console.warn('⚠️ Utilisation des builds depuis localStorage');
+      console.error(errorMsg);
+      console.warn('Utilisation des builds depuis localStorage');
       // Les builds de localStorage sont déjà chargés
     } finally {
       this.isLoading.set(false);
@@ -121,14 +121,16 @@ export class BuildService {
   // ============ CRUD Operations ============
 
   public async createBuild(build: Build): Promise<Build | null> {
+    console.log('[BuildService] createBuild - classId:', build.classId, 'name:', build.name);
     // Ajouter immédiatement au state local
     this.builds.update(builds => [...builds, build]);
     this.saveToPersistence();
-    console.log('✅ Build créé localement:', build.id);
+    console.log('Build créé localement:', build.id);
 
     // Tenter de synchroniser avec le backend en arrière-plan
     try {
       const buildForBackend = this.prepareBuildForBackend(build);
+      console.log('[BuildService] Envoi au backend - classId:', buildForBackend.classId);
       const created = await firstValueFrom(this.api.createBuild(buildForBackend));
       const parsedBuild = this.parseBuildFromBackend(created);
 
@@ -137,10 +139,10 @@ export class BuildService {
         builds.map(b => b.id === build.id ? parsedBuild : b)
       );
       this.saveToPersistence();
-      console.log('✅ Build synchronisé avec le backend:', created.id);
+      console.log('Build synchronisé avec le backend:', created.id);
       return parsedBuild;
     } catch (error) {
-      console.warn('⚠️ Impossible de synchroniser avec le backend, build gardé en local:', error);
+      console.warn('Impossible de synchroniser avec le backend, build gardé en local:', error);
       return build; // Retourner le build local même si backend échoue
     }
   }
@@ -150,17 +152,19 @@ export class BuildService {
     if (!build) return false;
 
     const updated = { ...build, ...updates, updatedAt: new Date() } as Build;
+    console.log('[BuildService] updateBuild - buildId:', buildId, 'classId:', updated.classId);
 
     // Mettre à jour immédiatement en local
     this.builds.update(builds =>
       builds.map(b => b.id === buildId ? updated : b)
     );
     this.saveToPersistence();
-    console.log('✅ Build mis à jour localement:', buildId);
+    console.log('Build mis à jour localement:', buildId);
 
     // Tenter de synchroniser avec le backend en arrière-plan
     try {
       const buildForBackend = this.prepareBuildForBackend(updated);
+      console.log('[BuildService] Envoi mise à jour au backend - classId:', buildForBackend.classId);
       const result = await firstValueFrom(this.api.updateBuild(buildId, buildForBackend));
       const parsedBuild = this.parseBuildFromBackend(result);
 
@@ -168,10 +172,10 @@ export class BuildService {
         builds.map(b => b.id === buildId ? parsedBuild : b)
       );
       this.saveToPersistence();
-      console.log('✅ Build synchronisé avec le backend:', buildId);
+      console.log('Build synchronisé avec le backend:', buildId);
       return true;
     } catch (error) {
-      console.warn('⚠️ Impossible de synchroniser avec le backend, build gardé en local:', error);
+      console.warn('Impossible de synchroniser avec le backend, build gardé en local:', error);
       return true; // Retourner true car la mise à jour locale a réussi
     }
   }
@@ -185,15 +189,15 @@ export class BuildService {
     if (this.selectedBuildIdB() === buildId) this.selectedBuildIdB.set(null);
 
     this.saveToPersistence();
-    console.log('✅ Build supprimé localement:', buildId);
+    console.log('Build supprimé localement:', buildId);
 
     // Tenter de synchroniser avec le backend en arrière-plan
     try {
       await firstValueFrom(this.api.deleteBuild(buildId));
-      console.log('✅ Build supprimé du backend:', buildId);
+      console.log('Build supprimé du backend:', buildId);
       return true;
     } catch (error) {
-      console.warn('⚠️ Impossible de synchroniser avec le backend, build supprimé en local:', error);
+      console.warn('Impossible de synchroniser avec le backend, build supprimé en local:', error);
       return true; // Retourner true car la suppression locale a réussi
     }
   }

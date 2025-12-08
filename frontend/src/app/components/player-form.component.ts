@@ -321,6 +321,8 @@ export class PlayerFormComponent {
       return;
     }
 
+    console.log('[PlayerForm] onSubmit - classId:', this.form.classId);
+
     // Use class name if no custom name provided (only for new players)
     const name = this.editMode()
       ? this.form.name.trim()
@@ -334,11 +336,13 @@ export class PlayerFormComponent {
     };
 
     if (this.editMode() && this.editingId()) {
+      console.log('[PlayerForm] Édition du joueur avec classId:', data.classId);
       this.playerEdited.emit({
         id: this.editingId()!,
         ...data
       });
     } else {
+      console.log('[PlayerForm] Ajout du nouveau joueur avec classId:', data.classId);
       this.playerAdded.emit(data);
     }
 

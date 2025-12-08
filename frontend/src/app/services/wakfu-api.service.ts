@@ -103,6 +103,7 @@ export class WakfuApiService {
   // ============ Spell API ============
 
   getAllSpells(classId?: string): Observable<Spell[]> {
+    console.log('[WakfuAPI] getAllSpells - classId:', classId);
     if (classId) {
       return this.http.get<Spell[]>(`${this.baseUrl}/spells`, {
         params: { classId }
@@ -118,6 +119,7 @@ export class WakfuApiService {
   // ============ Passive API ============
 
   getAllPassives(classId?: string): Observable<Passive[]> {
+    console.log('[WakfuAPI] getAllPassives - classId:', classId);
     if (classId) {
       return this.http.get<Passive[]>(`${this.baseUrl}/passives`, {
         params: { classId }

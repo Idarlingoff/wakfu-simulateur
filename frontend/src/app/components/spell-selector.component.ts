@@ -3,10 +3,10 @@
  * Permet de sélectionner des sorts pour un build
  */
 
-import { Component, Input, Output, EventEmitter, signal, inject, effect } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal, inject, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { SpellWithLevel, Spell } from '../models/spell.model';
+import { SpellWithLevel } from '../models/spell.model';
 import { SpellReference } from '../models/build.model';
 import { DataCacheService } from '../services/data-cache.service';
 
@@ -69,15 +69,26 @@ import { DataCacheService } from '../services/data-cache.service';
               <div class="spell-list-section">
                 @if (loading()) {
                   <div class="loading">Chargement des sorts...</div>
+                } @else if (errorMessage()) {
+                  <div class="error-message">{{ errorMessage() }}</div>
                 } @else if (filteredSpells().length === 0) {
-                  <div class="no-results">Aucun sort trouvé</div>
+                  <div class="no-results">Aucun sort trouvé pour cette recherche</div>
                 } @else {
                   <div class="spell-grid">
                     @for (spell of filteredSpells(); track spell.id) {
-                      <div class="spell-item" (click)="selectSpell(spell)">
+                      <div
+                        class="spell-item"
+                        [class.already-selected]="isSpellSelected(spell.id)"
+                        (click)="selectSpell(spell)"
+                      >
                         <div class="spell-icon-large">✨</div>
                         <div class="spell-info">
-                          <div class="spell-title">{{ spell.name }}</div>
+                          <div class="spell-title">
+                            {{ spell.name }}
+                            @if (isSpellSelected(spell.id)) {
+                              <span class="badge-selected">✓ Sélectionné</span>
+                            }
+                          </div>
                           <div class="spell-meta">
                             <span class="cost-pa">⚡ {{ spell.paCost || 0 }} PA</span>
                             <span class="cost-pw">💠 {{ spell.pwCost || 0 }} PW</span>
@@ -318,6 +329,18 @@ import { DataCacheService } from '../services/data-cache.service';
       padding: 32px;
     }
 
+    .error-message {
+      text-align: center;
+      color: #ff6b6b;
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
     .spell-grid {
       display: grid;
       gap: 8px;
@@ -340,6 +363,18 @@ import { DataCacheService } from '../services/data-cache.service';
       border-color: var(--accent);
     }
 
+    .spell-item.already-selected {
+      background: rgba(76, 201, 240, 0.1);
+      border-color: var(--accent);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .spell-item.already-selected:hover {
+      opacity: 0.7;
+      transform: none;
+    }
+
     .spell-icon-large {
       font-size: 32px;
       width: 48px;
@@ -360,6 +395,20 @@ import { DataCacheService } from '../services/data-cache.service';
       color: #e8ecf3;
       font-weight: 600;
       margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-selected {
+      background: var(--accent);
+      color: #0b1220;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .spell-meta {
@@ -389,31 +438,31 @@ import { DataCacheService } from '../services/data-cache.service';
     }
   `]
 })
-export class SpellSelectorComponent {
+export class SpellSelectorComponent implements OnChanges {
   @Input() classId: string = '';
   @Input() selectedSpells: (SpellReference | null)[] = new Array(12).fill(null);
   @Output() spellsChange = new EventEmitter<(SpellReference | null)[]>();
 
-  private dataCache = inject(DataCacheService);
+  private readonly dataCache = inject(DataCacheService);
 
   pickerOpen = signal(false);
   currentSlotIndex = signal(-1);
   loading = signal(false);
   allSpells = signal<SpellWithLevel[]>([]);
   filteredSpells = signal<SpellWithLevel[]>([]);
+  errorMessage = signal<string>('');
   searchQuery = '';
 
-  constructor() {
-    // Recharger les sorts quand la classe change
-    effect(() => {
-      const classId = this.classId;
-      if (classId && this.pickerOpen()) {
-        this.loadSpells();
-      }
-    });
+  ngOnChanges(changes: SimpleChanges): void {
+    // Recharger les sorts quand la classe change et que le modal est ouvert
+    if (changes['classId'] && this.pickerOpen()) {
+      console.log('[SpellSelector] ngOnChanges - Nouvelle classId:', changes['classId'].currentValue, '(ancienne:', changes['classId'].previousValue, ')');
+      this.loadSpells();
+    }
   }
 
   openModal(): void {
+    console.log('[SpellSelector] openModal - classId actuel:', this.classId);
     this.pickerOpen.set(true);
     this.loadSpells();
   }
@@ -429,9 +478,25 @@ export class SpellSelectorComponent {
 
   async loadSpells(): Promise<void> {
     this.loading.set(true);
+    this.errorMessage.set('');
+
     try {
-      // Charger les sorts depuis le cache
-      const spells = await this.dataCache.getSpells(this.classId || undefined);
+      // Ne charger que si une classe est sélectionnée
+      if (!this.classId) {
+        console.warn('Aucune classe sélectionnée, impossible de charger les sorts');
+        this.errorMessage.set('Veuillez sélectionner une classe pour afficher les sorts');
+        this.allSpells.set([]);
+        this.filteredSpells.set([]);
+        return;
+      }
+
+
+      const spells = await this.dataCache.getSpells(this.classId);
+
+      if (spells.length === 0) {
+        console.warn(`⚠️ Aucun sort disponible pour la classe ${this.classId}`);
+        this.errorMessage.set(`⚠️ Aucun sort disponible pour cette classe. Vérifiez que le backend est démarré et que les données sont chargées.`);
+      }
 
       // Convertir en SpellWithLevel (level par défaut à 1)
       const spellsWithLevel: SpellWithLevel[] = spells.map(spell => ({
@@ -442,7 +507,8 @@ export class SpellSelectorComponent {
       this.allSpells.set(spellsWithLevel);
       this.filterSpells();
     } catch (error) {
-      console.error('Erreur chargement sorts:', error);
+      console.error('Erreur lors du chargement des sorts:', error);
+      this.errorMessage.set('Erreur de connexion au serveur. Vérifiez que le backend est démarré.');
       // En cas d'erreur, utiliser des données par défaut vides
       this.allSpells.set([]);
       this.filteredSpells.set([]);
@@ -461,6 +527,16 @@ export class SpellSelectorComponent {
   }
 
   selectSpell(spell: SpellWithLevel): void {
+    // Vérifier si le sort est déjà présent dans la barre
+    const isAlreadySelected = this.selectedSpells.some(
+      s => s !== null && s.spellId === spell.id
+    );
+
+    if (isAlreadySelected) {
+      alert(`❌ Le sort "${spell.name}" est déjà dans votre barre de sorts. Vous ne pouvez pas l'ajouter deux fois.`);
+      return;
+    }
+
     const index = this.currentSlotIndex();
     let targetIndex = index >= 0 ? index : this.findFirstEmptySlot();
 
@@ -498,6 +574,10 @@ export class SpellSelectorComponent {
   getSpellName(spellId: string): string {
     const spell = this.allSpells().find(s => s.id === spellId);
     return spell?.name || spellId;
+  }
+
+  isSpellSelected(spellId: string): boolean {
+    return this.selectedSpells.some(s => s !== null && s.spellId === spellId);
   }
 }
 

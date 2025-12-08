@@ -3,7 +3,7 @@
  * Permet de sélectionner des passifs pour un build
  */
 
-import { Component, Input, Output, EventEmitter, signal, inject, effect } from '@angular/core';
+import { Component, Input, Output, EventEmitter, signal, inject, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Passive } from '../models/passive.model';
@@ -17,7 +17,7 @@ import { DataCacheService } from '../services/data-cache.service';
   template: `
     <div class="passive-selector">
       <div class="selector-header">
-        <h4>Passifs ({{ countSelected() }}/6)</h4>
+        <h4>Passifs ({{ countSelected() }}/{{ getAvailableSlots().length }})</h4>
         <button type="button" class="btn-open" (click)="openModal()">
           📋 Gérer les passifs
         </button>
@@ -36,9 +36,16 @@ import { DataCacheService } from '../services/data-cache.service';
               <!-- Slots de passifs -->
               <div class="passive-slots">
                 @for (passive of selectedPassives; track $index; let i = $index) {
-                  <div class="passive-slot" [class.filled]="passive !== null">
+                  <div class="passive-slot"
+                       [class.filled]="passive !== null"
+                       [class.locked]="!isSlotAvailable(i)">
                     <div class="slot-level">Niveau {{ getLevelForSlot(i) }}</div>
-                    @if (passive) {
+                    @if (!isSlotAvailable(i)) {
+                      <div class="locked-slot">
+                        <span class="lock-icon">🔒</span>
+                        <span class="lock-text">Verrouillé</span>
+                      </div>
+                    } @else if (passive) {
                       <div class="passive-card" (click)="removePassive(i)">
                         <span class="passive-icon">🔮</span>
                         <span class="passive-name">{{ getPassiveName(passive.passiveId) }}</span>
@@ -67,8 +74,10 @@ import { DataCacheService } from '../services/data-cache.service';
 
                 @if (loading()) {
                   <div class="loading">Chargement des passifs...</div>
+                } @else if (errorMessage()) {
+                  <div class="error-message">{{ errorMessage() }}</div>
                 } @else if (filteredPassives().length === 0) {
-                  <div class="no-results">Aucun passif trouvé</div>
+                  <div class="no-results">Aucun passif trouvé pour cette recherche</div>
                 } @else {
                   <div class="passive-list">
                     @for (passive of filteredPassives(); track passive.id) {
@@ -79,7 +88,12 @@ import { DataCacheService } from '../services/data-cache.service';
                       >
                         <div class="passive-icon-large">🔮</div>
                         <div class="passive-info">
-                          <div class="passive-title">{{ passive.name }}</div>
+                          <div class="passive-title">
+                            {{ passive.name }}
+                            @if (isSelected(passive.id)) {
+                              <span class="badge-selected">✓ Sélectionné</span>
+                            }
+                          </div>
                           <div class="passive-meta">
                             <span>Niveau min: {{ passive.unlockedAtLevel || 20 }}</span>
                           </div>
@@ -200,6 +214,11 @@ import { DataCacheService } from '../services/data-cache.service';
       overflow: hidden;
     }
 
+    .passive-slot.locked {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
     .slot-level {
       background: var(--panel-2);
       padding: 4px 8px;
@@ -280,6 +299,27 @@ import { DataCacheService } from '../services/data-cache.service';
       background: var(--panel);
     }
 
+    .locked-slot {
+      height: 100px;
+      background: var(--panel-2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--muted);
+    }
+
+    .lock-icon {
+      font-size: 24px;
+      opacity: 0.5;
+    }
+
+    .lock-text {
+      font-size: 11px;
+      text-align: center;
+    }
+
     .available-section {
       border-top: 2px solid var(--stroke);
       padding-top: 16px;
@@ -307,6 +347,18 @@ import { DataCacheService } from '../services/data-cache.service';
       text-align: center;
       color: var(--muted);
       padding: 32px;
+    }
+
+    .error-message {
+      text-align: center;
+      color: #ff6b6b;
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid rgba(255, 107, 107, 0.3);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px;
+      font-size: 14px;
+      line-height: 1.6;
     }
 
     .passive-list {
@@ -359,10 +411,36 @@ import { DataCacheService } from '../services/data-cache.service';
       color: #e8ecf3;
       font-weight: 600;
       margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge-selected {
+      background: var(--accent);
+      color: #0b1220;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .passive-item.selected {
+      background: rgba(76, 201, 240, 0.1);
+      border-color: var(--accent);
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .passive-item.selected:hover {
+      opacity: 0.7;
+      transform: none;
     }
 
     .passive-item.selected .passive-title {
-      color: #0b1220;
+      color: #e8ecf3;
     }
 
     .passive-meta {
@@ -412,34 +490,62 @@ import { DataCacheService } from '../services/data-cache.service';
     }
   `]
 })
-export class PassiveSelectorComponent {
+export class PassiveSelectorComponent implements OnChanges {
   @Input() classId: string = '';
+  @Input() characterLevel: number = 245; // Niveau du personnage
   @Input() selectedPassives: (PassiveReference | null)[] = new Array(6).fill(null);
   @Output() passivesChange = new EventEmitter<(PassiveReference | null)[]>();
 
-  private dataCache = inject(DataCacheService);
+  private readonly dataCache = inject(DataCacheService);
 
   modalOpen = signal(false);
   currentSlotIndex = signal(-1);
   loading = signal(false);
   allPassives = signal<Passive[]>([]);
   filteredPassives = signal<Passive[]>([]);
+  errorMessage = signal<string>('');
   searchQuery = '';
 
   // Niveaux de déverrouillage des passifs
   private readonly PASSIVE_LEVELS = [20, 35, 50, 100, 150, 200];
 
-  constructor() {
-    // Recharger les passifs quand la classe change
-    effect(() => {
-      const classId = this.classId;
-      if (classId && this.modalOpen()) {
-        this.loadPassives();
+  /**
+   * Obtient les emplacements de passifs disponibles selon le niveau du personnage
+   */
+  getAvailableSlots(): number[] {
+    return this.PASSIVE_LEVELS
+      .map((level, index) => ({ level, index }))
+      .filter(slot => slot.level <= this.characterLevel)
+      .map(slot => slot.index);
+  }
+
+  /**
+   * Vérifie si un emplacement est disponible selon le niveau du personnage
+   */
+  isSlotAvailable(index: number): boolean {
+    return this.PASSIVE_LEVELS[index] <= this.characterLevel;
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['classId'] && this.modalOpen()) {
+      console.log('[PassiveSelector] ngOnChanges - Nouvelle classId:', changes['classId'].currentValue, '(ancienne:', changes['classId'].previousValue, ')');
+      this.loadPassives();
+    }
+
+    // Si le niveau change, on vérifie s'il faut retirer des passifs des emplacements verrouillés
+    if (changes['characterLevel'] && !changes['characterLevel'].isFirstChange()) {
+      const newLevel = changes['characterLevel'].currentValue;
+      const oldLevel = changes['characterLevel'].previousValue;
+
+      if (newLevel < oldLevel) {
+        // Le niveau a diminué, vérifier si des passifs sont dans des emplacements maintenant verrouillés
+        this.removePassivesFromLockedSlots();
       }
-    });
+    }
   }
 
   openModal(): void {
+    console.log('[PassiveSelector] openModal - classId actuel:', this.classId);
     this.modalOpen.set(true);
     this.loadPassives();
   }
@@ -452,15 +558,30 @@ export class PassiveSelectorComponent {
 
   async loadPassives(): Promise<void> {
     this.loading.set(true);
+    this.errorMessage.set('');
+
     try {
-      // Charger les passifs depuis le cache
-      const passives = await this.dataCache.getPassives(this.classId || undefined);
+      if (!this.classId) {
+        console.warn('Aucune classe sélectionnée, impossible de charger les passifs');
+        this.errorMessage.set('Veuillez sélectionner une classe pour afficher les passifs');
+        this.allPassives.set([]);
+        this.filteredPassives.set([]);
+        return;
+      }
+
+      const passives = await this.dataCache.getPassives(this.classId);
+
+      if (passives.length === 0) {
+        console.warn(`Aucun passif disponible pour la classe ${this.classId}`);
+        this.errorMessage.set(`Aucun passif disponible pour cette classe. Vérifiez que le backend est démarré et que les données sont chargées.`);
+      }
 
       this.allPassives.set(passives);
       this.filterPassives();
     } catch (error) {
-      console.error('Erreur chargement passifs:', error);
-      // En cas d'erreur, utiliser des données par défaut vides
+      console.error('Erreur lors du chargement des passifs:', error);
+      this.errorMessage.set('Erreur de connexion au serveur. Vérifiez que le backend est démarré.');
+
       this.allPassives.set([]);
       this.filteredPassives.set([]);
     } finally {
@@ -482,6 +603,16 @@ export class PassiveSelectorComponent {
   }
 
   selectPassive(passive: Passive): void {
+    // Vérifier si le passif est déjà présent dans la barre
+    const isAlreadySelected = this.selectedPassives.some(
+      p => p !== null && p.passiveId === passive.id
+    );
+
+    if (isAlreadySelected) {
+      alert(`❌ Le passif "${passive.name}" est déjà dans votre barre de passifs. Vous ne pouvez pas l'ajouter deux fois.`);
+      return;
+    }
+
     const currentIndex = this.currentSlotIndex();
     let targetIndex = currentIndex >= 0 ? currentIndex : this.findFirstEmptySlot();
 
@@ -525,6 +656,26 @@ export class PassiveSelectorComponent {
 
   countSelected(): number {
     return this.selectedPassives.filter(p => p !== null).length;
+  }
+
+  /**
+   * Retire les passifs des emplacements verrouillés si le niveau du personnage diminue
+   */
+  private removePassivesFromLockedSlots(): void {
+    const newPassives = [...this.selectedPassives];
+    let hasChanges = false;
+
+    for (let i = 0; i < newPassives.length; i++) {
+      if (newPassives[i] !== null && !this.isSlotAvailable(i)) {
+        console.log(`[PassiveSelector] Retrait du passif de l'emplacement ${i} (niveau ${this.PASSIVE_LEVELS[i]} > ${this.characterLevel})`);
+        newPassives[i] = null;
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      this.passivesChange.emit(newPassives);
+    }
   }
 }
 

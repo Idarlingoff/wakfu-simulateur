@@ -56,7 +56,7 @@ interface FormBuild {
                 <label>Classe *</label>
                 <select [(ngModel)]="form.classId" name="classId" required>
                   <option value="">-- Sélectionner --</option>
-                  <option value="xelor">Xélor</option>
+                  <option value="XEL">Xélor</option>
                   <option value="sacrier">Sacrier</option>
                   <option value="osamodas">Osamodas</option>
                   <option value="ecaflip">Écaflip</option>
@@ -66,14 +66,10 @@ interface FormBuild {
 
               <div class="form-group">
                 <label>Niveau du personnage *</label>
-                <input
-                  type="number"
-                  [(ngModel)]="form.characterLevel"
-                  name="level"
-                  min="1"
-                  max="215"
-                  required
-                />
+                <select [(ngModel)]="form.characterLevel" name="level" required>
+                  <option value="">-- Sélectionner --</option>
+                  <option *ngFor="let level of availableLevels" [value]="level">{{ level }}</option>
+                </select>
               </div>
 
               <div class="form-group">
@@ -100,6 +96,7 @@ interface FormBuild {
             <div class="form-section">
               <app-passive-selector
                 [classId]="form.classId"
+                [characterLevel]="form.characterLevel"
                 [selectedPassives]="form.passives"
                 (passivesChange)="onPassivesChange($event)"
               ></app-passive-selector>
@@ -410,6 +407,9 @@ export class BuildFormComponent {
   isOpen = signal(false);
   editingBuildId = signal<string | null>(null);
 
+  // Niveaux disponibles pour la création de build
+  readonly availableLevels = [20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215, 230, 245];
+
   form: FormBuild = {
     name: '',
     classId: '',
@@ -513,6 +513,8 @@ export class BuildFormComponent {
       return;
     }
 
+    console.log('[BuildForm] onSubmit - classId:', this.form.classId);
+
     if (this.editingBuildId()) {
       // Update existing build
       const updates: Partial<Build> = {
@@ -525,6 +527,7 @@ export class BuildFormComponent {
         sublimationBar: { sublimations: this.form.sublimations },
         stats: this.form.stats
       };
+      console.log('[BuildForm] Mise à jour du build avec classId:', updates.classId);
       this.buildService.updateBuild(this.editingBuildId()!, updates);
       alert('Build modifié avec succès!');
     } else {
@@ -542,6 +545,7 @@ export class BuildFormComponent {
         createdAt: new Date(),
         updatedAt: new Date()
       };
+      console.log('[BuildForm] Création du nouveau build avec classId:', newBuild.classId);
       this.buildService.createBuild(newBuild);
       alert('Build créé avec succès!');
     }

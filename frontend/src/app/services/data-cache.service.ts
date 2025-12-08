@@ -33,16 +33,17 @@ export class DataCacheService {
    */
   async getSpells(classId?: string): Promise<Spell[]> {
     const cacheKey = classId || 'all';
+    console.log('[DataCache] getSpells - classId:', classId, '- cacheKey:', cacheKey);
 
     // Vérifier le cache
     const cached = this.spellsCache.get(cacheKey);
     if (cached && this.isCacheValid(cached.timestamp)) {
-      console.log(`✅ Sorts récupérés depuis le cache (${cacheKey})`);
+      console.log(`Sorts récupérés depuis le cache (${cacheKey}) - ${cached.data.length} sort(s)`);
       return cached.data;
     }
 
     // Charger depuis l'API
-    console.log(`📡 Chargement des sorts depuis l'API (${cacheKey})`);
+    console.log(`Chargement des sorts depuis l'API (${cacheKey})`);
     this.loadingSpells.set(true);
 
     try {
@@ -53,13 +54,24 @@ export class DataCacheService {
         });
       });
 
-      // Mettre en cache
-      this.spellsCache.set(cacheKey, {
-        data: spells,
-        timestamp: Date.now()
-      });
+      console.log(`Réponse API: ${spells.length} sort(s) reçu(s) pour (${cacheKey})`);
+
+      // Ne mettre en cache que si des données sont retournées
+      // Évite de cacher un tableau vide en cas d'erreur backend
+      if (spells && spells.length > 0) {
+        this.spellsCache.set(cacheKey, {
+          data: spells,
+          timestamp: Date.now()
+        });
+        console.log(`${spells.length} sort(s) mis en cache pour (${cacheKey})`);
+      } else {
+        console.warn(`Aucun sort retourné par l'API pour (${cacheKey}) - cache non mis à jour`);
+      }
 
       return spells;
+    } catch (error) {
+      console.error(`Erreur lors du chargement des sorts pour (${cacheKey}):`, error);
+      throw error;
     } finally {
       this.loadingSpells.set(false);
     }
@@ -98,16 +110,17 @@ export class DataCacheService {
    */
   async getPassives(classId?: string): Promise<Passive[]> {
     const cacheKey = classId || 'all';
+    console.log('[DataCache] getPassives - classId:', classId, '- cacheKey:', cacheKey);
 
     // Vérifier le cache
     const cached = this.passivesCache.get(cacheKey);
     if (cached && this.isCacheValid(cached.timestamp)) {
-      console.log(`✅ Passifs récupérés depuis le cache (${cacheKey})`);
+      console.log(`Passifs récupérés depuis le cache (${cacheKey}) - ${cached.data.length} passif(s)`);
       return cached.data;
     }
 
     // Charger depuis l'API
-    console.log(`📡 Chargement des passifs depuis l'API (${cacheKey})`);
+    console.log(`Chargement des passifs depuis l'API (${cacheKey})`);
     this.loadingPassives.set(true);
 
     try {
@@ -118,13 +131,24 @@ export class DataCacheService {
         });
       });
 
-      // Mettre en cache
-      this.passivesCache.set(cacheKey, {
-        data: passives,
-        timestamp: Date.now()
-      });
+      console.log(`Réponse API: ${passives.length} passif(s) reçu(s) pour (${cacheKey})`);
+
+      // Ne mettre en cache que si des données sont retournées
+      // Évite de cacher un tableau vide en cas d'erreur backend
+      if (passives && passives.length > 0) {
+        this.passivesCache.set(cacheKey, {
+          data: passives,
+          timestamp: Date.now()
+        });
+        console.log(`${passives.length} passif(s) mis en cache pour (${cacheKey})`);
+      } else {
+        console.warn(`Aucun passif retourné par l'API pour (${cacheKey}) - cache non mis à jour`);
+      }
 
       return passives;
+    } catch (error) {
+      console.error(`Erreur lors du chargement des passifs pour (${cacheKey}):`, error);
+      throw error;
     } finally {
       this.loadingPassives.set(false);
     }
@@ -163,19 +187,19 @@ export class DataCacheService {
    * @param classId ID de la classe
    */
   async preloadClassData(classId: string): Promise<void> {
-    console.log(`🚀 Préchargement des données pour la classe ${classId}`);
+    console.log(`Préchargement des données pour la classe ${classId}`);
     await Promise.all([
       this.getSpells(classId),
       this.getPassives(classId)
     ]);
-    console.log(`✅ Données préchargées pour ${classId}`);
+    console.log(`Données préchargées pour ${classId}`);
   }
 
   /**
    * Vide le cache (utile après une mise à jour des données)
    */
   clearCache(): void {
-    console.log('🗑️ Vidage du cache');
+    console.log('Vidage du cache');
     this.spellsCache.clear();
     this.passivesCache.clear();
   }
@@ -184,7 +208,7 @@ export class DataCacheService {
    * Vide le cache des sorts
    */
   clearSpellsCache(): void {
-    console.log('🗑️ Vidage du cache des sorts');
+    console.log('Vidage du cache des sorts');
     this.spellsCache.clear();
   }
 
@@ -192,7 +216,7 @@ export class DataCacheService {
    * Vide le cache des passifs
    */
   clearPassivesCache(): void {
-    console.log('🗑️ Vidage du cache des passifs');
+    console.log('Vidage du cache des passifs');
     this.passivesCache.clear();
   }
 

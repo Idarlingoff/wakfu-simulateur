@@ -70,10 +70,10 @@ export class BuildValidatorService {
       });
     }
 
-    if (build.characterLevel && build.characterLevel > 230) {
+    if (build.characterLevel && build.characterLevel > 245) {
       errors.push({
         field: 'characterLevel',
-        message: 'Le niveau ne peut pas dépasser 230',
+        message: 'Le niveau ne peut pas dépasser 245',
         code: 'LEVEL_TOO_HIGH'
       });
     }

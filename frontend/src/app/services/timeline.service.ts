@@ -82,23 +82,23 @@ export class TimelineService {
       const backendTimelines = await firstValueFrom(this.api.getAllTimelines(buildId));
       this.timelines.set(backendTimelines);
       this.saveToPersistence();
-      console.log('✅ Timelines chargées depuis le backend:', backendTimelines.length);
+      console.log('Timelines chargées depuis le backend:', backendTimelines.length);
 
       // Si aucune timeline n'est chargée et qu'on n'a pas de currentTimeline, on peut initialiser avec une timeline mock
       if (backendTimelines.length === 0 && this.timelines().length === 0) {
-        console.warn('⚠️ Aucune timeline trouvée, utilisation de données mock');
+        console.warn('Aucune timeline trouvée, utilisation de données mock');
         await this.initializeMockData();
       }
     } catch (error: any) {
       const errorMsg = `Erreur de chargement depuis le backend: ${error.message}`;
       this.loadError.set(errorMsg);
-      console.error('❌', errorMsg);
-      console.warn('⚠️ Utilisation des timelines depuis localStorage');
+      console.error(errorMsg);
+      console.warn('Utilisation des timelines depuis localStorage');
       // Les timelines de localStorage sont déjà chargées
 
       // Si toujours pas de timeline, initialiser avec des données mock
       if (this.timelines().length === 0) {
-        console.warn('⚠️ Initialisation avec des données mock');
+        console.warn('Initialisation avec des données mock');
         await this.initializeMockData();
       }
     } finally {
@@ -155,13 +155,13 @@ export class TimelineService {
       this.timelines.set([created]);
       this.currentTimelineId.set(created.id);
       this.saveToPersistence();
-      console.log('✅ Timeline mock créée sur le backend:', created.id);
+      console.log('Timeline mock créée sur le backend:', created.id);
     } catch (error) {
       // Si erreur backend, garder en local seulement
       this.timelines.set([mockTimeline]);
       this.currentTimelineId.set('timeline_1');
       this.saveToPersistence();
-      console.warn('⚠️ Timeline mock gardée en local uniquement');
+      console.warn('Timeline mock gardée en local uniquement');
     }
   }
 
@@ -196,7 +196,7 @@ export class TimelineService {
     // Ajouter immédiatement au state local
     this.timelines.update(tls => [...tls, timeline]);
     this.saveToPersistence();
-    console.log('✅ Timeline créée localement:', timeline.id);
+    console.log('Timeline créée localement:', timeline.id);
 
     // Tenter de synchroniser avec le backend en arrière-plan
     try {
@@ -209,10 +209,10 @@ export class TimelineService {
         tls.map(t => t.id === timeline.id ? parsedTimeline : t)
       );
       this.saveToPersistence();
-      console.log('✅ Timeline synchronisée avec le backend:', created.id);
+      console.log('Timeline synchronisée avec le backend:', created.id);
       return parsedTimeline;
     } catch (error) {
-      console.warn('⚠️ Impossible de synchroniser avec le backend, timeline gardée en local:', error);
+      console.warn('Impossible de synchroniser avec le backend, timeline gardée en local:', error);
       return timeline; // Retourner la timeline locale même si backend échoue
     }
   }
@@ -220,7 +220,7 @@ export class TimelineService {
   public async updateTimeline(timelineId: string, updates: Partial<Timeline>): Promise<Timeline | null> {
     const existingTimeline = this.getTimelineById(timelineId);
     if (!existingTimeline) {
-      console.error('❌ Timeline introuvable:', timelineId);
+      console.error('Timeline introuvable:', timelineId);
       return null;
     }
 
@@ -231,7 +231,7 @@ export class TimelineService {
       tls.map(t => t.id === timelineId ? updatedTimeline : t)
     );
     this.saveToPersistence();
-    console.log('✅ Timeline mise à jour localement:', timelineId);
+    console.log('Timeline mise à jour localement:', timelineId);
 
     // Tenter de synchroniser avec le backend en arrière-plan
     try {
@@ -243,10 +243,10 @@ export class TimelineService {
         tls.map(t => t.id === timelineId ? parsedTimeline : t)
       );
       this.saveToPersistence();
-      console.log('✅ Timeline synchronisée avec le backend:', timelineId);
+      console.log('Timeline synchronisée avec le backend:', timelineId);
       return parsedTimeline;
     } catch (error) {
-      console.warn('⚠️ Impossible de synchroniser avec le backend, timeline gardée en local:', error);
+      console.warn('Impossible de synchroniser avec le backend, timeline gardée en local:', error);
       return updatedTimeline; // Retourner la timeline locale même si backend échoue
     }
   }
@@ -260,15 +260,15 @@ export class TimelineService {
       this.currentStepIndex.set(0);
     }
     this.saveToPersistence();
-    console.log('✅ Timeline supprimée localement:', timelineId);
+    console.log('Timeline supprimée localement:', timelineId);
 
     // Tenter de synchroniser avec le backend en arrière-plan
     try {
       await firstValueFrom(this.api.deleteTimeline(timelineId));
-      console.log('✅ Timeline supprimée du backend:', timelineId);
+      console.log('Timeline supprimée du backend:', timelineId);
       return true;
     } catch (error) {
-      console.warn('⚠️ Impossible de synchroniser avec le backend, timeline supprimée en local:', error);
+      console.warn('Impossible de synchroniser avec le backend, timeline supprimée en local:', error);
       return true; // Retourner true car la suppression locale a réussi
     }
   }
@@ -285,9 +285,9 @@ export class TimelineService {
     if (timeline) {
       this.currentTimelineId.set(timelineId);
       this.currentStepIndex.set(0);
-      console.log('✅ Timeline loaded:', timelineId);
+      console.log('Timeline loaded:', timelineId);
     } else {
-      console.warn('⚠️ Timeline not found:', timelineId);
+      console.warn('Timeline not found:', timelineId);
       console.log('Available timelines:', this.timelines().map(t => t.id));
     }
   }
@@ -362,11 +362,11 @@ export class TimelineService {
   public executeCurrentStep(): TimelineAction[] {
     const step = this.currentStep();
     if (!step) {
-      console.warn('⚠️ Aucune étape à exécuter');
+      console.warn('Aucune étape à exécuter');
       return [];
     }
 
-    console.log('▶️ Exécution de l\'étape:', step.id);
+    console.log('Exécution de l\'étape:', step.id);
     return step.actions;
   }
 

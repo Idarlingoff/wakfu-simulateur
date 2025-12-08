@@ -3,13 +3,15 @@
  * Form for creating and editing timelines with spell sequences
  */
 
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
+import { DataCacheService } from '../services/data-cache.service';
 import { Timeline, TimelineStep } from '../models/timeline.model';
+import { Spell } from '../models/spell.model';
 
 interface FormStep {
   id: string;
@@ -53,7 +55,7 @@ interface FormStep {
 
               <div class="form-group">
                 <label>Build associé *</label>
-                <select [(ngModel)]="form.buildId" name="buildId" required>
+                <select [ngModel]="selectedBuildId()" (ngModelChange)="selectedBuildId.set($event)" name="buildId" required>
                   <option value="">-- Sélectionner --</option>
                   <option *ngFor="let build of buildService.allBuilds()" [value]="build.id">
                     {{ build.name }}
@@ -413,17 +415,31 @@ export class TimelineFormComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
   boardService = inject(BoardService);
+  dataCacheService = inject(DataCacheService);
 
   isOpen = signal(false);
   editingTimelineId = signal<string | null>(null);
+  enrichedSpells = signal<Spell[]>([]);
+  selectedBuildId = signal<string>('');
 
   form = {
     name: '',
-    buildId: '',
     description: ''
   };
 
   steps: FormStep[] = [];
+
+  constructor() {
+    // Charger les sorts enrichis quand le buildId change
+    effect(() => {
+      const buildId = this.selectedBuildId();
+      if (buildId) {
+        this.loadEnrichedSpells(buildId);
+      } else {
+        this.enrichedSpells.set([]);
+      }
+    });
+  }
 
   /**
    * Open form for creating new timeline
@@ -432,9 +448,9 @@ export class TimelineFormComponent {
     this.editingTimelineId.set(null);
     this.form = {
       name: '',
-      buildId: '',
       description: ''
     };
+    this.selectedBuildId.set('');
     this.steps = [];
     this.isOpen.set(true);
   }
@@ -446,9 +462,9 @@ export class TimelineFormComponent {
     this.editingTimelineId.set(timeline.id);
     this.form = {
       name: timeline.name,
-      buildId: timeline.buildId,
       description: ''
     };
+    this.selectedBuildId.set(timeline.buildId);
 
     // Convert timeline steps to form steps
     this.steps = timeline.steps.map((step) => {
@@ -492,13 +508,42 @@ export class TimelineFormComponent {
   }
 
   /**
+   * Load enriched spells with full data from cache
+   */
+  private async loadEnrichedSpells(buildId: string): Promise<void> {
+    console.log('Loading enriched spells for buildId:', buildId);
+    const build = this.buildService.getBuildById(buildId);
+    if (!build) {
+      console.warn('Build not found:', buildId);
+      this.enrichedSpells.set([]);
+      return;
+    }
+
+    console.log('Build found:', build.name, '- Spell bar:', build.spellBar);
+    const spellReferences = build.spellBar.spells.filter(s => s !== null);
+    console.log('Spell references found:', spellReferences.length);
+
+    const enrichedSpellsPromises = spellReferences.map(async (ref) => {
+      if (ref) {
+        console.log('Fetching spell:', ref.spellId);
+        return await this.dataCacheService.getSpellById(ref.spellId);
+      }
+      return undefined;
+    });
+
+    const spells = await Promise.all(enrichedSpellsPromises);
+    const filteredSpells = spells.filter((s): s is Spell => s !== undefined);
+    console.log('Enriched spells loaded:', filteredSpells.length, filteredSpells.map(s => s.name));
+    this.enrichedSpells.set(filteredSpells);
+  }
+
+  /**
    * Get available spells from selected build
    */
   getSpells() {
-    if (!this.form.buildId) return [];
-    const build = this.buildService.getBuildById(this.form.buildId);
-    if (!build) return [];
-    return build.spellBar.spells.filter(s => s !== null) as any[];
+    const spells = this.enrichedSpells();
+    console.log('getSpells() called, returning:', spells.length, 'spells');
+    return spells;
   }
 
   /**
@@ -512,7 +557,8 @@ export class TimelineFormComponent {
    * Handle form submission
    */
   async onSubmit(): Promise<void> {
-    if (!this.form.name || !this.form.buildId || this.steps.length === 0) {
+    const buildId = this.selectedBuildId();
+    if (!this.form.name || !buildId || this.steps.length === 0) {
       alert('Veuillez remplir les champs obligatoires et ajouter au moins une étape');
       return;
     }
@@ -535,11 +581,11 @@ export class TimelineFormComponent {
       // Mode édition : mettre à jour uniquement les champs modifiés
       const updated = await this.timelineService.updateTimeline(this.editingTimelineId()!, {
         name: this.form.name,
-        buildId: this.form.buildId,
+        buildId: buildId,
         steps: timelineSteps
       });
       if (updated) {
-        console.log('✏️ Timeline updated:', this.editingTimelineId());
+        console.log('Timeline updated:', this.editingTimelineId());
         alert('Timeline modifiée avec succès!');
       } else {
         alert('Erreur lors de la modification de la timeline');
@@ -550,7 +596,7 @@ export class TimelineFormComponent {
       const timeline: Timeline = {
         id: `timeline_${Date.now()}`,
         name: this.form.name,
-        buildId: this.form.buildId,
+        buildId: buildId,
         steps: timelineSteps,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -559,7 +605,7 @@ export class TimelineFormComponent {
       const created = await this.timelineService.createTimeline(timeline);
       if (created) {
         this.timelineService.loadTimeline(created.id);
-        console.log('✅ Timeline created and loaded:', created.id);
+        console.log('Timeline created and loaded:', created.id);
         alert('Timeline créée avec succès!');
       } else {
         alert('Erreur lors de la création de la timeline');

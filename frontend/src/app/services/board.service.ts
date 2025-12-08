@@ -6,7 +6,6 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { InteractiveBoardState, BoardEntity, Mechanism } from '../models/board.model';
 import { Position, Facing } from '../models/timeline.model';
-
 @Injectable({
   providedIn: 'root'
 })
@@ -18,7 +17,6 @@ export class BoardService {
     entities: [],
     mechanisms: [],
     selectedEntityId: undefined,
-    draggedEntity: undefined
   });
 
   // État initial du plateau (sauvegardé avant toute exécution)
@@ -69,7 +67,7 @@ export class BoardService {
           id: 'player_1',
           type: 'player',
           name: 'Xélor',
-          classId: 'xelor',
+          classId: 'XEL',
           position: { x: 6, y: 10 },
           facing: { direction: 'front' }
         },
@@ -91,13 +89,15 @@ export class BoardService {
       mechanisms: [],
       selectedEntityId: undefined
     };
-
     this.boardState.set(boardState);
   }
 
   // ============ Entity Management ============
 
   public addEntity(entity: BoardEntity): void {
+    if ('classId' in entity) {
+      console.log('[BoardService] addEntity - classId:', entity.classId, 'name:', entity.name);
+    }
     this.boardState.update(state => ({
       ...state,
       entities: [...state.entities, entity]
@@ -105,6 +105,9 @@ export class BoardService {
   }
 
   public updateEntity(entityId: string, updates: Partial<BoardEntity>): void {
+    if ('classId' in updates) {
+      console.log('[BoardService] updateEntity - entityId:', entityId, 'classId:', updates.classId);
+    }
     this.boardState.update(state => ({
       ...state,
       entities: state.entities.map(e =>
@@ -130,7 +133,7 @@ export class BoardService {
   public updateEntityPosition(entityId: string, position: Position): void {
     const entity = this.getEntity(entityId);
     if (!entity) {
-      console.error(`❌ BoardService: Entity not found: ${entityId}`);
+      console.error(`BoardService: Entity not found: ${entityId}`);
       return;
     }
 
@@ -141,7 +144,7 @@ export class BoardService {
       return;
     }
 
-    console.log(`📍 BoardService: Updating ${entity.name} position to (${position.x}, ${position.y})`);
+    console.log(`BoardService: Updating ${entity.name} position to (${position.x}, ${position.y})`);
 
     this.boardState.update(s => ({
       ...s,
@@ -150,7 +153,7 @@ export class BoardService {
       )
     }));
 
-    console.log(`✅ BoardService: Position updated for ${entity.name}`);
+    console.log(`BoardService: Position updated for ${entity.name}`);
   }
 
   public updateEntityFacing(entityId: string, facing: Facing): void {
@@ -176,8 +179,6 @@ export class BoardService {
     }));
   }
 
-  // ============ Mechanism Management ============
-
   public addMechanism(mechanism: Mechanism): void {
     // Validate position
     const state = this.boardState();
@@ -193,6 +194,10 @@ export class BoardService {
     }));
   }
 
+  public getMechanism(mechanismId: string): Mechanism | undefined {
+    return this.boardState().mechanisms.find(m => m.id === mechanismId);
+  }
+
   public removeMechanism(mechanismId: string): void {
     this.boardState.update(state => ({
       ...state,
@@ -200,58 +205,24 @@ export class BoardService {
     }));
   }
 
-  public updateMechanism(mechanismId: string, updates: Partial<Mechanism>): void {
-    this.boardState.update(state => ({
-      ...state,
-      mechanisms: state.mechanisms.map(m =>
-        m.id === mechanismId ? { ...m, ...updates } : m
-      )
-    }));
-  }
-
-  public getMechanism(mechanismId: string): Mechanism | undefined {
-    return this.boardState().mechanisms.find(m => m.id === mechanismId);
-  }
-
-  public getMechanismsAtPosition(position: Position): Mechanism[] {
-    return this.boardState().mechanisms.filter(m =>
-      m.position.x === position.x && m.position.y === position.y
-    );
-  }
-
-  // ============ Queries ============
-
-  public getEntitiesAtPosition(position: Position): BoardEntity[] {
-    return this.boardState().entities.filter(e =>
-      e.position.x === position.x && e.position.y === position.y
-    );
-  }
-
-  public calculateDistance(pos1: Position, pos2: Position): number {
-    return Math.max(
-      Math.abs(pos1.x - pos2.x),
-      Math.abs(pos1.y - pos2.y)
-    );
-  }
-
-  public isAdjacent(pos1: Position, pos2: Position): boolean {
-    return this.calculateDistance(pos1, pos2) === 1;
-  }
-
-  // ============ Reset ============
-
-  public clearBoard(): void {
-    this.boardState.update(state => ({
-      ...state,
+  public resetToDefault(): void {
+    this.boardState.set({
+      cols: 13,
+      rows: 13,
       entities: [],
       mechanisms: [],
       selectedEntityId: undefined,
       draggedEntity: undefined
-    }));
+    });
   }
 
-  public resetToDefault(): void {
+  /**
+   * Efface complètement le plateau (entités et mécanismes)
+   * Réinitialise le plateau avec les entités par défaut
+   */
+  public clearBoard(): void {
     this.initializeBoard();
+    console.log('✅ Plateau effacé et réinitialisé avec les entités par défaut');
   }
 
   // ============ State Management (Undo/Redo) ============
@@ -263,16 +234,7 @@ export class BoardService {
     const currentState = this.deepCloneState(this.boardState());
     this.initialState.set(currentState);
     this.stateHistory.set([currentState]);
-    console.log('💾 État initial du plateau sauvegardé');
-  }
-
-  /**
-   * Sauvegarde l'état actuel dans l'historique
-   */
-  public pushState(): void {
-    const currentState = this.deepCloneState(this.boardState());
-    this.stateHistory.update(history => [...history, currentState]);
-    console.log(`💾 État sauvegardé (${this.stateHistory().length} états dans l'historique)`);
+    console.log('État initial du plateau sauvegardé');
   }
 
   /**
@@ -283,9 +245,9 @@ export class BoardService {
     if (index >= 0 && index < history.length) {
       const stateToRestore = this.deepCloneState(history[index]);
       this.boardState.set(stateToRestore);
-      console.log(`♻️ État restauré à l'index ${index}`);
+      console.log(`État restauré à l'index ${index}`);
     } else {
-      console.warn(`⚠️ Index d'historique invalide: ${index}`);
+      console.warn(`Index d'historique invalide: ${index}`);
     }
   }
 
@@ -296,20 +258,19 @@ export class BoardService {
     const initial = this.initialState();
     if (initial) {
       this.boardState.set(this.deepCloneState(initial));
-      console.log('♻️ Plateau réinitialisé à l\'état initial');
+      console.log('Plateau réinitialisé à l\'état initial');
     } else {
-      console.warn('⚠️ Aucun état initial sauvegardé, réinitialisation par défaut');
+      console.warn('Aucun état initial sauvegardé, réinitialisation par défaut');
       this.resetToDefault();
     }
   }
-
   /**
    * Efface l'historique
    */
   public clearHistory(): void {
     this.stateHistory.set([]);
     this.initialState.set(null);
-    console.log('🗑️ Historique effacé');
+    console.log('Historique effacé');
   }
 
   /**

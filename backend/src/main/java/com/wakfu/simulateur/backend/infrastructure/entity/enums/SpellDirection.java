@@ -4,5 +4,6 @@ public enum SpellDirection {
 
     NONE,
     CROSS,
-    LINE
+    LINE,
+    AREA
 }

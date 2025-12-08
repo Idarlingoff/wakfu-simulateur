@@ -64,7 +64,7 @@ export class SpellModalComponent {
     {
       id: 'vol_du_temps',
       name: 'Vol du temps',
-      classId: 'xelor',
+      classId: 'XEL',
       spellType: 'damage',
       element: 'fire',
       paCost: 2,
@@ -85,7 +85,7 @@ export class SpellModalComponent {
     {
       id: 'rouage',
       name: 'Rouage',
-      classId: 'xelor',
+      classId: 'XEL',
       spellType: 'mechanism',
       element: 'time',
       paCost: 2,
@@ -106,7 +106,7 @@ export class SpellModalComponent {
     {
       id: 'distorsion',
       name: 'Distorsion',
-      classId: 'xelor',
+      classId: 'XEL',
       spellType: 'utility',
       element: 'time',
       paCost: 2,
