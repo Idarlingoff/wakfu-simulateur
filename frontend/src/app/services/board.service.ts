@@ -4,7 +4,7 @@
  */
 
 import { Injectable, signal, computed } from '@angular/core';
-import { InteractiveBoardState, BoardEntity, Mechanism } from '../models/board.model';
+import { InteractiveBoardState, BoardEntity, Mechanism, DialHour } from '../models/board.model';
 import { Position, Facing } from '../models/timeline.model';
 @Injectable({
   providedIn: 'root'
@@ -16,6 +16,7 @@ export class BoardService {
     rows: 13,
     entities: [],
     mechanisms: [],
+    dialHours: [], // Heures du cadran (zones visuelles)
     selectedEntityId: undefined,
   });
 
@@ -49,6 +50,10 @@ export class BoardService {
 
   public mechanisms = computed(() => {
     return this.boardState().mechanisms;
+  });
+
+  public dialHours = computed(() => {
+    return this.boardState().dialHours;
   });
 
   constructor() {
@@ -87,6 +92,7 @@ export class BoardService {
         }
       ],
       mechanisms: [],
+      dialHours: [],
       selectedEntityId: undefined
     };
     this.boardState.set(boardState);
@@ -205,12 +211,37 @@ export class BoardService {
     }));
   }
 
+  // ============ Dial Hours Management ============
+
+  public addDialHour(dialHour: DialHour): void {
+    const state = this.boardState();
+    // Validate position
+    if (dialHour.position.x < 0 || dialHour.position.x >= state.cols ||
+        dialHour.position.y < 0 || dialHour.position.y >= state.rows) {
+      console.warn(`Dial hour position out of bounds: (${dialHour.position.x}, ${dialHour.position.y})`);
+      return;
+    }
+
+    this.boardState.update(s => ({
+      ...s,
+      dialHours: [...s.dialHours, dialHour]
+    }));
+  }
+
+  public removeDialHoursForDial(dialId: string): void {
+    this.boardState.update(state => ({
+      ...state,
+      dialHours: state.dialHours.filter(h => h.dialId !== dialId)
+    }));
+  }
+
   public resetToDefault(): void {
     this.boardState.set({
       cols: 13,
       rows: 13,
       entities: [],
       mechanisms: [],
+      dialHours: [],
       selectedEntityId: undefined,
       draggedEntity: undefined
     });
@@ -235,6 +266,16 @@ export class BoardService {
     this.initialState.set(currentState);
     this.stateHistory.set([currentState]);
     console.log('État initial du plateau sauvegardé');
+  }
+
+  /**
+   * Ajoute l'état actuel du plateau à l'historique
+   */
+  public pushState(): void {
+    const currentState = this.deepCloneState(this.boardState());
+    const history = this.stateHistory();
+    this.stateHistory.set([...history, currentState]);
+    console.log(`État du plateau ajouté à l'historique (total: ${history.length + 1})`);
   }
 
   /**
@@ -287,7 +328,11 @@ export class BoardService {
       mechanisms: state.mechanisms.map(m => ({
         ...m,
         position: { ...m.position }
-      }))
+      })),
+      dialHours: state.dialHours ? state.dialHours.map(h => ({
+        ...h,
+        position: { ...h.position }
+      })) : []
     };
   }
 

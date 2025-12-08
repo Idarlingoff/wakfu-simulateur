@@ -30,12 +30,21 @@ export interface Mechanism {
   turn?: number;
   effects?: string[];
   spellId?: string; // ID du sort qui a créé le mécanisme
-  // Propriétés optionnelles pour les heures de cadran
-  dialId?: string; // ID du cadran central (pour les heures)
-  hour?: number; // 1-12 (pour les heures)
 }
+
+/**
+ * Heure du cadran - Zone visuelle/de déplacement, PAS un mécanisme
+ */
+export interface DialHour {
+  id: string;
+  dialId: string; // ID du cadran central
+  hour: number; // 1-12
+  position: Position;
+}
+
 export interface InteractiveBoardState extends BoardState {
   mechanisms: Mechanism[];
+  dialHours: DialHour[]; // Heures du cadran (zones visuelles)
   draggedEntity?: BoardEntity;
 }
 

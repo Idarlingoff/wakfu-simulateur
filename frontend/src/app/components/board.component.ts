@@ -98,17 +98,29 @@ interface BoardCell {
               <span class="entity-label">{{ entity.name }}</span>
             </div>
 
+            <!-- Dial Hours (zones visuelles/de déplacement) -->
+            <div
+              *ngIf="getDialHourAtPosition(cell.x, cell.y) as dialHour"
+              class="dial-hour"
+              [title]="'Cadran - ' + dialHour.hour + 'h'"
+            >
+              <img
+                [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'"
+                [alt]="'Heure ' + dialHour.hour"
+                class="dial-hour-image"
+              />
+            </div>
+
             <!-- Mechanism -->
             <div
               *ngIf="getMechanismAtPosition(cell.x, cell.y) as mech"
               class="mechanism"
               [class]="mech.type"
-              [class.dial-hour]="mech.hour"
-              [title]="getMechanismTitleWithHour(mech)"
+              [title]="getMechanismTitle(mech.type)"
             >
               <img
-                [src]="getMechanismImageUrl(mech)"
-                [alt]="getMechanismTitleWithHour(mech)"
+                [src]="getMechanismImage(mech.type, mech.charges)"
+                [alt]="getMechanismTitle(mech.type)"
                 class="mechanism-image"
               />
             </div>
@@ -520,31 +532,66 @@ interface BoardCell {
       filter: drop-shadow(0 0 4px rgba(255, 209, 102, 0.8));
     }
 
+    /* Rouage (cog) - TOUJOURS au premier plan */
+    .board .mechanism.cog {
+      z-index: 3 !important; /* Au-dessus de tout */
+    }
+
+    /* Cadran central - reste au premier plan avec les autres mécanismes */
     .board .mechanism.dial .mechanism-image {
       filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.9));
     }
 
-    /* Heures du cadran - style différent */
-    .board .mechanism.dial-hour .mechanism-image {
+    /* Cadran central (sans heures) - z-index explicite */
+    .board .mechanism.dial:not(.dial-hour) {
+      z-index: 3 !important; /* Au-dessus de tout */
+    }
+
+    /* Heures du cadran - ZONES VISUELLES (pas des mécanismes) */
+    /* Les heures sont des éléments séparés avec leur propre rendu */
+    .board .dial-hour {
+      position: absolute;
+      z-index: 0 !important; /* Passe derrière tout le reste */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      pointer-events: none; /* Les heures ne bloquent pas les clics */
+    }
+
+    .board .dial-hour-image {
       width: 60%;
       height: 60%;
-      filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.7));
-      animation: hourGlow 2s ease-in-out infinite;
+      opacity: 0.5; /* Opacité réduite pour être plus discrètes */
+      object-fit: contain;
+      filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.5));
+      animation: hourGlow 3s ease-in-out infinite; /* Animation plus lente et douce */
     }
 
     @keyframes hourGlow {
       0%, 100% {
-        opacity: 0.8;
-        filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.7));
+        opacity: 0.4; /* Plus transparentes */
+        filter: drop-shadow(0 0 2px rgba(167, 139, 250, 0.4));
       }
       50% {
-        opacity: 1;
-        filter: drop-shadow(0 0 6px rgba(167, 139, 250, 1));
+        opacity: 0.6; /* Légère augmentation */
+        filter: drop-shadow(0 0 4px rgba(167, 139, 250, 0.6));
       }
+    }
+
+    /* Sinistro - TOUJOURS au premier plan */
+    .board .mechanism.sinistro {
+      z-index: 3 !important; /* Au-dessus de tout */
     }
 
     .board .mechanism.sinistro .mechanism-image {
       filter: drop-shadow(0 0 4px rgba(255, 107, 107, 0.8));
+    }
+
+    /* Régulateur - TOUJOURS au premier plan */
+    .board .mechanism.regulateur {
+      z-index: 3 !important; /* Au-dessus de tout */
     }
 
     .board .mechanism.regulateur .mechanism-image {
@@ -882,6 +929,15 @@ export class BoardComponent {
   }
 
   /**
+   * Get dial hour at position
+   */
+  getDialHourAtPosition(x: number, y: number) {
+    return this.boardService.dialHours().find(
+      h => h.position.x === x && h.position.y === y
+    );
+  }
+
+  /**
    * Get action at position
    * Exclude Move, Transpose, and mechanism spells as they have their own visual representation
    */
@@ -986,6 +1042,12 @@ export class BoardComponent {
       return;
     }
 
+    // Si c'est la première étape (index 0 → 1), sauvegarder l'état initial
+    if (currentIndex === 0) {
+      this.boardService.saveInitialState();
+      console.log('💾 État initial du board sauvegardé');
+    }
+
     // Passer à l'étape suivante d'abord
     this.timelineService.nextStep();
 
@@ -994,6 +1056,9 @@ export class BoardComponent {
     if (newIndex > 0 && newIndex <= timeline.steps.length) {
       const realStepIndex = newIndex - 1; // L'index réel dans le tableau steps
       await this.simulationService.executeStep(build, timeline, realStepIndex);
+
+      // Sauvegarder l'état après l'exécution pour l'historique
+      this.boardService.pushState();
     }
   }
 
@@ -1004,7 +1069,11 @@ export class BoardComponent {
       // Revenir à l'étape précédente
       this.timelineService.previousStep();
 
-      console.log(`Retour à l'étape ${currentIndex - 1}`);
+      // Restaurer l'état du board à l'étape précédente
+      const newIndex = this.currentStepIndex();
+      this.boardService.restoreStateAtIndex(newIndex);
+
+      console.log(`⏮️ Retour à l'étape ${newIndex}`);
     }
   }
 
@@ -1012,7 +1081,10 @@ export class BoardComponent {
     // Réinitialiser la timeline à l'étape 0
     this.timelineService.resetTimeline();
 
-    console.log('Timeline réinitialisée');
+    // Restaurer l'état initial du board
+    this.boardService.restoreInitialState();
+
+    console.log('🔄 Timeline et Board réinitialisés');
   }
 
   /**
@@ -1032,4 +1104,3 @@ export class BoardComponent {
     }
   }
 }
-
