@@ -9,8 +9,10 @@ import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
 import { SimulationService } from '../services/simulation.service';
-import { BoardEntity } from '../models/board.model';
-import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism} from '../utils/mechanism-utils';
+import { BoardEntity, Mechanism } from '../models/board.model';
+import { Position, TimelineAction } from '../models/timeline.model';
+import { Build } from '../models/build.model';
+import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
 
 interface BoardCell {
   x: number;
@@ -35,16 +37,35 @@ interface BoardCell {
           </div>
         </div>
         <div class="board-controls">
-          <button (click)="onPreviousStep()" [disabled]="currentStepIndex() === 0" class="btn-nav">
+          <!-- Nouveau : Bouton pour lancer toute la simulation -->
+          <button
+            (click)="onRunFullSimulation()"
+            [disabled]="isSimulating() || currentStepIndex() > 0"
+            class="btn-run-full"
+            title="Exécuter toute la timeline d'un coup">
+            @if (isSimulating()) {
+              <span>⏳ Simulation en cours...</span>
+            } @else {
+              <span>▶ Lancer Toute la Simulation</span>
+            }
+          </button>
+
+          <div class="divider"></div>
+
+          <!-- Contrôles step-by-step -->
+          <button (click)="onPreviousStep()" [disabled]="currentStepIndex() === 0 || isSimulating()" class="btn-nav">
             ◀ Étape Précédente
           </button>
           <span class="step-indicator">
             {{ currentStepIndex() === 0 ? 'État initial' : 'Étape ' + currentStepIndex() }} / {{ totalSteps() - 1 }}
           </span>
-          <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1" class="btn-nav">
+          <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1 || isSimulating()" class="btn-nav">
             Étape Suivante ▶
           </button>
-          <button (click)="onReset()" class="btn-reset">🔄 Réinitialiser</button>
+
+          <div class="divider"></div>
+
+          <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">🔄 Réinitialiser</button>
         </div>
       </div>
 
@@ -282,9 +303,10 @@ interface BoardCell {
       display: flex;
       gap: 8px;
       align-items: center;
+      flex-wrap: wrap;
     }
 
-    .btn-nav, .btn-reset {
+    .btn-nav, .btn-reset, .btn-run-full {
       background: #253044;
       border: 1px solid var(--stroke);
       color: #e8ecf3;
@@ -293,6 +315,26 @@ interface BoardCell {
       cursor: pointer;
       font-size: 12px;
       transition: all 0.2s;
+    }
+
+    .btn-run-full {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-color: #667eea;
+      font-weight: 600;
+      padding: 10px 16px;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-run-full:hover:not(:disabled) {
+      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-run-full:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
     }
 
     .btn-nav:hover:not(:disabled) {
@@ -306,9 +348,21 @@ interface BoardCell {
       cursor: not-allowed;
     }
 
-    .btn-reset:hover {
+    .btn-reset:hover:not(:disabled) {
       background: #4cc9f0;
       color: #0b1220;
+    }
+
+    .btn-reset:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: var(--stroke);
+      margin: 0 4px;
     }
 
     .step-indicator {
@@ -867,8 +921,10 @@ export class BoardComponent {
   deleteEntity = output<BoardEntity>();
 
   currentTimeline = computed(() => this.timelineService.currentTimeline());
-
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
+
+  // 🆕 Signal pour indiquer si une simulation est en cours
+  isSimulating = computed(() => this.simulationService.isRunning());
 
   constructor() {
     // Nettoyer l'historique quand on change de timeline
@@ -1030,36 +1086,179 @@ export class BoardComponent {
   }
 
   /**
-   * Navigation
+   * Navigation - Step by step
+   * Exécute un seul step à la fois avec validation complète
    */
   async onNextStep(): Promise<void> {
     const timeline = this.currentTimeline();
     const build = this.buildService.selectedBuildA();
     const currentIndex = this.currentStepIndex();
 
+    console.log('');
+    console.log('🔵 [onNextStep] DÉBUT - Index actuel:', currentIndex);
+
     if (!timeline || !build) {
       console.warn('⚠️ Timeline ou Build manquant');
       return;
     }
 
-    // Si c'est la première étape (index 0 → 1), sauvegarder l'état initial
+    // Si c'est la première étape, sauvegarder l'état initial
     if (currentIndex === 0) {
+      console.log('💾 Sauvegarde de l\'état initial du board');
       this.boardService.saveInitialState();
-      console.log('💾 État initial du board sauvegardé');
     }
 
-    // Passer à l'étape suivante d'abord
+    // Vérifier qu'il reste des steps à exécuter
+    if (currentIndex >= timeline.steps.length) {
+      console.warn('⚠️ Aucun step suivant disponible');
+      return;
+    }
+
+    const realStepIndex = currentIndex;
+    console.log(`\n🔹 [onNextStep] Exécution du step ${realStepIndex + 1}/${timeline.steps.length}...`);
+
+    // ✅ Appeler executeStep pour valider et exécuter le step
+    const success = await this.simulationService.executeStep(build, timeline, realStepIndex);
+
+    if (!success) {
+      console.error(`❌ Le step ${realStepIndex + 1} a échoué`);
+      // Récupérer le message d'erreur depuis les résultats
+      const stepResult = this.simulationService.getStepResult(realStepIndex);
+      const failedAction = stepResult?.actions.find((a: any) => !a.success);
+      const errorMessage = failedAction?.message || 'Action impossible à exécuter';
+
+      alert(`⚠️ Erreur au step ${realStepIndex + 1}:\n${errorMessage}`);
+
+      // ❌ NE PAS mettre à jour la map en cas d'échec
+      console.log('🚫 Map non mise à jour (step échoué)');
+      return;
+    }
+
+    console.log(`✅ Step ${realStepIndex + 1} exécuté avec succès`);
+
+    // ✅ Le step a réussi : avancer l'index et mettre à jour le board
     this.timelineService.nextStep();
-
-    // Puis exécuter l'étape qu'on vient d'atteindre (si elle existe)
     const newIndex = this.currentStepIndex();
-    if (newIndex > 0 && newIndex <= timeline.steps.length) {
-      const realStepIndex = newIndex - 1; // L'index réel dans le tableau steps
-      await this.simulationService.executeStep(build, timeline, realStepIndex);
 
-      // Sauvegarder l'état après l'exécution pour l'historique
-      this.boardService.pushState();
+    // Appliquer les actions visuelles (mécanismes, etc.)
+    const step = timeline.steps[realStepIndex];
+    for (const action of step.actions) {
+      await this.applyVisualAction(action, build, realStepIndex);
     }
+
+    // Sauvegarder l'état après l'application
+    this.boardService.pushState();
+
+    // Afficher les résultats
+    const stepResult = this.simulationService.getStepResult(realStepIndex);
+    if (stepResult) {
+      const actionResults = stepResult.actions.filter((a: any) => a.success);
+      if (actionResults.length > 0) {
+        console.log('📊 Résultats du step:', {
+          actionsReussies: actionResults.length,
+          paUtilises: actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0),
+          wpUtilises: actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0),
+          degats: actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0)
+        });
+      }
+    }
+
+    console.log('🔵 [onNextStep] FIN');
+    console.log('');
+  }
+
+  private async applyVisualAction(action: TimelineAction, build: Build, stepIndex: number): Promise<void> {
+    if (action.type === 'CastSpell' && action.spellId) {
+      // Vérifier si le sort crée un mécanisme
+      console.log(`🔍 Analyse du sort: "${action.spellId}"`);
+      const mechanismType = getSpellMechanismType(action.spellId);
+      console.log(`🎯 Type de mécanisme détecté: ${mechanismType || 'aucun'}`);
+
+      if (mechanismType && action.targetPosition) {
+        console.log(`✅ Création d'un mécanisme ${mechanismType} à la position (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+        // Créer le mécanisme
+        const mechanism: Mechanism = {
+          id: `mechanism_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: mechanismType,
+          position: action.targetPosition,
+          charges: 0,
+          turn: stepIndex + 1,
+          spellId: action.spellId
+        };
+
+        // Ajouter le mécanisme au plateau
+        this.boardService.addMechanism(mechanism);
+        console.log('🎉 Mécanisme créé et ajouté au plateau:', mechanism);
+
+        // Si c'est un cadran, créer les 12 heures autour
+        if (mechanismType === 'dial') {
+          const playerEntity = this.boardService.player();
+          const playerPosition = playerEntity?.position || { x: 6, y: 6 };
+          this.createDialHours(mechanism.id, action.targetPosition, playerPosition);
+        }
+      }
+    }
+  }
+
+  /**
+   * Crée les 12 heures autour d'un cadran
+   */
+  private createDialHours(dialId: string, centerPosition: Position, playerPosition: Position): void {
+    console.log(`🕐 [DIAL_HOURS] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
+
+    const dx = centerPosition.x - playerPosition.x;
+    const dy = centerPosition.y - playerPosition.y;
+
+    let rotation = 0;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      rotation = dx > 0 ? 1 : 3;
+    } else {
+      rotation = dy > 0 ? 2 : 0;
+    }
+
+    const baseHourPositions = [
+      { hour: 12, offsetX: 0, offsetY: -3 },
+      { hour: 1, offsetX: +1, offsetY: -2 },
+      { hour: 2, offsetX: +2, offsetY: -1 },
+      { hour: 3, offsetX: +3, offsetY: 0 },
+      { hour: 4, offsetX: +2, offsetY: +1 },
+      { hour: 5, offsetX: +1, offsetY: +2 },
+      { hour: 6, offsetX: 0, offsetY: +3 },
+      { hour: 7, offsetX: -1, offsetY: +2 },
+      { hour: 8, offsetX: -2, offsetY: +1 },
+      { hour: 9, offsetX: -3, offsetY: 0 },
+      { hour: 10, offsetX: -2, offsetY: -1 },
+      { hour: 11, offsetX: -1, offsetY: -2 }
+    ];
+
+    baseHourPositions.forEach(({ hour, offsetX, offsetY }) => {
+      let rotatedX = offsetX;
+      let rotatedY = offsetY;
+
+      for (let i = 0; i < rotation; i++) {
+        const tempX = rotatedX;
+        rotatedX = -rotatedY;
+        rotatedY = tempX;
+      }
+
+      const hourPosition = {
+        x: centerPosition.x + rotatedX,
+        y: centerPosition.y + rotatedY
+      };
+
+      if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
+        const dialHour = {
+          id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          dialId: dialId,
+          hour: hour,
+          position: hourPosition
+        };
+
+        this.boardService.addDialHour(dialHour);
+        console.log(`  ✅ Hour ${hour} created at (${hourPosition.x}, ${hourPosition.y})`);
+      }
+    });
   }
 
   onPreviousStep(): void {
@@ -1084,7 +1283,134 @@ export class BoardComponent {
     // Restaurer l'état initial du board
     this.boardService.restoreInitialState();
 
+    // Nettoyer le cache de simulation
+    this.simulationService.clearSimulation();
+
     console.log('🔄 Timeline et Board réinitialisés');
+  }
+
+  /**
+   * Lance toute la simulation d'un coup
+   * Exécute tous les steps avec validation à chaque étape
+   * Met à jour le board à chaque step réussi
+   * S'arrête et retourne l'erreur si un step échoue
+   */
+  async onRunFullSimulation(): Promise<void> {
+    const timeline = this.currentTimeline();
+    const build = this.buildService.selectedBuildA();
+
+    if (!timeline || !build) {
+      console.warn('⚠️ Timeline ou Build manquant');
+      return;
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 LANCEMENT SIMULATION COMPLÈTE');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📋 Timeline:', timeline.name);
+    console.log('🔢 Nombre de steps:', timeline.steps.length);
+
+    // Sauvegarder l'état initial
+    this.boardService.saveInitialState();
+    console.log('💾 État initial sauvegardé');
+
+    // Réinitialiser le service de simulation
+    this.simulationService.clearSimulation();
+
+    // Variables pour suivre la simulation
+    let totalDamage = 0;
+    let totalPaUsed = 0;
+    let totalWpUsed = 0;
+    let totalMpUsed = 0;
+    let stepsExecuted = 0;
+
+    // Exécuter chaque step un par un
+    for (let stepIndex = 0; stepIndex < timeline.steps.length; stepIndex++) {
+      const step = timeline.steps[stepIndex];
+      console.log('');
+      console.log(`┌───────────────────────────────────────────────────────┐`);
+      console.log(`│  🔹 STEP ${stepIndex + 1}/${timeline.steps.length}: ${step.description || step.id}`);
+      console.log(`└───────────────────────────────────────────────────────┘`);
+
+      // ✅ Exécuter le step avec validation complète
+      const success = await this.simulationService.executeStep(build, timeline, stepIndex);
+
+      if (!success) {
+        // ❌ Le step a échoué : NE PAS mettre à jour le board
+        console.error(`❌ Step ${stepIndex + 1} échoué`);
+
+        // Récupérer le message d'erreur
+        const stepResult = this.simulationService.getStepResult(stepIndex);
+        const failedAction = stepResult?.actions.find((a: any) => !a.success);
+        const errorMessage = failedAction?.message || 'Action impossible à exécuter';
+
+        console.log('🚫 Board non mis à jour pour ce step');
+        console.log('═══════════════════════════════════════════════════════');
+        console.log(`❌ Simulation arrêtée au step ${stepIndex + 1}`);
+        console.log('═══════════════════════════════════════════════════════');
+
+        alert(`⚠️ Simulation arrêtée au step ${stepIndex + 1}:\n${errorMessage}`);
+        return;
+      }
+
+      // ✅ Le step a réussi : mettre à jour le board
+      console.log(`✅ Step ${stepIndex + 1} exécuté avec succès`);
+
+      // Récupérer les résultats du step
+      const stepResult = this.simulationService.getStepResult(stepIndex);
+      if (stepResult) {
+        const actionResults = stepResult.actions.filter((a: any) => a.success);
+
+        // Calculer les totaux
+        const stepDamage = actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0);
+        const stepPa = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
+        const stepWp = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
+        const stepMp = actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
+
+        totalDamage += stepDamage;
+        totalPaUsed += stepPa;
+        totalWpUsed += stepWp;
+        totalMpUsed += stepMp;
+
+        console.log('📊 Résultats du step:', {
+          dégâts: stepDamage,
+          PA: stepPa,
+          WP: stepWp,
+          MP: stepMp
+        });
+      }
+
+      // Avancer l'index de la timeline
+      this.timelineService.nextStep();
+
+      // Appliquer les actions visuelles au board (mécanismes, etc.)
+      for (const action of step.actions) {
+        await this.applyVisualAction(action, build, stepIndex);
+      }
+
+      // Sauvegarder l'état du board après ce step
+      this.boardService.pushState();
+      console.log('💾 Board mis à jour et état sauvegardé');
+
+      stepsExecuted++;
+
+      // Petite pause pour la visualisation (optionnel)
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🎉 SIMULATION COMPLÈTE TERMINÉE AVEC SUCCÈS');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📊 Résultats finaux:');
+    console.log(`  ✅ Steps exécutés: ${stepsExecuted}/${timeline.steps.length}`);
+    console.log(`  💥 Dégâts totaux: ${totalDamage}`);
+    console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
+    console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
+    console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('');
   }
 
   /**

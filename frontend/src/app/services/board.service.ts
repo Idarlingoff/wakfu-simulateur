@@ -211,6 +211,45 @@ export class BoardService {
     }));
   }
 
+  /**
+   * Met à jour les charges d'un mécanisme
+   */
+  public updateMechanismCharges(mechanismId: string, charges: number): void {
+    this.boardState.update(state => ({
+      ...state,
+      mechanisms: state.mechanisms.map(m =>
+        m.id === mechanismId ? { ...m, charges } : m
+      )
+    }));
+  }
+
+  /**
+   * Met à jour la position d'un mécanisme
+   */
+  public updateMechanismPosition(mechanismId: string, position: Position): void {
+    const mechanism = this.getMechanism(mechanismId);
+    if (!mechanism) {
+      console.error(`BoardService: Mechanism not found: ${mechanismId}`);
+      return;
+    }
+
+    // Validate bounds
+    const state = this.boardState();
+    if (position.x < 0 || position.x >= state.cols || position.y < 0 || position.y >= state.rows) {
+      console.warn(`Mechanism position out of bounds: (${position.x}, ${position.y})`);
+      return;
+    }
+
+    console.log(`BoardService: Updating mechanism ${mechanism.type} position to (${position.x}, ${position.y})`);
+
+    this.boardState.update(s => ({
+      ...s,
+      mechanisms: s.mechanisms.map(m =>
+        m.id === mechanismId ? { ...m, position } : m
+      )
+    }));
+  }
+
   // ============ Dial Hours Management ============
 
   public addDialHour(dialHour: DialHour): void {

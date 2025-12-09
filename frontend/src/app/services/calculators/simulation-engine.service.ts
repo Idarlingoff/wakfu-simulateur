@@ -8,11 +8,17 @@ import { Injectable, inject } from '@angular/core';
 import { DamageCalculatorService, DamageCalculationParams } from './damage-calculator.service';
 import { StatsCalculatorService, TotalStats } from './stats-calculator.service';
 import { BoardService } from '../board.service';
+import { WakfuApiService } from '../wakfu-api.service';
 import { Build } from '../../models/build.model';
 import { Timeline, TimelineStep, TimelineAction, Position } from '../../models/timeline.model';
 import { Spell } from '../../models/spell.model';
 import { BoardEntity, Mechanism } from '../../models/board.model';
 import { isSpellMechanism, getSpellMechanismType, getMechanismImagePath } from '../../utils/mechanism-utils';
+import { SpellCastingValidatorService } from '../validators/spell-casting-validator.service';
+import { MovementValidatorService } from '../validators/movement-validator.service';
+import { MechanismManagerService } from '../managers/mechanism-manager.service';
+import { SpellEffectProcessorService } from '../processors/spell-effect-processor.service';
+import { firstValueFrom } from 'rxjs';
 
 export interface SimulationContext {
   availablePa: number;
@@ -71,11 +77,16 @@ export class SimulationEngineService {
 
   // Cache pour les sorts complets (sera rempli par un service externe)
   private readonly spellsCache = new Map<string, Spell>();
-  private readonly boardService = inject(BoardService);
+  private readonly boardService: BoardService = inject(BoardService);
+  private readonly spellCastingValidator: SpellCastingValidatorService = inject(SpellCastingValidatorService);
+  private readonly movementValidator: MovementValidatorService = inject(MovementValidatorService);
+  private readonly mechanismManager: MechanismManagerService = inject(MechanismManagerService);
+  private readonly spellEffectProcessor: SpellEffectProcessorService = inject(SpellEffectProcessorService);
 
   constructor(
     private readonly damageCalculator: DamageCalculatorService,
-    private readonly statsCalculator: StatsCalculatorService
+    private readonly statsCalculator: StatsCalculatorService,
+    private readonly wakfuApi: WakfuApiService
   ) {}
 
   /**
@@ -89,9 +100,27 @@ export class SimulationEngineService {
   /**
    * Exécute une simulation complète
    */
-  runSimulation(build: Build, timeline: Timeline): SimulationResult {
+  async runSimulation(build: Build, timeline: Timeline): Promise<SimulationResult> {
+    console.log('');
+    console.log('╔═══════════════════════════════════════════════════════╗');
+    console.log('║  🎮 DÉMARRAGE DE LA SIMULATION                       ║');
+    console.log('╚═══════════════════════════════════════════════════════╝');
+    console.log('📦 Build:', build.name);
+    console.log('📋 Timeline:', timeline.name);
+    console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
+    console.log('');
+
     // Calculer les stats totales du build avec les passifs
     let buildStats = this.statsCalculator.calculateTotalStats(build);
+
+    console.log('📊 Stats calculées:', {
+      AP: buildStats.ap,
+      WP: buildStats.wp,
+      MP: buildStats.mp,
+      HP: buildStats.hp,
+      'Maîtrise Primaire': buildStats.masteryPrimary
+    });
+    console.log('');
 
     // Récupérer les entités et mécanismes du plateau
     const boardState = this.boardService.state();
@@ -124,7 +153,7 @@ export class SimulationEngineService {
     // Exécuter chaque step de la timeline
     for (let i = 0; i < timeline.steps.length; i++) {
       const step = timeline.steps[i];
-      const stepResult = this.executeStep(
+      const stepResult = await this.executeStep(
         step,
         currentContext,
         build,
@@ -149,6 +178,21 @@ export class SimulationEngineService {
       }
     }
 
+    console.log('');
+    console.log('╔═══════════════════════════════════════════════════════╗');
+    console.log('║  ✅ FIN DE LA SIMULATION                             ║');
+    console.log('╚═══════════════════════════════════════════════════════╝');
+    console.log('📊 Résultat:');
+    console.log('  ✅ Succès:', errors.length === 0);
+    console.log('  💥 Dégâts totaux:', totalDamage);
+    console.log('  ⚡ PA utilisés:', initialContext.availablePa - currentContext.availablePa);
+    console.log('  🔮 WP utilisés:', initialContext.availablePw - currentContext.availablePw);
+    console.log('  🏃 MP utilisés:', initialContext.availableMp - currentContext.availableMp);
+    if (errors.length > 0) {
+      console.log('  ❌ Erreurs:', errors);
+    }
+    console.log('');
+
     return {
       buildId: build.id || '',
       timelineId: timeline.id || '',
@@ -168,13 +212,20 @@ export class SimulationEngineService {
   /**
    * Exécute un step de la timeline
    */
-  private executeStep(
+  private async executeStep(
     step: TimelineStep,
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats,
     stepNumber: number
-  ): SimulationStepResult {
+  ): Promise<SimulationStepResult> {
+    console.log('');
+    console.log('┌───────────────────────────────────────────────────────┐');
+    console.log(`│  🔹 ÉTAPE ${stepNumber}: ${step.description || step.id}`);
+    console.log('└───────────────────────────────────────────────────────┘');
+    console.log(`🎬 Nombre d'actions: ${step.actions.length}`);
+    console.log('');
+
     const actions: SimulationActionResult[] = [];
     let currentContext = { ...context };
     let stepSuccess = true;
@@ -182,7 +233,8 @@ export class SimulationEngineService {
 
     // Exécuter chaque action du step
     for (const action of step.actions) {
-      const actionResult = this.executeAction(action, currentContext, build, buildStats);
+      console.log(`▶️  Action ${action.type}...`);
+      const actionResult = await this.executeAction(action, currentContext, build, buildStats);
       actions.push(actionResult);
 
       if (actionResult.success) {
@@ -213,12 +265,12 @@ export class SimulationEngineService {
   /**
    * Exécute une action individuelle
    */
-  private executeAction(
+  private async executeAction(
     action: TimelineAction,
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats
-  ): SimulationActionResult {
+  ): Promise<SimulationActionResult> {
     const baseResult: SimulationActionResult = {
       success: false,
       actionId: action.id || '',
@@ -231,7 +283,7 @@ export class SimulationEngineService {
 
     switch (action.type) {
       case 'CastSpell':
-        return this.executeCastSpell(action, context, build, buildStats);
+        return await this.executeCastSpell(action, context, build, buildStats);
 
       case 'Move':
         return this.executeMove(action, context);
@@ -247,12 +299,25 @@ export class SimulationEngineService {
   /**
    * Exécute un sort
    */
-  private executeCastSpell(
+  private async executeCastSpell(
     action: TimelineAction,
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats
-  ): SimulationActionResult {
+  ): Promise<SimulationActionResult> {
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🎯 [CAST SPELL] Tentative de lancement de sort');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📦 Spell ID:', action.spellId);
+    console.log('📍 Position cible:', action.targetPosition);
+    console.log('⚡ Ressources disponibles:', {
+      AP: context.availablePa,
+      WP: context.availablePw,
+      MP: context.availableMp
+    });
+    console.log('═══════════════════════════════════════════════════════');
+
     // Trouver la référence du sort dans le build
     const spellRef = build.spellBar?.spells?.find(s => s && s.spellId === action.spellId);
 
@@ -266,17 +331,38 @@ export class SimulationEngineService {
         paCost: 0,
         pwCost: 0,
         mpCost: 0,
-        message: `Spell not found in build: ${action.spellId}`
+        message: `Sort non trouvé dans le build: ${action.spellId}`
       };
     }
 
-    // Récupérer les données complètes du sort depuis le cache
-    const spell = this.spellsCache.get(spellRef.spellId);
+    // Récupérer les données complètes du sort depuis le cache ou l'API
+    let spell = this.spellsCache.get(spellRef.spellId);
 
     if (!spell) {
-      // Fallback: utiliser des valeurs par défaut si le sort n'est pas dans le cache
-      console.warn(`Spell ${spellRef.spellId} not in cache, using default values`);
-      return this.executeCastSpellWithDefaults(action, context, spellRef.spellId, buildStats);
+      console.warn(`⚠️ Sort ${spellRef.spellId} non trouvé dans le cache, chargement depuis l'API...`);
+
+      try {
+        // Charger le sort depuis l'API
+        spell = await firstValueFrom(this.wakfuApi.getSpellById(spellRef.spellId));
+
+        // Mettre en cache pour les prochains appels
+        this.spellsCache.set(spell.id, spell);
+
+        console.log(`✅ Sort chargé depuis l'API:`, spell.name);
+      } catch (error) {
+        console.error(`❌ Impossible de charger le sort ${spellRef.spellId} depuis l'API:`, error);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'CastSpell',
+          spellId: spellRef.spellId,
+          spellName: spellRef.spellId,
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: `Sort introuvable: ${spellRef.spellId}. Vérifiez que le sort existe en base de données.`
+        };
+      }
     }
 
     const paCost = spell.paCost || 0;
@@ -300,8 +386,24 @@ export class SimulationEngineService {
       };
     }
 
-    // Vérifier les ressources
-    if (context.availablePa < paCost) {
+    // 🆕 Utiliser le validateur pour vérifier toutes les conditions
+    console.log('🔍 [VALIDATION] Vérification des conditions de lancement...');
+    const validation = this.spellCastingValidator.validateSpellCast(
+      spell,
+      casterPosition,
+      targetPosition,
+      context
+    );
+
+    console.log('✅ [VALIDATION] Résultat:', {
+      canCast: validation.canCast,
+      reason: validation.reason,
+      details: validation.details
+    });
+
+    if (!validation.canCast) {
+      console.log('❌ [CAST SPELL] Sort impossible à lancer !');
+      console.log('═══════════════════════════════════════════════════════');
       return {
         success: false,
         actionId: action.id || '',
@@ -311,23 +413,12 @@ export class SimulationEngineService {
         paCost,
         pwCost,
         mpCost: 0,
-        message: `Insufficient PA (need ${paCost}, have ${context.availablePa})`
+        message: validation.reason || 'Cannot cast spell',
+        details: validation.details
       };
     }
 
-    if (context.availablePw < pwCost) {
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId: spell.id,
-        spellName: spell.name,
-        paCost,
-        pwCost,
-        mpCost: 0,
-        message: `Insufficient PW (need ${pwCost}, have ${context.availablePw})`
-      };
-    }
+    console.log('✅ [CAST SPELL] Validation réussie ! Le sort peut être lancé');
 
     // Vérifier si c'est un sort de mécanisme
     const isMechanism = isSpellMechanism(spell.id);
@@ -375,71 +466,58 @@ export class SimulationEngineService {
     };
   }
 
-  /**
-   * Exécute un sort avec des valeurs par défaut (fallback)
-   */
-  private executeCastSpellWithDefaults(
-    action: TimelineAction,
-    context: SimulationContext,
-    spellId: string,
-    buildStats: TotalStats
-  ): SimulationActionResult {
-    const defaultPaCost = 3;
-    const defaultPwCost = 0;
-    const defaultBaseDamage = 100;
 
-    if (context.availablePa < defaultPaCost) {
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId,
-        spellName: spellId,
-        paCost: defaultPaCost,
-        pwCost: defaultPwCost,
-        mpCost: 0,
-        message: `Insufficient PA (need ${defaultPaCost}, have ${context.availablePa})`
-      };
+  /**
+   * Extrait les dégâts de base d'un sort depuis ses effets
+   */
+  private extractBaseDamageFromSpell(spell: Spell): number {
+    console.log('🔍 [DAMAGE EXTRACTION] Extraction des dégâts du sort:', spell.name);
+
+    // Chercher la variante NORMAL (pas CRIT)
+    const normalVariant = spell.variants.find(v => v.kind === 'NORMAL');
+
+    if (!normalVariant) {
+      console.warn('⚠️ Aucune variante NORMAL trouvée, retour à 0 dégâts');
+      return 0;
     }
 
-    const damageParams: DamageCalculationParams = {
-      baseDamage: defaultBaseDamage,
-      masteryPrimary: buildStats.masteryPrimary,
-      masterySecondary: buildStats.masterySecondary,
-      backMastery: buildStats.backMastery,
-      dommageInflict: buildStats.dommageInflict,
-      critRate: buildStats.critRate,
-      critMastery: buildStats.critMastery,
-      resistance: 0
-    };
+    console.log('📦 Variante NORMAL trouvée avec', normalVariant.effects.length, 'effets');
 
-    const damageResult = this.damageCalculator.calculateDamage(damageParams);
+    // Chercher les effets de type "damage" dans les effets
+    // Les effets de dégâts peuvent avoir effect = "DEAL_DAMAGE" ou contenir "damage" dans l'effet
+    let totalBaseDamage = 0;
 
-    return {
-      success: true,
-      actionId: action.id || '',
-      actionType: 'CastSpell',
-      spellId,
-      spellName: spellId,
-      damage: damageResult.finalDamage,
-      paCost: defaultPaCost,
-      pwCost: defaultPwCost,
-      mpCost: 0,
-      message: `Cast ${spellId} for ${damageResult.finalDamage} damage (default values)`,
-      details: {
-        damageBreakdown: damageResult.breakdown,
-        isCritical: damageResult.isCritical
+    for (const effect of normalVariant.effects) {
+      console.log('  🔹 Effet:', {
+        effect: effect.effect,
+        element: effect.element,
+        minValue: effect.minValue,
+        maxValue: effect.maxValue,
+        targetScope: effect.targetScope
+      });
+
+      // Vérifier si c'est un effet de dégâts
+      const isDamageEffect = effect.effect === 'DEAL_DAMAGE'
+        || effect.effect?.toLowerCase().includes('damage')
+        || effect.effect?.toLowerCase().includes('dégât');
+
+      if (isDamageEffect && effect.minValue !== undefined && effect.maxValue !== undefined) {
+        // Utiliser la moyenne entre min et max
+        const damage = (effect.minValue + effect.maxValue) / 2;
+        totalBaseDamage += damage;
+
+        console.log(`  ✅ Dégâts trouvés: ${effect.minValue}-${effect.maxValue} (moyenne: ${damage})`);
       }
-    };
-  }
+    }
 
-  /**
-   * Extrait les dégâts de base d'un sort
-   */
-  private extractBaseDamageFromSpell(_spell: Spell): number {
-    // Pour l'instant, utiliser une valeur par défaut
-    // TODO: Analyser les effets du sort pour extraire les dégâts réels
-    return 100;
+    if (totalBaseDamage === 0) {
+      console.warn('⚠️ Aucun effet de dégâts trouvé dans le sort, retour à 0');
+      console.log('  💡 Ce sort ne fait peut-être pas de dégâts (mécanisme, buff, etc.)');
+    } else {
+      console.log(`💥 Total des dégâts de base extraits: ${totalBaseDamage}`);
+    }
+
+    return totalBaseDamage;
   }
 
   /**
@@ -648,91 +726,129 @@ export class SimulationEngineService {
     action: TimelineAction,
     context: SimulationContext
   ): SimulationActionResult {
-    const mpCost = action.details?.['mpCost'] || 1;
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚶 [MOVE] Tentative de déplacement');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📍 Position cible:', action.targetPosition);
+    console.log('⚡ Ressources disponibles:', {
+      AP: context.availablePa,
+      WP: context.availablePw,
+      MP: context.availableMp
+    });
+    console.log('═══════════════════════════════════════════════════════');
 
-    if (context.availableMp < mpCost) {
+    // Déterminer quelle entité déplacer
+    let entityToMove;
+    let currentPosition: Position;
+
+    if (action.entityId) {
+      // Si un entityId est spécifié, utiliser cette entité
+      entityToMove = this.boardService.getEntity(action.entityId);
+      if (!entityToMove) {
+        console.error(`Entité introuvable: ${action.entityId}`);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'Move',
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: `Entity not found: ${action.entityId}`
+        };
+      }
+      currentPosition = entityToMove.position;
+    } else {
+      // Sinon, déplacer le joueur par défaut
+      entityToMove = this.boardService.player();
+      if (!entityToMove) {
+        console.error(`Aucun joueur trouvé sur le plateau`);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'Move',
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: 'No player found on board'
+        };
+      }
+      currentPosition = context.playerPosition || entityToMove.position;
+    }
+
+    if (!action.targetPosition) {
       return {
         success: false,
         actionId: action.id || '',
         actionType: 'Move',
         paCost: 0,
         pwCost: 0,
-        mpCost,
-        message: `Insufficient MP (need ${mpCost}, have ${context.availableMp})`
+        mpCost: 0,
+        message: 'No target position specified'
       };
     }
 
-    // Mettre à jour la position de l'entité sur le plateau
-    if (action.targetPosition) {
-      // Déterminer quelle entité déplacer
-      let entityToMove;
+    // 🆕 Utiliser le validateur pour vérifier le déplacement
+    console.log('🔍 [VALIDATION] Vérification du déplacement...');
+    console.log('  De:', currentPosition);
+    console.log('  Vers:', action.targetPosition);
 
-      if (action.entityId) {
-        // Si un entityId est spécifié, utiliser cette entité
-        entityToMove = this.boardService.getEntity(action.entityId);
-        if (!entityToMove) {
-          console.error(`Entité introuvable: ${action.entityId}`);
-          return {
-            success: false,
-            actionId: action.id || '',
-            actionType: 'Move',
-            paCost: 0,
-            pwCost: 0,
-            mpCost: 0,
-            message: `Entity not found: ${action.entityId}`
-          };
-        }
-      } else {
-        // Sinon, déplacer le joueur par défaut
-        entityToMove = this.boardService.player();
-        if (!entityToMove) {
-          console.error(`Aucun joueur trouvé sur le plateau`);
-          return {
-            success: false,
-            actionId: action.id || '',
-            actionType: 'Move',
-            paCost: 0,
-            pwCost: 0,
-            mpCost: 0,
-            message: 'No player found on board'
-          };
-        }
-      }
+    const validation = this.movementValidator.validateMovement(
+      currentPosition,
+      action.targetPosition,
+      context
+    );
 
-      // Effectuer le déplacement
-      this.boardService.updateEntityPosition(entityToMove.id, action.targetPosition);
-      console.log(`${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
+    console.log('✅ [VALIDATION] Résultat:', {
+      canMove: validation.canMove,
+      reason: validation.reason,
+      cost: validation.cost,
+      details: validation.details
+    });
 
-      // Mettre à jour le contexte si c'est le joueur
-      if (entityToMove.type === 'player') {
-        this.updateContextPosition(context, action.targetPosition);
-      }
-
-      // Mettre à jour la direction si spécifiée
-      if (action.targetFacing) {
-        this.boardService.updateEntityFacing(entityToMove.id, action.targetFacing);
-        console.log(`${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
-      }
-
+    if (!validation.canMove) {
+      console.log('❌ [MOVE] Déplacement impossible !');
+      console.log('═══════════════════════════════════════════════════════');
       return {
-        success: true,
+        success: false,
         actionId: action.id || '',
         actionType: 'Move',
         paCost: 0,
-        pwCost: 0,
-        mpCost,
-        message: `${entityToMove.name} moved to (${action.targetPosition.x}, ${action.targetPosition.y})`
+        pwCost: validation.cost.wp,
+        mpCost: validation.cost.mp,
+        message: validation.reason || 'Cannot move',
+        details: validation.details
       };
     }
 
+    console.log('✅ [MOVE] Validation réussie ! Déplacement autorisé');
+    console.log(`💰 Coût: ${validation.cost.mp} MP, ${validation.cost.wp} WP`);
+    console.log('═══════════════════════════════════════════════════════');
+
+    // Effectuer le déplacement
+    this.boardService.updateEntityPosition(entityToMove.id, action.targetPosition);
+    console.log(`${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+    // Mettre à jour le contexte si c'est le joueur
+    if (entityToMove.type === 'player') {
+      this.updateContextPosition(context, action.targetPosition);
+    }
+
+    // Mettre à jour la direction si spécifiée
+    if (action.targetFacing) {
+      this.boardService.updateEntityFacing(entityToMove.id, action.targetFacing);
+      console.log(`${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
+    }
+
     return {
-      success: false,
+      success: true,
       actionId: action.id || '',
       actionType: 'Move',
       paCost: 0,
-      pwCost: 0,
-      mpCost: 0,
-      message: 'No target position specified'
+      pwCost: validation.cost.wp,
+      mpCost: validation.cost.mp,
+      message: `${entityToMove.name} moved to (${action.targetPosition.x}, ${action.targetPosition.y})${validation.details?.movementType === 'dial_hour' ? ' (via dial hour)' : ''}`,
+      details: validation.details
     };
   }
 
