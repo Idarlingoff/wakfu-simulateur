@@ -26,8 +26,18 @@ export class BoardService {
   // Historique des états pour le undo
   private stateHistory = signal<InteractiveBoardState[]>([]);
 
+  // Heure courante du cadran (1-12, undefined si pas de cadran)
+  private _currentDialHour = signal<number | undefined>(undefined);
+
+  // ID du cadran actif
+  private _activeDialId = signal<string | undefined>(undefined);
+
   // Computed Selectors
   public state = computed(() => this.boardState());
+
+  // Exposer l'heure courante comme signal public
+  public currentDialHour = computed(() => this._currentDialHour());
+  public activeDialId = computed(() => this._activeDialId());
 
   public selectedEntity = computed(() => {
     const state = this.boardState();
@@ -301,6 +311,114 @@ export class BoardService {
    */
   public getDialHours(dialId: string): any[] {
     return this.boardState().dialHours.filter(h => h.dialId === dialId);
+  }
+
+  // ============ Dial Hour Tracking ============
+
+  /**
+   * Définit l'heure courante du cadran
+   * @param hour L'heure (1-12)
+   * @param dialId L'ID du cadran associé
+   */
+  public setCurrentDialHour(hour: number, dialId?: string): void {
+    if (hour < 1 || hour > 12) {
+      console.error(`[BoardService] Invalid dial hour: ${hour} (must be 1-12)`);
+      return;
+    }
+
+    this._currentDialHour.set(hour);
+
+    if (dialId) {
+      this._activeDialId.set(dialId);
+    }
+
+    console.log(`[BoardService] ⏰ Current dial hour set to ${hour}${dialId ? ` (dial: ${dialId})` : ''}`);
+  }
+
+  /**
+   * Avance l'heure courante du cadran
+   * @param hours Nombre d'heures à avancer (peut être négatif pour reculer)
+   * @returns La nouvelle heure et si un wrap (tour complet) s'est produit
+   */
+  public advanceCurrentDialHour(hours: number): { newHour: number; wrapped: boolean } {
+    const currentHour = this._currentDialHour();
+
+    if (currentHour === undefined) {
+      console.warn(`[BoardService] Cannot advance dial hour: no active dial`);
+      return { newHour: 0, wrapped: false };
+    }
+
+    const previousHour = currentHour;
+    // Calculer la nouvelle heure (1-12)
+    let newHour = ((currentHour - 1 + hours) % 12);
+    if (newHour < 0) newHour += 12; // Gérer les heures négatives
+    newHour += 1;
+
+    // Détecter le wrap (tour complet)
+    const wrapped = hours > 0 ? (previousHour + hours > 12) : (hours < 0 && newHour > previousHour);
+
+    this._currentDialHour.set(newHour);
+
+    console.log(`[BoardService] ⏰ Dial hour advanced: ${previousHour} → ${newHour} (${hours > 0 ? '+' : ''}${hours}h)${wrapped ? ' 🔄 WRAPPED!' : ''}`);
+
+    return { newHour, wrapped };
+  }
+
+  /**
+   * Récupère la position d'une heure spécifique du cadran
+   * @param hour L'heure recherchée (1-12)
+   * @param dialId L'ID du cadran (optionnel, utilise le cadran actif par défaut)
+   */
+  public getDialHourPosition(hour: number, dialId?: string): Position | null {
+    const targetDialId = dialId || this._activeDialId();
+
+    if (!targetDialId) {
+      console.warn(`[BoardService] Cannot get dial hour position: no active dial`);
+      return null;
+    }
+
+    const dialHours = this.boardState().dialHours;
+    const dialHour = dialHours.find(h =>
+      h.hour === hour &&
+      h.dialId === targetDialId
+    );
+
+    return dialHour ? dialHour.position : null;
+  }
+
+  /**
+   * Téléporte le joueur sur une heure spécifique du cadran
+   * @param hour L'heure cible (1-12)
+   * @param dialId L'ID du cadran (optionnel)
+   * @returns true si la téléportation a réussi
+   */
+  public teleportPlayerToDialHour(hour: number, dialId?: string): boolean {
+    const position = this.getDialHourPosition(hour, dialId);
+
+    if (!position) {
+      console.error(`[BoardService] Cannot teleport player: hour ${hour} not found`);
+      return false;
+    }
+
+    const player = this.player();
+    if (!player) {
+      console.error(`[BoardService] Cannot teleport player: no player found`);
+      return false;
+    }
+
+    this.updateEntityPosition(player.id, position);
+    console.log(`[BoardService] 🌀 Player teleported to hour ${hour} at (${position.x}, ${position.y})`);
+
+    return true;
+  }
+
+  /**
+   * Réinitialise l'état du cadran (quand le cadran est détruit)
+   */
+  public resetDialState(): void {
+    this._currentDialHour.set(undefined);
+    this._activeDialId.set(undefined);
+    console.log(`[BoardService] 🔄 Dial state reset`);
   }
 
   // ============ Dial Hours Management ============

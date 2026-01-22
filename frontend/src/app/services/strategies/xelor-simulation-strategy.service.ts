@@ -87,9 +87,18 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       // Si c'est un cadran, initialiser l'heure courante
       if (mechanismType === 'dial' && actionResult.details?.mechanismId) {
         context.dialId = actionResult.details.mechanismId;
-        context.currentDialHour = 6; // Heure VI par défaut
+        context.currentDialHour = 12; // Heure XII par défaut
         console.log(`[XELOR] Dial activated - current hour set to ${context.currentDialHour}`);
       }
+    }
+
+    // Avancer l'heure du cadran selon le PW dépensé (1h par PW)
+    // Cela s'applique à TOUS les sorts qui coûtent du PW
+    console.log(`[XELOR] 🔍 Checking PW advancement: pwCost=${spell.pwCost}, success=${actionResult.success}, dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
+    if (spell.pwCost > 0 && actionResult.success && context.dialId) {
+      this.advanceDialHourByPwCost(spell.pwCost, context);
+    } else if (spell.pwCost > 0 && actionResult.success && !context.dialId) {
+      console.log(`[XELOR] ⚠️ Cannot advance dial hour: no dialId in context (spell: ${spell.name})`);
     }
 
     // Ajouter des charges aux mécanismes selon le PW dépensé
@@ -97,9 +106,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     if (spell.pwCost > 0 && actionResult.success) {
       this.addChargesFromPwSpent(spell.pwCost, context);
     }
-
-    // Traiter les sorts qui déclenchent un tour de cadran
-    // TODO: Identifier ces sorts et appeler this.processHourWrap(context)
 
     // Traiter les sorts qui téléportent sur une heure du cadran
     // Cela pourrait déclencher l'effet Ponctualité (+50% DI)
@@ -109,6 +115,32 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
         console.log(`[XELOR] Player on current hour (${hour}) - Ponctualité may apply`);
         // TODO: Appliquer le buff Ponctualité (+50% DI pour le tour)
       }
+    }
+  }
+
+  /**
+   * Avance l'heure du cadran selon le coût en PW d'un sort
+   * L'heure courante avance de 1 par PW dépensé
+   */
+  private advanceDialHourByPwCost(pwCost: number, context: SimulationContext): void {
+    if (!context.dialId || context.currentDialHour === undefined) {
+      console.log(`[XELOR] ⚠️ advanceDialHourByPwCost skipped: dialId=${context.dialId}, currentDialHour=${context.currentDialHour}`);
+      return;
+    }
+
+    console.log(`[XELOR] ⏰ Advancing dial hour by ${pwCost} (PW cost)`);
+    console.log(`[XELOR] ⏰ BoardService state: activeDialId=${this.boardService.activeDialId()}, currentDialHour=${this.boardService.currentDialHour()}`);
+
+    // Avancer via le BoardService pour mettre à jour le signal
+    const result = this.boardService.advanceCurrentDialHour(pwCost);
+
+    // Mettre à jour le contexte
+    context.currentDialHour = result.newHour;
+
+    // Traiter le wrap si nécessaire
+    if (result.wrapped) {
+      console.log(`[XELOR] 🔄 Hour wrap detected! Triggering ON_HOUR_WRAPPED effects`);
+      this.processHourWrap(context);
     }
   }
 
@@ -174,6 +206,68 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       case 'dial': return 12; // Cadran: 12 heures
       case 'regulateur': return 0; // Régulateur n'a pas de charges
       default: return 10;
+    }
+  }
+
+  /**
+   * Gère les mécanismes existants avant d'en poser un nouveau
+   * Règles:
+   * - Cadran: 1 seul max, remplace l'ancien (supprime aussi les heures du cadran)
+   * - Régulateur: 1 seul max, remplace l'ancien
+   * - Rouage: 1 max par défaut, 2 max avec passif "Rémanence" (supprime le plus ancien si limite atteinte)
+   * - Sinistro: 1 max par défaut, 2 max avec passif "Rémanence" (supprime le plus ancien si limite atteinte)
+   */
+  private handleExistingMechanisms(mechanismType: 'cog' | 'sinistro' | 'dial' | 'regulateur', context: SimulationContext): void {
+    const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
+    const maxAllowed = this.getMaxMechanismsAllowed(mechanismType, context);
+
+    console.log(`[XELOR] Handling existing ${mechanismType}s: ${existingMechanisms.length} existing, max allowed: ${maxAllowed}`);
+
+    if (existingMechanisms.length >= maxAllowed) {
+      // Supprimer le(s) mécanisme(s) le(s) plus ancien(s) jusqu'à avoir de la place
+      const toRemove = existingMechanisms.length - maxAllowed + 1;
+
+      for (let i = 0; i < toRemove; i++) {
+        const mechanismToRemove = existingMechanisms[i];
+        console.log(`[XELOR] 🗑️ Removing old ${mechanismType}: ${mechanismToRemove.id}`);
+
+        // Si c'est un cadran, supprimer aussi les heures associées et réinitialiser l'état
+        if (mechanismType === 'dial') {
+          this.boardService.removeDialHoursForDial(mechanismToRemove.id);
+          this.boardService.resetDialState();
+          context.dialId = undefined;
+          context.currentDialHour = undefined;
+          console.log(`[XELOR] 🗑️ Removed dial hours and reset dial state`);
+        }
+
+        // Supprimer le mécanisme du plateau
+        this.boardService.removeMechanism(mechanismToRemove.id);
+
+        // Supprimer les charges du contexte
+        context.mechanismCharges?.delete(mechanismToRemove.id);
+      }
+    }
+  }
+
+  /**
+   * Retourne le nombre maximum de mécanismes autorisés pour un type donné
+   * Prend en compte le passif "Rémanence" qui augmente la limite pour Rouage et Sinistro
+   */
+  private getMaxMechanismsAllowed(mechanismType: string, context: SimulationContext): number {
+    const hasRemanence = context.activePassiveIds?.includes('remanence') ||
+                         context.activePassiveIds?.includes('XEL_REMANENCE');
+
+    switch (mechanismType) {
+      case 'dial':
+        return 1; // Toujours 1 seul cadran
+      case 'regulateur':
+        return 1; // Toujours 1 seul régulateur
+      case 'cog':
+        return hasRemanence ? 2 : 1; // 2 rouages avec Rémanence, sinon 1
+      case 'sinistro':
+        return hasRemanence ? 2 : 1; // 2 sinistros avec Rémanence, sinon 1
+      default:
+        return 1;
     }
   }
 
@@ -255,6 +349,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     console.log(`[XELOR] Target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
+    // Gérer les mécanismes existants selon les règles
+    this.handleExistingMechanisms(mechanismType, context);
+
     // Créer le mécanisme
     const mechanism: Mechanism = {
       id: `${mechanismType}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -271,12 +368,34 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     console.log(`[XELOR] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
-    // Si c'est un cadran, créer les 12 heures autour
+    // Si c'est un cadran, créer les 12 heures autour et téléporter le joueur sur l'heure 6
     if (mechanismType === 'dial') {
       const playerEntity = this.boardService.player();
       const playerPosition = playerEntity?.position || context.playerPosition || { x: 6, y: 6 };
 
+      // Créer les 12 heures autour du cadran
       this.createDialHours(mechanism.id, action.targetPosition, playerPosition);
+
+      // Définir l'heure courante à 12 dans le BoardService
+      this.boardService.setCurrentDialHour(12, mechanism.id);
+
+      // Téléporter le joueur sur l'heure 6
+      const teleported = this.boardService.teleportPlayerToDialHour(6, mechanism.id);
+      if (teleported) {
+        console.log(`[XELOR] 🌀 Player automatically teleported to hour 6`);
+
+        // Mettre à jour le contexte avec la nouvelle position du joueur (heure 6, PAS 12)
+        const newPosition = this.boardService.getDialHourPosition(6, mechanism.id);
+        if (newPosition) {
+          context.playerPosition = newPosition;
+          context.currentPosition = newPosition;
+          console.log(`[XELOR] 📍 Context updated with new player position: (${newPosition.x}, ${newPosition.y})`);
+        }
+      }
+
+      // Initialiser l'heure courante dans le contexte
+      context.currentDialHour = 12;
+      context.dialId = mechanism.id;
     }
 
     return {
@@ -321,7 +440,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     if (dials.length > 0) {
       const dial = dials[0]; // On prend le premier cadran (max 1 normalement)
       context.dialId = dial.id;
-      context.currentDialHour = 6; // Heure initiale (VI - où le Xélor est téléporté)
+      context.currentDialHour = 12; // Heure initiale (XII - où le Xélor est téléporté)
       context.activeAuras!.add('DIAL_AURA');
       console.log(`[XELOR] Active dial found (${dial.id}), current hour: ${context.currentDialHour}`);
     }

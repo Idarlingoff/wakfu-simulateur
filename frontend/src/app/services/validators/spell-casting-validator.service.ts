@@ -138,10 +138,85 @@ export class SpellCastingValidatorService {
     }
     details.isValidDirection = true;
 
+    // 6. Vérifier le nombre d'utilisations par tour
+    const usePerTurnValidation = this.validateUsePerTurn(spell, context);
+    if (!usePerTurnValidation.valid) {
+      return {
+        canCast: false,
+        reason: usePerTurnValidation.reason || 'Limite d\'utilisation par tour atteinte',
+        details
+      };
+    }
+
+    // 7. Vérifier le nombre d'utilisations par cible
+    const usePerTargetValidation = this.validateUsePerTarget(spell, targetPosition, context);
+    if (!usePerTargetValidation.valid) {
+      return {
+        canCast: false,
+        reason: usePerTargetValidation.reason || 'Limite d\'utilisation par cible atteinte',
+        details
+      };
+    }
+
     return {
       canCast: true,
       details
     };
+  }
+
+  /**
+   * Valide le nombre d'utilisations par tour d'un sort
+   */
+  private validateUsePerTurn(
+    spell: Spell,
+    context: SimulationContext
+  ): { valid: boolean; reason?: string } {
+    // Si usePerTurn n'est pas défini ou est très élevé (99), pas de limite
+    if (!spell.usePerTurn || spell.usePerTurn >= 99) {
+      return { valid: true };
+    }
+
+    const currentUsage = context.spellUsageThisTurn?.get(spell.id) || 0;
+
+    console.log(`🔢 [USE PER TURN] Sort "${spell.name}": ${currentUsage}/${spell.usePerTurn} utilisations ce tour`);
+
+    if (currentUsage >= spell.usePerTurn) {
+      return {
+        valid: false,
+        reason: `${spell.name} ne peut être utilisé que ${spell.usePerTurn} fois par tour (déjà utilisé ${currentUsage} fois)`
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Valide le nombre d'utilisations par cible d'un sort
+   */
+  private validateUsePerTarget(
+    spell: Spell,
+    targetPosition: Position,
+    context: SimulationContext
+  ): { valid: boolean; reason?: string } {
+    // Si usePerTarget n'est pas défini ou est très élevé (99), pas de limite
+    if (!spell.usePerTarget || spell.usePerTarget >= 99) {
+      return { valid: true };
+    }
+
+    const targetKey = `${targetPosition.x},${targetPosition.y}`;
+    const spellTargetUsage = context.spellUsagePerTarget?.get(spell.id);
+    const currentUsage = spellTargetUsage?.get(targetKey) || 0;
+
+    console.log(`🎯 [USE PER TARGET] Sort "${spell.name}" sur (${targetPosition.x}, ${targetPosition.y}): ${currentUsage}/${spell.usePerTarget} utilisations sur cette cible`);
+
+    if (currentUsage >= spell.usePerTarget) {
+      return {
+        valid: false,
+        reason: `${spell.name} ne peut être utilisé que ${spell.usePerTarget} fois par cible par tour (déjà utilisé ${currentUsage} fois sur cette cible)`
+      };
+    }
+
+    return { valid: true };
   }
 
   /**

@@ -39,6 +39,12 @@ export interface SimulationContext {
 
   // IDs des passifs actifs du build (pour vérifier des conditions comme Rémanence)
   activePassiveIds?: string[];
+
+  // Compteur d'utilisation de sorts par tour (spellId -> nombre d'utilisations ce tour)
+  spellUsageThisTurn?: Map<string, number>;
+
+  // Compteur d'utilisation de sorts par cible (spellId -> Map<targetKey, usageCount>)
+  spellUsagePerTarget?: Map<string, Map<string, number>>;
 }
 
 export interface SimulationActionResult {
@@ -160,7 +166,10 @@ export class SimulationEngineService {
       buffs: [],
       debuffs: [],
       turn: 1,
-      activePassiveIds: activePassiveIds
+      activePassiveIds: activePassiveIds,
+      // Compteurs d'utilisation de sorts (réinitialisés chaque tour)
+      spellUsageThisTurn: new Map<string, number>(),
+      spellUsagePerTarget: new Map<string, Map<string, number>>()
     };
 
     if (this.currentClassStrategy) {
@@ -253,6 +262,10 @@ export class SimulationEngineService {
     console.log(`│  🔹 ÉTAPE ${stepNumber}: ${step.description || step.id}`);
     console.log('└───────────────────────────────────────────────────────┘');
     console.log(`🎬 Nombre d'actions: ${step.actions.length}`);
+    console.log(`📍 Position joueur (context): (${context.playerPosition?.x}, ${context.playerPosition?.y})`);
+    console.log(`📍 Position joueur (BoardService): (${this.boardService.player()?.position?.x}, ${this.boardService.player()?.position?.y})`);
+    console.log(`⏰ Dial state (context): dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
+    console.log(`⏰ Dial state (BoardService): activeDialId=${this.boardService.activeDialId()}, currentHour=${this.boardService.currentDialHour()}`);
     console.log('');
 
     const actions: SimulationActionResult[] = [];
@@ -395,7 +408,19 @@ export class SimulationEngineService {
 
     // Déterminer la position de la cible
     const targetPosition = action.targetPosition || context.currentPosition;
-    const casterPosition = context.playerPosition || context.currentPosition;
+
+    // Utiliser la position du BoardService comme source de vérité (plus fiable après téléportation)
+    const playerFromBoard = this.boardService.player();
+    const casterPosition = playerFromBoard?.position || context.playerPosition || context.currentPosition;
+
+    // Synchroniser le contexte avec le BoardService si nécessaire
+    if (playerFromBoard?.position &&
+        (context.playerPosition?.x !== playerFromBoard.position.x ||
+         context.playerPosition?.y !== playerFromBoard.position.y)) {
+      console.log(`🔄 [SYNC] Synchronizing context position with BoardService: (${context.playerPosition?.x}, ${context.playerPosition?.y}) → (${playerFromBoard.position.x}, ${playerFromBoard.position.y})`);
+      context.playerPosition = playerFromBoard.position;
+      context.currentPosition = playerFromBoard.position;
+    }
 
     if (!targetPosition || !casterPosition) {
       return {
@@ -413,6 +438,9 @@ export class SimulationEngineService {
 
     // 🆕 Utiliser le validateur pour vérifier toutes les conditions
     console.log('🔍 [VALIDATION] Vérification des conditions de lancement...');
+    console.log('🔍 [VALIDATION] Position du lanceur (context.playerPosition):', casterPosition);
+    console.log('🔍 [VALIDATION] Position cible:', targetPosition);
+    console.log('🔍 [VALIDATION] Position du joueur dans BoardService:', this.boardService.player()?.position);
     const validation = this.spellCastingValidator.validateSpellCast(
       spell,
       casterPosition,
@@ -479,6 +507,8 @@ export class SimulationEngineService {
         // 🆕 Traiter les effets spécifiques de classe
         if (result.success) {
           this.currentClassStrategy.processClassSpecificEffects(spell, action, context, result);
+          // Mettre à jour les compteurs d'utilisation
+          this.updateSpellUsageCounters(spell, action.targetPosition, context);
         }
 
         return result;
@@ -504,8 +534,7 @@ export class SimulationEngineService {
 
     const damageResult = this.damageCalculator.calculateDamage(damageParams);
 
-
-    return {
+    const result: SimulationActionResult = {
       success: true,
       actionId: action.id || '',
       actionType: 'CastSpell',
@@ -522,6 +551,50 @@ export class SimulationEngineService {
         lineOfSight: spell.lineOfSight
       }
     };
+
+    // 🆕 Traiter les effets spécifiques de classe pour TOUS les sorts (pas seulement les mécanismes)
+    if (this.currentClassStrategy && result.success) {
+      this.currentClassStrategy.processClassSpecificEffects(spell, action, context, result);
+    }
+
+    // Mettre à jour les compteurs d'utilisation
+    if (result.success) {
+      this.updateSpellUsageCounters(spell, action.targetPosition, context);
+    }
+
+    return result;
+  }
+
+  /**
+   * Met à jour les compteurs d'utilisation de sort
+   */
+  private updateSpellUsageCounters(spell: Spell, targetPosition: Position | undefined, context: SimulationContext): void {
+    // Initialiser les Maps si nécessaire
+    if (!context.spellUsageThisTurn) {
+      context.spellUsageThisTurn = new Map<string, number>();
+    }
+    if (!context.spellUsagePerTarget) {
+      context.spellUsagePerTarget = new Map<string, Map<string, number>>();
+    }
+
+    // Incrémenter le compteur d'utilisation par tour
+    const currentUsage = context.spellUsageThisTurn.get(spell.id) || 0;
+    context.spellUsageThisTurn.set(spell.id, currentUsage + 1);
+    console.log(`📊 [USAGE] ${spell.name}: ${currentUsage + 1} utilisation(s) ce tour`);
+
+    // Incrémenter le compteur d'utilisation par cible
+    if (targetPosition) {
+      const targetKey = `${targetPosition.x},${targetPosition.y}`;
+
+      if (!context.spellUsagePerTarget.has(spell.id)) {
+        context.spellUsagePerTarget.set(spell.id, new Map<string, number>());
+      }
+
+      const spellTargetUsage = context.spellUsagePerTarget.get(spell.id)!;
+      const currentTargetUsage = spellTargetUsage.get(targetKey) || 0;
+      spellTargetUsage.set(targetKey, currentTargetUsage + 1);
+      console.log(`📊 [USAGE] ${spell.name} sur (${targetPosition.x}, ${targetPosition.y}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
+    }
   }
 
 

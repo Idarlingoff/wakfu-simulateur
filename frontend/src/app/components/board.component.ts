@@ -123,13 +123,15 @@ interface BoardCell {
             <div
               *ngIf="getDialHourAtPosition(cell.x, cell.y) as dialHour"
               class="dial-hour"
-              [title]="'Cadran - ' + dialHour.hour + 'h'"
+              [class.current-hour]="isCurrentDialHour(dialHour.hour)"
+              [title]="'Cadran - ' + dialHour.hour + 'h' + (isCurrentDialHour(dialHour.hour) ? ' (HEURE COURANTE)' : '')"
             >
               <img
                 [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'"
                 [alt]="'Heure ' + dialHour.hour"
                 class="dial-hour-image"
               />
+              <span *ngIf="isCurrentDialHour(dialHour.hour)" class="current-hour-indicator">⏰</span>
             </div>
 
             <!-- Mechanism -->
@@ -663,6 +665,45 @@ interface BoardCell {
       }
     }
 
+    /* Heure courante du cadran - MISE EN SURBRILLANCE */
+    .board .dial-hour.current-hour .dial-hour-image {
+      opacity: 1 !important;
+      width: 80%;
+      height: 80%;
+      filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.9)) drop-shadow(0 0 15px rgba(255, 215, 0, 0.6)) !important;
+      animation: currentHourPulse 1s ease-in-out infinite !important;
+    }
+
+    .board .dial-hour.current-hour {
+      z-index: 1 !important; /* Légèrement au-dessus des autres heures */
+    }
+
+    .board .current-hour-indicator {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      font-size: 12px;
+      animation: currentHourBounce 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes currentHourPulse {
+      0%, 100% {
+        opacity: 0.9;
+        transform: scale(1);
+        filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.9)) drop-shadow(0 0 15px rgba(255, 215, 0, 0.6));
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 12px rgba(255, 215, 0, 1)) drop-shadow(0 0 20px rgba(255, 215, 0, 0.8));
+      }
+    }
+
+    @keyframes currentHourBounce {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(-3px); }
+    }
+
     /* Sinistro - TOUJOURS au premier plan */
     .board .mechanism.sinistro {
       z-index: 3 !important; /* Au-dessus de tout */
@@ -1020,6 +1061,21 @@ export class BoardComponent {
     return this.boardService.dialHours().find(
       h => h.position.x === x && h.position.y === y
     );
+  }
+
+  /**
+   * Check if a dial hour is the current hour
+   */
+  isCurrentDialHour(hour: number): boolean {
+    const currentHour = this.boardService.currentDialHour();
+    return currentHour !== undefined && currentHour === hour;
+  }
+
+  /**
+   * Get the current dial hour (for display purposes)
+   */
+  getCurrentDialHour(): number | undefined {
+    return this.boardService.currentDialHour();
   }
 
   /**
