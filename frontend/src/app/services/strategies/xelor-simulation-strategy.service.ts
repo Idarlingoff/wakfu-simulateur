@@ -362,17 +362,27 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       this.advanceDialHour(context);
     }
 
-    // 3. Appliquer le bonus PW du Régulateur (pour le début du prochain tour)
-    if (context.activeAuras?.has('REGULATOR_PW_AURA')) {
-      const regulateurs = this.boardService.getMechanismsByType('regulateur');
-      if (regulateurs.length > 0) {
-        console.log(`[XELOR] ✅ Régulateur present - +1 PW will be added at turn start`);
-        // Note: Le +1 PW sera appliqué au début du prochain tour dans initializeClassContext
-      }
-    }
+    // 3. Appliquer le bonus PW du Régulateur en fin de tour
+    this.applyRegulatorPwBonus(context);
 
     // TODO: Décrémenter les durées de buffs temporaires
     // TODO: Réinitialiser certains compteurs
+  }
+
+  /**
+   * Applique le bonus +1 PW du Régulateur si présent en fin de tour
+   * Le Xelor gagne +1 PW par Régulateur présent sur le plateau à la fin de son tour
+   */
+  private applyRegulatorPwBonus(context: SimulationContext): void {
+    const regulateurs = this.boardService.getMechanismsByType('regulateur');
+
+    if (regulateurs.length > 0) {
+      const pwBonus = regulateurs.length; // +1 PW par Régulateur
+      context.availablePw += pwBonus;
+
+      console.log(`[XELOR] ✅ Régulateur end-of-turn effect: +${pwBonus} PW (now ${context.availablePw} PW)`);
+      console.log(`[XELOR] 📊 ${regulateurs.length} Régulateur(s) on board`);
+    }
   }
 
   /**
@@ -657,5 +667,94 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     console.log(`[XELOR DIAL] Created ${hoursCreated}/12 hours (oriented ${directionName})`);
   }
-}
 
+  /**
+   * Vérifie si les dégâts doivent être redirigés vers le Régulateur
+   * Tous les dégâts subis par les mécanismes (Rouage, Sinistro, Cadran) sont redirigés vers le Régulateur
+   *
+   * @param targetMechanismType Le type de mécanisme ciblé
+   * @returns true si les dégâts doivent être redirigés
+   */
+  shouldRedirectDamageToRegulator(targetMechanismType: string): boolean {
+    // Seuls les mécanismes "non-régulateur" redirigent leurs dégâts
+    if (targetMechanismType === 'regulateur') {
+      return false;
+    }
+
+    // Vérifier s'il y a un Régulateur actif sur le plateau
+    const regulateurs = this.boardService.getMechanismsByType('regulateur');
+    return regulateurs.length > 0;
+  }
+
+  /**
+   * Redirige les dégâts d'un mécanisme vers le Régulateur
+   * Le Régulateur absorbe tous les coups destinés aux autres mécanismes
+   *
+   * @param damage Les dégâts à rediriger
+   * @param sourceMechanismId L'ID du mécanisme initialement ciblé
+   * @param context Le contexte de simulation
+   * @returns L'ID du Régulateur qui a reçu les dégâts, ou null si pas de redirection
+   */
+  redirectDamageToRegulator(
+    damage: number,
+    sourceMechanismId: string,
+    context: SimulationContext
+  ): { regulatorId: string; damageDealt: number } | null {
+    const regulateurs = this.boardService.getMechanismsByType('regulateur');
+
+    if (regulateurs.length === 0) {
+      console.log(`[XELOR] ❌ No Régulateur to redirect damage to`);
+      return null;
+    }
+
+    // Prendre le premier Régulateur (normalement il n'y en a qu'un)
+    const regulateur = regulateurs[0];
+
+    console.log(`[XELOR] 🔄 Redirecting ${damage} damage from mechanism ${sourceMechanismId} to Régulateur ${regulateur.id}`);
+    console.log(`[XELOR] 📍 Régulateur at position (${regulateur.position.x}, ${regulateur.position.y})`);
+
+    // Appliquer les dégâts au Régulateur
+    // Dans le jeu, le Régulateur a des PV comme les autres mécanismes
+    // Pour l'instant, on log simplement le dommage
+    // TODO: Implémenter un système de PV pour les mécanismes
+
+    return {
+      regulatorId: regulateur.id,
+      damageDealt: damage
+    };
+  }
+
+  /**
+   * Calcule les dégâts qu'un mécanisme devrait recevoir (avant redirection)
+   * Utilisé pour savoir combien de dégâts seront redirigés vers le Régulateur
+   *
+   * @param mechanismId L'ID du mécanisme ciblé
+   * @param baseDamage Les dégâts de base de l'attaque
+   * @returns Les dégâts finaux après calculs
+   */
+  calculateMechanismDamage(mechanismId: string, baseDamage: number): number {
+    // Les mécanismes n'ont pas de résistance, les dégâts sont appliqués directement
+    // TODO: Vérifier si certains passifs modifient les dégâts sur les mécanismes
+    return baseDamage;
+  }
+
+  /**
+   * Vérifie si un mécanisme est ciblé par une attaque
+   * Utilisé pour déterminer si on doit rediriger les dégâts
+   *
+   * @param targetPosition La position ciblée par l'attaque
+   * @returns Le mécanisme à cette position, ou null
+   */
+  getMechanismAtPosition(targetPosition: Position): Mechanism | null {
+    const mechanisms = this.boardService.mechanisms();
+
+    for (const mechanism of mechanisms) {
+      if (mechanism.position.x === targetPosition.x &&
+          mechanism.position.y === targetPosition.y) {
+        return mechanism;
+      }
+    }
+
+    return null;
+  }
+}

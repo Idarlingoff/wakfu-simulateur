@@ -445,8 +445,31 @@ export class SimulationEngineService {
 
     console.log('✅ [CAST SPELL] Validation réussie ! Le sort peut être lancé');
 
-    // 🆕 Vérifier si c'est un sort de classe
+    // 🆕 Vérifier si c'est un sort de classe avec validation spécifique
     if (this.currentClassStrategy) {
+      // Validation spécifique de classe (ex: Régulateur doit être posé sur une heure du cadran)
+      const classValidation = this.currentClassStrategy.validateClassSpecificCasting(
+        spell,
+        casterPosition,
+        targetPosition,
+        context
+      );
+
+      if (!classValidation.canCast) {
+        console.log(`❌ [CLASS VALIDATION] ${classValidation.reason}`);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'CastSpell',
+          spellId: spell.id,
+          spellName: spell.name,
+          paCost,
+          pwCost,
+          mpCost: 0,
+          message: classValidation.reason || 'Condition de classe non remplie'
+        };
+      }
+
       const isClassMechanism = this.currentClassStrategy.isClassMechanismSpell(spell.id);
 
       if (isClassMechanism) {
