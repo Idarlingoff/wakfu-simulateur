@@ -13,24 +13,32 @@ import { Build } from '../../models/build.model';
 import { Timeline, TimelineStep, TimelineAction, Position } from '../../models/timeline.model';
 import { Spell } from '../../models/spell.model';
 import { BoardEntity, Mechanism } from '../../models/board.model';
-import { isSpellMechanism, getSpellMechanismType, getMechanismImagePath } from '../../utils/mechanism-utils';
 import { SpellCastingValidatorService } from '../validators/spell-casting-validator.service';
 import { MovementValidatorService } from '../validators/movement-validator.service';
-import { MechanismManagerService } from '../managers/mechanism-manager.service';
-import { SpellEffectProcessorService } from '../processors/spell-effect-processor.service';
+import { ClassStrategyFactory } from '../strategies/class-strategy-factory.service';
+import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy.interface';
 import { firstValueFrom } from 'rxjs';
 
 export interface SimulationContext {
   availablePa: number;
   availablePw: number;
   availableMp: number;
-  currentPosition?: Position;
-  playerPosition?: Position;
+  currentPosition: Position;
+  playerPosition: Position;
+  range: number;
   entities?: BoardEntity[];
   mechanisms?: Mechanism[];
   buffs?: any[];
   debuffs?: any[];
   turn?: number;
+
+  mechanismCharges?: Map<string, number>;
+  activeAuras?: Set<string>;
+  currentDialHour?: number;
+  dialId?: string;
+
+  // IDs des passifs actifs du build (pour vérifier des conditions comme Rémanence)
+  activePassiveIds?: string[];
 }
 
 export interface SimulationActionResult {
@@ -80,8 +88,10 @@ export class SimulationEngineService {
   private readonly boardService: BoardService = inject(BoardService);
   private readonly spellCastingValidator: SpellCastingValidatorService = inject(SpellCastingValidatorService);
   private readonly movementValidator: MovementValidatorService = inject(MovementValidatorService);
-  private readonly mechanismManager: MechanismManagerService = inject(MechanismManagerService);
-  private readonly spellEffectProcessor: SpellEffectProcessorService = inject(SpellEffectProcessorService);
+  private readonly classStrategyFactory: ClassStrategyFactory = inject(ClassStrategyFactory);
+
+  // Stratégie de classe actuelle (sera définie au début de la simulation)
+  private currentClassStrategy?: ClassSimulationStrategy;
 
   constructor(
     private readonly damageCalculator: DamageCalculatorService,
@@ -106,11 +116,15 @@ export class SimulationEngineService {
     console.log('║  🎮 DÉMARRAGE DE LA SIMULATION                       ║');
     console.log('╚═══════════════════════════════════════════════════════╝');
     console.log('📦 Build:', build.name);
+    console.log('🎭 Classe:', build.classId || 'Default');
     console.log('📋 Timeline:', timeline.name);
     console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
     console.log('');
 
-    // Calculer les stats totales du build avec les passifs
+    this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
+    console.log(`Stratégie de classe: ${this.currentClassStrategy.classId}`);
+    console.log('');
+
     let buildStats = this.statsCalculator.calculateTotalStats(build);
 
     console.log('📊 Stats calculées:', {
@@ -118,32 +132,47 @@ export class SimulationEngineService {
       WP: buildStats.wp,
       MP: buildStats.mp,
       HP: buildStats.hp,
-      'Maîtrise Primaire': buildStats.masteryPrimary
+      'Maitrise Primaire': buildStats.masteryPrimary
     });
     console.log('');
 
-    // Récupérer les entités et mécanismes du plateau
     const boardState = this.boardService.state();
     const entities = boardState.entities || [];
     const mechanisms: Mechanism[] = this.boardService.mechanisms();
 
-    // Trouver la position du joueur
     const playerEntity = entities.find((e: BoardEntity) => e.type === 'player');
     const playerPosition = playerEntity?.position || { x: 7, y: 7 };
 
-    // Créer le contexte initial
+    // Extraire les IDs des passifs actifs du build
+    const activePassiveIds = build.passiveBar?.passives
+      ?.filter(p => p !== null)
+      ?.map(p => p!.passiveId) || [];
+
     const initialContext: SimulationContext = {
       availablePa: buildStats.ap,
       availablePw: buildStats.wp,
       availableMp: buildStats.mp,
       currentPosition: playerPosition,
       playerPosition: playerPosition,
+      range: buildStats.range || 0, // Portée du joueur
       entities: entities,
       mechanisms: mechanisms,
       buffs: [],
       debuffs: [],
-      turn: 1
+      turn: 1,
+      activePassiveIds: activePassiveIds
     };
+
+    if (this.currentClassStrategy) {
+      this.currentClassStrategy.initializeClassContext(initialContext, build);
+
+      buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, initialContext);
+      console.log('📊 Stats après passifs de classe:', {
+        AP: buildStats.ap,
+        'Maitrise Primaire': buildStats.masteryPrimary
+      });
+      console.log('');
+    }
 
     const steps: SimulationStepResult[] = [];
     const errors: string[] = [];
@@ -230,26 +259,22 @@ export class SimulationEngineService {
     let currentContext = { ...context };
     let stepSuccess = true;
 
-
-    // Exécuter chaque action du step
     for (const action of step.actions) {
       console.log(`▶️  Action ${action.type}...`);
       const actionResult = await this.executeAction(action, currentContext, build, buildStats);
       actions.push(actionResult);
 
       if (actionResult.success) {
-        // Déduire les ressources utilisées
         currentContext.availablePa -= actionResult.paCost;
         currentContext.availablePw -= actionResult.pwCost;
         currentContext.availableMp -= actionResult.mpCost;
 
-        // Mettre à jour la position si c'était un déplacement
         if (action.type === 'Move' && action.targetPosition) {
           this.updateContextPosition(currentContext, action.targetPosition);
         }
       } else {
         stepSuccess = false;
-        break; // Arrêter le step si une action échoue
+        break;
       }
     }
 
@@ -420,11 +445,21 @@ export class SimulationEngineService {
 
     console.log('✅ [CAST SPELL] Validation réussie ! Le sort peut être lancé');
 
-    // Vérifier si c'est un sort de mécanisme
-    const isMechanism = isSpellMechanism(spell.id);
+    // 🆕 Vérifier si c'est un sort de classe
+    if (this.currentClassStrategy) {
+      const isClassMechanism = this.currentClassStrategy.isClassMechanismSpell(spell.id);
 
-    if (isMechanism) {
-      return this.executeMechanismSpell(action, context, spell, paCost, pwCost);
+      if (isClassMechanism) {
+        console.log(`🔧 [CLASS MECHANISM] Detected class mechanism spell for ${this.currentClassStrategy.classId}`);
+        const result = this.currentClassStrategy.executeClassMechanismSpell(action, context, spell, paCost, pwCost);
+
+        // 🆕 Traiter les effets spécifiques de classe
+        if (result.success) {
+          this.currentClassStrategy.processClassSpecificEffects(spell, action, context, result);
+        }
+
+        return result;
+      }
     }
 
     // Utiliser les stats du build directement (les passifs sont déjà appliqués)
@@ -520,204 +555,6 @@ export class SimulationEngineService {
     return totalBaseDamage;
   }
 
-  /**
-   * Exécute un sort de mécanisme (Rouage, Sinistro, Cadran, Régulateur)
-   */
-  private executeMechanismSpell(
-    action: TimelineAction,
-    context: SimulationContext,
-    spell: Spell,
-    paCost: number,
-    pwCost: number
-  ): SimulationActionResult {
-    console.log(`🔧 [MECHANISM] executeMechanismSpell called for spell: ${spell.id} (${spell.name})`);
-
-    const mechanismType = getSpellMechanismType(spell.id);
-
-    if (!mechanismType) {
-      console.error(`❌ [MECHANISM] Type not found for spell: ${spell.id}`);
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId: spell.id,
-        spellName: spell.name,
-        paCost,
-        pwCost,
-        mpCost: 0,
-        message: `Mechanism type not found for ${spell.name}`
-      };
-    }
-
-    const imageUrl = 'http://localhost:8080/' + getMechanismImagePath(mechanismType, 0);
-
-    console.log(`✅ [MECHANISM] Type found:`, {
-      type: mechanismType,
-      imageUrl: imageUrl
-    });
-
-    // Vérifier que la position cible est fournie
-    if (!action.targetPosition) {
-      console.error(`❌ [MECHANISM] No target position for spell ${spell.name}`);
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId: spell.id,
-        spellName: spell.name,
-        paCost,
-        pwCost,
-        mpCost: 0,
-        message: `No target position for mechanism ${spell.name}`
-      };
-    }
-
-    console.log(`📍 [MECHANISM] Target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
-
-    // Créer le mécanisme
-    const mechanism: Mechanism = {
-      id: `${mechanismType}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-      type: mechanismType,
-      position: action.targetPosition,
-      charges: 0,
-      spellId: spell.id
-    };
-
-    console.log(`🏗️ [MECHANISM] Mechanism object created:`, mechanism);
-
-    // Ajouter le mécanisme au plateau via le BoardService
-    this.boardService.addMechanism(mechanism);
-
-    console.log(`✅ [MECHANISM] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
-
-    // Si c'est un cadran, créer les 12 heures autour (orientées selon la direction du lancer)
-    if (mechanismType === 'dial') {
-      // Récupérer la position du joueur
-      const playerEntity = this.boardService.player();
-      const playerPosition = playerEntity?.position || context.playerPosition || { x: 6, y: 6 };
-
-      this.createDialHours(mechanism.id, action.targetPosition, playerPosition);
-    }
-
-    // Consommer les ressources
-    context.availablePa -= paCost;
-    context.availablePw -= pwCost;
-
-    return {
-      success: true,
-      actionId: action.id || '',
-      actionType: 'CastSpell',
-      spellId: spell.id,
-      spellName: spell.name,
-      paCost,
-      pwCost,
-      mpCost: 0,
-      message: `Placed ${spell.name} at (${action.targetPosition.x}, ${action.targetPosition.y})`,
-      details: {
-        mechanismType: mechanismType,
-        mechanismId: mechanism.id
-      }
-    };
-  }
-
-  /**
-   * Crée les 12 heures autour d'un cadran, orientées selon la direction du lancer
-   */
-  private createDialHours(dialId: string, centerPosition: Position, playerPosition: Position): void {
-    console.log(`🕐 [DIAL_HOURS] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
-    console.log(`👤 [DIAL_HOURS] Player position: (${playerPosition.x}, ${playerPosition.y})`);
-
-    // Calculer la direction du lancer (du joueur vers le cadran)
-    const dx = centerPosition.x - playerPosition.x;
-    const dy = centerPosition.y - playerPosition.y;
-
-    console.log(`📐 [DIAL_HOURS] Direction vector: (${dx}, ${dy})`);
-
-    // Déterminer la rotation à appliquer selon la direction dominante
-    let rotation = 0; // En quarts de tour (0, 1, 2, 3)
-    let directionName = '';
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // Direction horizontale dominante
-      if (dx > 0) {
-        // Droite (Est)
-        rotation = 1; // 90° sens horaire
-        directionName = 'DROITE (Est)';
-      } else {
-        // Gauche (Ouest)
-        rotation = 3; // 270° sens horaire (ou -90°)
-        directionName = 'GAUCHE (Ouest)';
-      }
-    } else {
-      // Direction verticale dominante
-      if (dy > 0) {
-        // Bas (Sud) - Y+ = vers le bas
-        rotation = 2; // 180°
-        directionName = 'BAS (Sud)';
-      } else {
-        // Haut (Nord) - Y- = vers le haut
-        rotation = 0; // 0° (orientation par défaut)
-        directionName = 'HAUT (Nord)';
-      }
-    }
-
-    console.log(`🧭 [DIAL_HOURS] Direction détectée: ${directionName}, Rotation: ${rotation * 90}°`);
-
-    // Positions de base des heures (12h vers le HAUT/NORD par défaut)
-    // Avec Y- = Nord, Y+ = Sud, X+ = Est, X- = Ouest
-    const baseHourPositions = [
-      { hour: 12, offsetX: 0, offsetY: -3 },   // 12h - Nord (haut)
-      { hour: 1, offsetX: +1, offsetY: -2 },   // 1h
-      { hour: 2, offsetX: +2, offsetY: -1 },   // 2h
-      { hour: 3, offsetX: +3, offsetY: 0 },    // 3h - Est (droite)
-      { hour: 4, offsetX: +2, offsetY: +1 },   // 4h
-      { hour: 5, offsetX: +1, offsetY: +2 },   // 5h
-      { hour: 6, offsetX: 0, offsetY: +3 },    // 6h - Sud (bas)
-      { hour: 7, offsetX: -1, offsetY: +2 },   // 7h
-      { hour: 8, offsetX: -2, offsetY: +1 },   // 8h
-      { hour: 9, offsetX: -3, offsetY: 0 },    // 9h - Ouest (gauche)
-      { hour: 10, offsetX: -2, offsetY: -1 },  // 10h
-      { hour: 11, offsetX: -1, offsetY: -2 }   // 11h
-    ];
-
-    let hoursCreated = 0;
-
-    baseHourPositions.forEach(({ hour, offsetX, offsetY }) => {
-      // Appliquer la rotation
-      let rotatedX = offsetX;
-      let rotatedY = offsetY;
-
-      // Rotation par quarts de tour (sens horaire)
-      for (let i = 0; i < rotation; i++) {
-        const tempX = rotatedX;
-        rotatedX = -rotatedY;  // Rotation 90° sens horaire: (x,y) -> (-y,x)
-        rotatedY = tempX;
-      }
-
-      const hourPosition: Position = {
-        x: centerPosition.x + rotatedX,
-        y: centerPosition.y + rotatedY
-      };
-
-      // Vérifier que la position est dans les limites du plateau (13x13)
-      if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
-        const dialHour = {
-          id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          dialId: dialId,  // Référence au cadran central
-          hour: hour,      // Numéro de l'heure (1-12)
-          position: hourPosition
-        };
-
-        this.boardService.addDialHour(dialHour);
-        hoursCreated++;
-        console.log(`  ✅ Hour ${hour} created at (${hourPosition.x}, ${hourPosition.y}) [rotated offset: (${rotatedX}, ${rotatedY})]`);
-      } else {
-        console.warn(`  ⚠️ Hour ${hour} skipped - position out of bounds: (${hourPosition.x}, ${hourPosition.y})`);
-      }
-    });
-
-    console.log(`🕐 [DIAL_HOURS] Created ${hoursCreated}/12 hours around dial ${dialId} (oriented ${directionName})`);
-  }
 
   /**
    * Exécute un déplacement

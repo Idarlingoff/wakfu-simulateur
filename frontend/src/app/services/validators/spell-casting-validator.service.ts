@@ -76,13 +76,28 @@ export class SpellCastingValidatorService {
     console.log(`   Position lanceur: (${casterPosition.x}, ${casterPosition.y})`);
     console.log(`   Position cible: (${targetPosition.x}, ${targetPosition.y})`);
     console.log(`   Distance calculée (Chebyshev): ${distance}`);
-    console.log(`   Portée du sort: min=${spell.poMin}, max=${spell.poMax}`);
+    console.log(`   Portée du sort: min=${spell.poMin}, max=${spell.poMax}, modifiable=${spell.poModifiable}`);
 
-    if (distance < spell.poMin || distance > spell.poMax) {
+    // Si la portée est modifiable, ajouter la portée du joueur (range)
+    const playerRange = context.range || 0;
+    const effectiveMaxRange = spell.poModifiable ? spell.poMax + playerRange : spell.poMax;
+
+    console.log(`Portée du joueur: +${playerRange}`)
+    if (playerRange > 0 && spell.poModifiable) {
+      console.log(`   🎯 Portée du joueur: +${playerRange} → Portée effective: ${spell.poMin}-${effectiveMaxRange}`);
+    }
+
+    if (distance < spell.poMin || distance > effectiveMaxRange) {
+      const rangeInfo = spell.poModifiable && playerRange > 0
+        ? `${spell.poMin}-${spell.poMax} (+${playerRange} PO) = ${spell.poMin}-${effectiveMaxRange}`
+        : `${spell.poMin}-${spell.poMax}`;
+
       console.log(`   ❌ HORS DE PORTÉE !`);
+      console.log(`   ℹ️  Bonus PO du joueur: ${playerRange}`);
+      console.log(`   ℹ️  Portée effective max: ${effectiveMaxRange}`);
       return {
         canCast: false,
-        reason: `Hors de portée (distance: ${distance}, portée: ${spell.poMin}-${spell.poMax})`,
+        reason: `Hors de portée (distance: ${distance}, portée: ${rangeInfo})`,
         details
       };
     }
@@ -147,6 +162,8 @@ export class SpellCastingValidatorService {
    * Vérifie la ligne de vue entre deux positions
    * Utilise l'algorithme de Bresenham pour tracer la ligne
    * Vérifie qu'aucune entité ou mécanisme ne bloque le chemin
+   *
+   * Note: Le passif "Rémanence" (ID: remanence) permet aux mécanismes de ne plus bloquer la ligne de vue
    */
   private checkLineOfSight(
     from: Position,
@@ -161,35 +178,57 @@ export class SpellCastingValidatorService {
     // Récupérer toutes les positions entre from et to (excluant from et to)
     const linePositions = this.getLinePositions(from, to);
 
+    // Vérifier si le passif "Rémanence" est actif (les mécanismes ne bloquent plus la LdV)
+    const hasRemanence = this.hasRemanencePassive(context);
+    if (hasRemanence) {
+      console.log(`   🔮 Passif "Rémanence" actif: les mécanismes ne bloquent pas la ligne de vue`);
+    }
+
     // Vérifier qu'aucune cellule intermédiaire ne contient une entité ou un mécanisme bloquant
     for (const pos of linePositions) {
-      // Vérifier si une entité bloque (sauf le lanceur et la cible)
+      // Vérifier si une entité bloque (ennemis, alliés, invocations)
+      // Note: Le lanceur et la cible ne sont pas sur ces positions intermédiaires
       if (context.entities) {
-        const entity = context.entities.find(
-          e => e.position.x === pos.x && e.position.y === pos.y
+        const blockingEntity = context.entities.find(
+          (e) => e.position.x === pos.x && e.position.y === pos.y
         );
-        if (entity) {
-          console.log(`❌ Ligne de vue bloquée par une entité à (${pos.x}, ${pos.y}):`, entity.name);
+        if (blockingEntity) {
+          console.log(`   ❌ Ligne de vue bloquée par ${blockingEntity.type === 'player' ? 'un allié' : 'un ennemi'} "${blockingEntity.name}" à (${pos.x}, ${pos.y})`);
           return false;
         }
       }
 
-      // Vérifier si un mécanisme bloque
-      // Note: Dans Wakfu, certains mécanismes bloquent la ligne de vue, d'autres non
-      // Pour simplifier, on considère que tous les mécanismes bloquent
-      if (context.mechanisms) {
-        const mechanism = context.mechanisms.find(
-          m => m.position.x === pos.x && m.position.y === pos.y
+      // Vérifier si un mécanisme bloque (sauf si le passif Rémanence est actif)
+      if (!hasRemanence && context.mechanisms) {
+        const blockingMechanism = context.mechanisms.find(
+          (m) => m.position.x === pos.x && m.position.y === pos.y
         );
-        if (mechanism) {
-          console.log(`❌ Ligne de vue bloquée par un mécanisme à (${pos.x}, ${pos.y}):`, mechanism.type);
+        if (blockingMechanism) {
+          console.log(`   ❌ Ligne de vue bloquée par un mécanisme "${blockingMechanism.type}" à (${pos.x}, ${pos.y})`);
           return false;
         }
       }
     }
 
-    console.log(`✅ Ligne de vue libre de (${from.x}, ${from.y}) à (${to.x}, ${to.y})`);
+    console.log(`   ✅ Ligne de vue libre de (${from.x}, ${from.y}) à (${to.x}, ${to.y})`);
     return true;
+  }
+
+  /**
+   * Vérifie si le passif "Rémanence" est actif dans le contexte
+   * Le passif Rémanence permet aux mécanismes de ne plus bloquer la ligne de vue
+   */
+  private hasRemanencePassive(context: SimulationContext): boolean {
+    if (!context.activePassiveIds) {
+      return false;
+    }
+    // Vérifier différentes formes possibles de l'ID du passif Rémanence
+    const remanenceIds = ['remanence', 'REMANENCE', 'Remanence', 'rémanence', 'Rémanence', 'xelor_remanence'];
+    return context.activePassiveIds.some(id =>
+      remanenceIds.some(remanenceId =>
+        id.toLowerCase().includes(remanenceId.toLowerCase().replace('é', 'e'))
+      )
+    );
   }
 
   /**

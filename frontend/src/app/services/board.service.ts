@@ -250,6 +250,59 @@ export class BoardService {
     }));
   }
 
+  /**
+   * Récupère tous les mécanismes d'un type spécifique
+   */
+  public getMechanismsByType(type: 'cog' | 'sinistro' | 'dial' | 'regulateur'): Mechanism[] {
+    return this.boardState().mechanisms.filter(m => m.type === type);
+  }
+
+  /**
+   * Ajoute des charges à un mécanisme
+   */
+  public addCharges(mechanismId: string, amount: number): void {
+    const mechanism = this.getMechanism(mechanismId);
+    if (!mechanism) {
+      console.warn(`BoardService: Cannot add charges - mechanism not found: ${mechanismId}`);
+      return;
+    }
+    const newCharges = (mechanism.charges || 0) + amount;
+    this.updateMechanismCharges(mechanismId, newCharges);
+    console.log(`[BoardService] Added ${amount} charges to ${mechanism.type} (${mechanismId}): total = ${newCharges}`);
+  }
+
+  /**
+   * Vérifie si une position est sur une heure du cadran
+   */
+  public isPositionOnDialHour(position: Position, dialId?: string): boolean {
+    const dialHours = this.boardState().dialHours;
+    return dialHours.some(h =>
+      h.position.x === position.x &&
+      h.position.y === position.y &&
+      (dialId === undefined || h.dialId === dialId)
+    );
+  }
+
+  /**
+   * Récupère l'heure du cadran à une position donnée
+   */
+  public getDialHourAtPosition(position: Position, dialId?: string): number | null {
+    const dialHours = this.boardState().dialHours;
+    const dialHour = dialHours.find(h =>
+      h.position.x === position.x &&
+      h.position.y === position.y &&
+      (dialId === undefined || h.dialId === dialId)
+    );
+    return dialHour ? dialHour.hour : null;
+  }
+
+  /**
+   * Récupère toutes les heures d'un cadran spécifique
+   */
+  public getDialHours(dialId: string): any[] {
+    return this.boardState().dialHours.filter(h => h.dialId === dialId);
+  }
+
   // ============ Dial Hours Management ============
 
   public addDialHour(dialHour: DialHour): void {

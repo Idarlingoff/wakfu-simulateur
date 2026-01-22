@@ -185,9 +185,13 @@ export class SimulationService {
     console.log('🎯 [executeStep] Exécution et validation du step', stepIndex + 1);
 
     try {
-      // Si c'est le premier step ou si on n'a pas encore de cache, exécuter depuis le début
-      // Sinon, utiliser les résultats déjà calculés
-      if (!this.simulationResultsCache || stepIndex === 0) {
+      // Si c'est le premier step ou si on n'a pas encore de cache, ou si le step demandé n'est pas dans le cache
+      // alors on doit exécuter la simulation jusqu'à ce step
+      const needsComputation = !this.simulationResultsCache ||
+                               stepIndex === 0 ||
+                               !this.simulationResultsCache.steps[stepIndex];
+
+      if (needsComputation) {
         console.log('🔄 Exécution de la simulation depuis le début jusqu\'au step', stepIndex + 1);
 
         // Créer une timeline partielle avec tous les steps jusqu'à celui-ci inclus
@@ -226,7 +230,7 @@ export class SimulationService {
         // Utiliser le cache existant
         console.log('📦 [executeStep] Utilisation des résultats en cache');
 
-        const stepResult = this.simulationResultsCache.steps[stepIndex];
+        const stepResult = this.simulationResultsCache!.steps[stepIndex];
 
         if (!stepResult || !stepResult.success) {
           const failedAction = stepResult?.actions.find((a: any) => !a.success);
