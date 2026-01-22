@@ -79,7 +79,7 @@ interface FormStep {
               <h3>Séquence de sorts</h3>
 
               <div class="steps-list">
-                <div *ngFor="let step of steps; let i = index; trackBy: trackByStepId" class="step-card">
+                <div *ngFor="let step of steps; let i = index" class="step-card">
                   <div class="step-header">
                     <span class="step-number">Étape {{ i + 1 }}</span>
                     <div class="step-actions">
