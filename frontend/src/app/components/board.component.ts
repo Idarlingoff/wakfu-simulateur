@@ -136,14 +136,15 @@ interface BoardCell {
             <div
               *ngIf="getMechanismAtPosition(cell.x, cell.y) as mech"
               class="mechanism"
-              [class]="mech.type"
-              [title]="getMechanismTitle(mech.type)"
+              [ngClass]="[mech.type, (mech.type === 'cog' && (mech.charges || 0) > 0) ? 'has-charges' : '']"
+              [title]="getMechanismTitle(mech.type) + (mech.charges ? ' (' + mech.charges + ' charges)' : '')"
             >
               <img
                 [src]="getMechanismImage(mech.type, mech.charges)"
                 [alt]="getMechanismTitle(mech.type)"
                 class="mechanism-image"
               />
+              <span *ngIf="mech.type === 'cog' && (mech.charges || 0) > 0" class="charge-badge">{{ mech.charges }}</span>
             </div>
 
             <!-- Spell Action Indicator -->
@@ -586,6 +587,34 @@ interface BoardCell {
       filter: drop-shadow(0 0 4px rgba(255, 209, 102, 0.8));
     }
 
+    /* Rouage avec charges - teinte bleue via CSS (remplace rouage-bleu.png corrompu) */
+    .board .mechanism.cog.has-charges .mechanism-image {
+      filter: drop-shadow(0 0 8px rgba(76, 201, 240, 1))
+              hue-rotate(180deg)
+              saturate(1.5)
+              brightness(1.1);
+    }
+
+    /* Badge affichant le nombre de charges */
+    .board .mechanism .charge-badge {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      background: linear-gradient(135deg, #4cc9f0, #00b4d8);
+      color: #0b1220;
+      font-size: 10px;
+      font-weight: bold;
+      min-width: 16px;
+      height: 16px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
     /* Rouage (cog) - TOUJOURS au premier plan */
     .board .mechanism.cog {
       z-index: 3 !important; /* Au-dessus de tout */
@@ -1013,26 +1042,8 @@ export class BoardComponent {
       }
 
       // Exclure les sorts qui créent des mécanismes (ils ont leur propre représentation visuelle)
-      if (a.type === 'CastSpell' && a.spellId && isSpellMechanism(a.spellId)) {
-        return false;
-      }
-
-      return true;
+      return !(a.type === 'CastSpell' && a.spellId && isSpellMechanism(a.spellId));
     });
-  }
-
-  /**
-   * Get mechanism icon (deprecated - kept for backward compatibility)
-   */
-  getMechanismIcon(type: string): string {
-    switch(type) {
-      case 'cog':
-      case 'gear': return '⚙️';
-      case 'dial': return '⏰';
-      case 'sinistro': return '💀';
-      case 'regulateur': return '🔧';
-      default: return '⚡';
-    }
   }
 
   /**
@@ -1043,32 +1054,10 @@ export class BoardComponent {
   }
 
   /**
-   * Get mechanism image URL (gère les heures du cadran)
-   */
-  getMechanismImageUrl(mechanism: any): string {
-    // Si c'est une heure du cadran (a une propriété hour et un dialId)
-    if (mechanism.type === 'dial' && mechanism.hour && mechanism.dialId) {
-      return `http://localhost:8080/resources/dial/dial_hours-${mechanism.hour}.png`;
-    }
-    // Sinon, utiliser l'image normale du mécanisme
-    return this.getMechanismImage(mechanism.type, mechanism.charges);
-  }
-
-  /**
    * Get mechanism title (localized name)
    */
   getMechanismTitle(type: string): string {
     return getMechanismDisplayName(type);
-  }
-
-  /**
-   * Get mechanism title with hour (pour les heures du cadran)
-   */
-  getMechanismTitleWithHour(mechanism: any): string {
-    if (mechanism.type === 'dial' && mechanism.hour) {
-      return `Cadran - ${mechanism.hour}h`;
-    }
-    return this.getMechanismTitle(mechanism.type);
   }
 
   /**
@@ -1138,7 +1127,6 @@ export class BoardComponent {
 
     // ✅ Le step a réussi : avancer l'index et mettre à jour le board
     this.timelineService.nextStep();
-    const newIndex = this.currentStepIndex();
 
     // Appliquer les actions visuelles (mécanismes, etc.)
     const step = timeline.steps[realStepIndex];
@@ -1167,7 +1155,7 @@ export class BoardComponent {
     console.log('');
   }
 
-  private async applyVisualAction(action: TimelineAction, build: Build, stepIndex: number): Promise<void> {
+  private async applyVisualAction(action: TimelineAction, _build: Build, stepIndex: number): Promise<void> {
     if (action.type === 'CastSpell' && action.spellId) {
       // Vérifier si le sort crée un mécanisme
       console.log(`🔍 Analyse du sort: "${action.spellId}"`);
@@ -1236,10 +1224,13 @@ export class BoardComponent {
       let rotatedX = offsetX;
       let rotatedY = offsetY;
 
+      // Rotation de 90 degrés (sens horaire) appliquée 'rotation' fois
       for (let i = 0; i < rotation; i++) {
-        const tempX = rotatedX;
-        rotatedX = -rotatedY;
-        rotatedY = tempX;
+        // Formule de rotation: (x, y) -> (-y, x)
+        const newX = -rotatedY;
+        const newY = rotatedX;
+        rotatedX = newX;
+        rotatedY = newY;
       }
 
       const hourPosition = {
@@ -1374,7 +1365,7 @@ export class BoardComponent {
         totalMpUsed += stepMp;
 
         console.log('📊 Résultats du step:', {
-          dégâts: stepDamage,
+          degats: stepDamage,
           PA: stepPa,
           WP: stepWp,
           MP: stepMp
