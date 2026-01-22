@@ -336,6 +336,47 @@ export class TimelineService {
     await this.updateTimeline(timeline.id, { steps: newSteps });
   }
 
+  /**
+   * Intervertit deux étapes dans la timeline courante
+   * Les étapes échangent leur position sans modifier leur contenu
+   */
+  public async swapSteps(indexA: number, indexB: number): Promise<void> {
+    const timeline = this.currentTimeline();
+    if (!timeline) return;
+
+    if (indexA < 0 || indexA >= timeline.steps.length ||
+        indexB < 0 || indexB >= timeline.steps.length) {
+      console.warn('Invalid step indices for swap:', indexA, indexB);
+      return;
+    }
+
+    const newSteps = [...timeline.steps];
+    // Simple swap
+    const temp = newSteps[indexA];
+    newSteps[indexA] = newSteps[indexB];
+    newSteps[indexB] = temp;
+
+    await this.updateTimeline(timeline.id, { steps: newSteps });
+    console.log(`Steps swapped: ${indexA + 1} ↔ ${indexB + 1}`);
+  }
+
+  /**
+   * Monte une étape d'un cran (échange avec l'étape précédente)
+   */
+  public async moveStepUp(index: number): Promise<void> {
+    if (index <= 0) return;
+    await this.swapSteps(index, index - 1);
+  }
+
+  /**
+   * Descend une étape d'un cran (échange avec l'étape suivante)
+   */
+  public async moveStepDown(index: number): Promise<void> {
+    const timeline = this.currentTimeline();
+    if (!timeline || index >= timeline.steps.length - 1) return;
+    await this.swapSteps(index, index + 1);
+  }
+
   // ============ Navigation ============
 
   public nextStep(): void {

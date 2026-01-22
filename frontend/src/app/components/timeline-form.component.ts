@@ -79,10 +79,34 @@ interface FormStep {
               <h3>Séquence de sorts</h3>
 
               <div class="steps-list">
-                <div *ngFor="let step of steps; let i = index" class="step-card">
+                <div *ngFor="let step of steps; let i = index; trackBy: trackByStepId" class="step-card">
                   <div class="step-header">
                     <span class="step-number">Étape {{ i + 1 }}</span>
-                    <button type="button" (click)="onRemoveStep(i)" class="btn-remove">✕</button>
+                    <div class="step-actions">
+                      <button
+                        type="button"
+                        (click)="onMoveStepUp(i)"
+                        class="btn-move"
+                        [disabled]="i === 0"
+                        title="Monter l'étape">
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        (click)="onMoveStepDown(i)"
+                        class="btn-move"
+                        [disabled]="i === steps.length - 1"
+                        title="Descendre l'étape">
+                        ▼
+                      </button>
+                      <button
+                        type="button"
+                        (click)="onRemoveStep(i)"
+                        class="btn-remove"
+                        title="Supprimer l'étape">
+                        ✕
+                      </button>
+                    </div>
                   </div>
 
                   <div class="step-form">
@@ -323,6 +347,34 @@ interface FormStep {
       font-size: 13px;
     }
 
+    .step-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .btn-move {
+      background: transparent;
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-move:hover:not(:disabled) {
+      background: var(--accent);
+      color: #0b1220;
+      border-color: var(--accent);
+    }
+
+    .btn-move:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
     .btn-remove {
       background: transparent;
       border: 1px solid var(--stroke);
@@ -505,6 +557,34 @@ export class TimelineFormComponent {
    */
   onRemoveStep(index: number): void {
     this.steps.splice(index, 1);
+  }
+
+  /**
+   * Move step up (swap with previous step)
+   */
+  onMoveStepUp(index: number): void {
+    if (index <= 0) return;
+    // Créer un nouveau tableau avec des copies des objets pour forcer la détection de changement
+    const newSteps = this.steps.map(step => ({ ...step }));
+    // Swap les éléments
+    const temp = newSteps[index];
+    newSteps[index] = newSteps[index - 1];
+    newSteps[index - 1] = temp;
+    this.steps = newSteps;
+  }
+
+  /**
+   * Move step down (swap with next step)
+   */
+  onMoveStepDown(index: number): void {
+    if (index >= this.steps.length - 1) return;
+    // Créer un nouveau tableau avec des copies des objets pour forcer la détection de changement
+    const newSteps = this.steps.map(step => ({ ...step }));
+    // Swap les éléments
+    const temp = newSteps[index];
+    newSteps[index] = newSteps[index + 1];
+    newSteps[index + 1] = temp;
+    this.steps = newSteps;
   }
 
   /**
