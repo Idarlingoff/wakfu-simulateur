@@ -682,7 +682,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    * Traite les effets de tour de cadran (hour wrap)
    * Un tour de cadran se produit lorsque l'heure courante fait un tour complet (passe par 12→1)
    */
-  private processHourWrap(context: SimulationContext): void {
+  public override processHourWrap(context: SimulationContext): void {
     console.log('[XELOR] 🔄 Processing hour wrap effects (dial completed a full rotation)');
 
     // Les Rouages infligent des dégâts supplémentaires (status_effect avec tick_phase = ON_HOUR_WRAPPED)

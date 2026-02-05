@@ -805,6 +805,20 @@ export class SimulationEngineService {
     this.boardService.updateEntityPosition(entityToMove.id, action.targetPosition);
     console.log(`${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
+    // Si le déplacement est depuis une heure du cadran, avancer l'heure courante de 1
+    if (validation.details?.movementType === 'dial_hour' && validation.cost.wp > 0) {
+      const advanceResult = this.boardService.advanceCurrentDialHour(1);
+      // Mettre à jour aussi le contexte pour rester synchronisé
+      context.currentDialHour = advanceResult.newHour;
+      console.log(`⏰ [DIAL] Heure courante avancée de 1 → nouvelle heure: ${advanceResult.newHour}${advanceResult.wrapped ? ' (tour complet!)' : ''}`);
+
+      // Si un tour complet s'est produit, déclencher les effets de wrap via la stratégie de classe
+      if (advanceResult.wrapped && this.currentClassStrategy?.processHourWrap) {
+        console.log(`🔄 [DIAL] Tour complet détecté ! Déclenchement des effets de wrap...`);
+        this.currentClassStrategy.processHourWrap(context);
+      }
+    }
+
     // Mettre à jour le contexte si c'est le joueur
     if (entityToMove.type === 'player') {
       this.updateContextPosition(context, action.targetPosition);

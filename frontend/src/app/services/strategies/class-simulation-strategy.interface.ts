@@ -120,5 +120,13 @@ export abstract class ClassSimulationStrategy {
    * @param context Contexte à nettoyer
    */
   abstract cleanupTurn(context: SimulationContext): void;
-}
 
+  /**
+   * Traite les effets de tour complet du cadran (hour wrap)
+   * Méthode optionnelle - par défaut ne fait rien
+   * (ex: pour Xelor - déclenche les dégâts des rouages, soins des sinistros, effets délayés)
+   *
+   * @param context Contexte de simulation
+   */
+  processHourWrap?(context: SimulationContext): void;
+}
