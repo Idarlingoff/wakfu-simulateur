@@ -32,6 +32,10 @@ export class BoardService {
   // ID du cadran actif
   private _activeDialId = signal<string | undefined>(undefined);
 
+  // Historique de l'heure du dial (synchronisé avec stateHistory)
+  private dialHourHistory = signal<Array<{ hour: number | undefined; dialId: string | undefined }>>([]);
+  private initialDialState = signal<{ hour: number | undefined; dialId: string | undefined } | null>(null);
+
   // Computed Selectors
   public state = computed(() => this.boardState());
 
@@ -487,7 +491,13 @@ export class BoardService {
     const currentState = this.deepCloneState(this.boardState());
     this.initialState.set(currentState);
     this.stateHistory.set([currentState]);
-    console.log('État initial du plateau sauvegardé');
+
+    // Sauvegarder l'état initial du dial
+    const dialState = { hour: this._currentDialHour(), dialId: this._activeDialId() };
+    this.initialDialState.set(dialState);
+    this.dialHourHistory.set([dialState]);
+
+    console.log('État initial du plateau sauvegardé (heure dial:', dialState.hour, ')');
   }
 
   /**
@@ -497,18 +507,40 @@ export class BoardService {
     const currentState = this.deepCloneState(this.boardState());
     const history = this.stateHistory();
     this.stateHistory.set([...history, currentState]);
-    console.log(`État du plateau ajouté à l'historique (total: ${history.length + 1})`);
+
+    // Sauvegarder l'état du dial dans l'historique
+    const dialState = { hour: this._currentDialHour(), dialId: this._activeDialId() };
+    const dialHistory = this.dialHourHistory();
+    this.dialHourHistory.set([...dialHistory, dialState]);
+
+    console.log(`État du plateau ajouté à l'historique (total: ${history.length + 1}, heure dial: ${dialState.hour})`);
   }
 
   /**
    * Restaure l'état à un index donné de l'historique
+   * IMPORTANT: Tronque l'historique pour permettre une ré-exécution propre des steps
    */
   public restoreStateAtIndex(index: number): void {
     const history = this.stateHistory();
     if (index >= 0 && index < history.length) {
       const stateToRestore = this.deepCloneState(history[index]);
       this.boardState.set(stateToRestore);
-      console.log(`État restauré à l'index ${index}`);
+
+      // Restaurer l'état du dial
+      const dialHistory = this.dialHourHistory();
+      if (index < dialHistory.length) {
+        const dialState = dialHistory[index];
+        this._currentDialHour.set(dialState.hour);
+        this._activeDialId.set(dialState.dialId);
+
+        // Tronquer l'historique du dial pour ne garder que jusqu'à l'index restauré
+        this.dialHourHistory.set(dialHistory.slice(0, index + 1));
+      }
+
+      // Tronquer l'historique du board pour ne garder que jusqu'à l'index restauré
+      this.stateHistory.set(history.slice(0, index + 1));
+
+      console.log(`État restauré à l'index ${index} (heure dial: ${this._currentDialHour()}) - Historique tronqué`);
     } else {
       console.warn(`Index d'historique invalide: ${index}`);
     }
@@ -521,18 +553,32 @@ export class BoardService {
     const initial = this.initialState();
     if (initial) {
       this.boardState.set(this.deepCloneState(initial));
-      console.log('Plateau réinitialisé à l\'état initial');
+
+      // Restaurer l'état initial du dial
+      const initialDial = this.initialDialState();
+      if (initialDial) {
+        this._currentDialHour.set(initialDial.hour);
+        this._activeDialId.set(initialDial.dialId);
+      } else {
+        this._currentDialHour.set(undefined);
+        this._activeDialId.set(undefined);
+      }
+
+      console.log('Plateau réinitialisé à l\'état initial (heure dial:', initialDial?.hour, ')');
     } else {
       console.warn('Aucun état initial sauvegardé, réinitialisation par défaut');
       this.resetToDefault();
     }
   }
+
   /**
    * Efface l'historique
    */
   public clearHistory(): void {
     this.stateHistory.set([]);
     this.initialState.set(null);
+    this.dialHourHistory.set([]);
+    this.initialDialState.set(null);
     console.log('Historique effacé');
   }
 

@@ -1319,7 +1319,10 @@ export class BoardComponent {
       const newIndex = this.currentStepIndex();
       this.boardService.restoreStateAtIndex(newIndex);
 
-      console.log(`⏮️ Retour à l'étape ${newIndex}`);
+      // Invalider le cache de simulation pour forcer une ré-exécution propre
+      this.simulationService.clearSimulation();
+
+      console.log(`⏮️ Retour à l'étape ${newIndex} - Cache de simulation invalidé`);
     }
   }
 
