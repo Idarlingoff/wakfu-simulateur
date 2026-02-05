@@ -1442,8 +1442,7 @@ export class BoardComponent {
 
       stepsExecuted++;
 
-      // Petite pause pour la visualisation (optionnel)
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     console.log('');

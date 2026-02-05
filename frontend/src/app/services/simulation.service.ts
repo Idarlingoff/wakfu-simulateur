@@ -185,14 +185,61 @@ export class SimulationService {
     console.log('🎯 [executeStep] Exécution et validation du step', stepIndex + 1);
 
     try {
-      // Si c'est le premier step ou si on n'a pas encore de cache, ou si le step demandé n'est pas dans le cache
-      // alors on doit exécuter la simulation jusqu'à ce step
-      const needsComputation = !this.simulationResultsCache ||
-                               stepIndex === 0 ||
-                               !this.simulationResultsCache.steps[stepIndex];
+      // Vérifier si le cache est valide pour cette timeline/build
+      const cacheIsValid = this.simulationResultsCache !== null &&
+                           this.currentTimelineId === (timeline.id || '') &&
+                           this.currentBuildId === (build.id || '');
 
-      if (needsComputation) {
-        console.log('🔄 Exécution de la simulation depuis le début jusqu\'au step', stepIndex + 1);
+      // Vérifier si le cache contient déjà ce step
+      const cacheHasThisStep = cacheIsValid && this.simulationResultsCache!.steps.length > stepIndex;
+
+      // Vérifier si le cache contient les steps précédents (pour exécution incrémentale)
+      const cacheHasPreviousSteps = cacheIsValid && this.simulationResultsCache!.steps.length === stepIndex;
+
+      if (cacheHasThisStep) {
+        // Le cache contient déjà ce step, utiliser directement
+        console.log('📦 [executeStep] Utilisation des résultats en cache');
+      } else if (cacheHasPreviousSteps) {
+        // Le cache contient les steps précédents mais pas celui-ci
+        // Exécuter SEULEMENT ce step en utilisant le contexte du step précédent
+        console.log(`🔄 [executeStep] Exécution incrémentale du step ${stepIndex + 1} uniquement`);
+
+        const step = timeline.steps[stepIndex];
+        const previousContext = this.simulationResultsCache!.finalContext;
+
+        // Exécuter uniquement ce step
+        const stepResult = await this.simulationEngine.executeSingleStep(
+          step,
+          previousContext,
+          build,
+          stepIndex + 1
+        );
+
+        // Ajouter le résultat au cache existant
+        this.simulationResultsCache!.steps.push(stepResult);
+        this.simulationResultsCache!.finalContext = stepResult.contextAfter;
+
+        // Mettre à jour les totaux
+        for (const action of stepResult.actions) {
+          if (action.damage) {
+            this.simulationResultsCache!.totalDamage += action.damage;
+          }
+          this.simulationResultsCache!.totalPaUsed += action.paCost;
+          this.simulationResultsCache!.totalPwUsed += action.pwCost;
+          this.simulationResultsCache!.totalMpUsed += action.mpCost;
+        }
+
+        if (!stepResult.success) {
+          this.simulationResultsCache!.success = false;
+          this.simulationResultsCache!.errors.push(
+            `Step ${stepIndex + 1} failed: ${stepResult.actions.find(a => !a.success)?.message}`
+          );
+        }
+
+        console.log(`✅ Cache étendu avec le step ${stepIndex + 1}`);
+      } else {
+        // Pas de cache valide, exécuter la simulation depuis le début jusqu'à ce step
+        console.log(`🔄 Exécution de la simulation depuis le début jusqu'au step ${stepIndex + 1}`);
 
         // Créer une timeline partielle avec tous les steps jusqu'à celui-ci inclus
         const partialTimeline: Timeline = {
@@ -203,51 +250,32 @@ export class SimulationService {
         // Exécuter la simulation partielle
         const result = await this.simulationEngine.runSimulation(build, partialTimeline);
 
-        // Mettre à jour le cache
+        // Mettre à jour le cache avec les résultats
         this.simulationResultsCache = result;
         this.currentTimelineId = timeline.id || '';
         this.currentBuildId = build.id || '';
 
-        // Vérifier le résultat du step demandé
-        const stepResult = result.steps[stepIndex];
-
-        if (!stepResult || !stepResult.success) {
-          const failedAction = stepResult?.actions.find((a: any) => !a.success);
-          console.error('❌ [executeStep] Step échoué:', failedAction?.message || 'Erreur inconnue');
-          return false;
-        }
-
-        console.log('✅ [executeStep] Step validé avec succès');
-
-        // Traiter les actions pour créer les mécanismes visuels
-        const step = timeline.steps[stepIndex];
-        for (const action of step.actions) {
-          await this.processAction(action, build, stepIndex);
-        }
-
-        return true;
-      } else {
-        // Utiliser le cache existant
-        console.log('📦 [executeStep] Utilisation des résultats en cache');
-
-        const stepResult = this.simulationResultsCache!.steps[stepIndex];
-
-        if (!stepResult || !stepResult.success) {
-          const failedAction = stepResult?.actions.find((a: any) => !a.success);
-          console.error('❌ [executeStep] Step échoué (depuis cache):', failedAction?.message || 'Erreur inconnue');
-          return false;
-        }
-
-        console.log('✅ [executeStep] Step validé avec succès (depuis cache)');
-
-        // Traiter les actions pour créer les mécanismes visuels
-        const step = timeline.steps[stepIndex];
-        for (const action of step.actions) {
-          await this.processAction(action, build, stepIndex);
-        }
-
-        return true;
+        console.log(`✅ Cache initialisé avec ${result.steps.length} steps`);
       }
+
+      // Récupérer le résultat du step demandé depuis le cache
+      const stepResult = this.simulationResultsCache!.steps[stepIndex];
+
+      if (!stepResult || !stepResult.success) {
+        const failedAction = stepResult?.actions.find((a: any) => !a.success);
+        console.error('❌ [executeStep] Step échoué:', failedAction?.message || 'Erreur inconnue');
+        return false;
+      }
+
+      console.log('✅ [executeStep] Step validé avec succès');
+
+      // Traiter les actions pour créer les mécanismes visuels
+      const step = timeline.steps[stepIndex];
+      for (const action of step.actions) {
+        await this.processAction(action, build, stepIndex);
+      }
+
+      return true;
     } catch (error) {
       console.error('💥 [executeStep] Erreur lors de l\'exécution du step:', error);
       return false;

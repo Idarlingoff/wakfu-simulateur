@@ -845,6 +845,33 @@ export class SimulationEngineService {
     };
   }
 
+  /**
+   * 🆕 Exécute un SEUL step avec le contexte fourni (sans ré-exécuter les steps précédents)
+   * Utilisé pour l'exécution incrémentale step-by-step
+   */
+  async executeSingleStep(
+    step: TimelineStep,
+    context: SimulationContext,
+    build: Build,
+    stepNumber: number
+  ): Promise<SimulationStepResult> {
+    // Initialiser la stratégie de classe si nécessaire
+    if (!this.currentClassStrategy) {
+      this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
+    }
+
+    // Calculer les stats du build
+    let buildStats = this.statsCalculator.calculateTotalStats(build);
+
+    // Appliquer les passifs de classe
+    if (this.currentClassStrategy) {
+      buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, context);
+    }
+
+    // Exécuter le step
+    return await this.executeStep(step, context, build, buildStats, stepNumber);
+  }
+
 
   /**
    * Met à jour la position du joueur dans le contexte après un déplacement
