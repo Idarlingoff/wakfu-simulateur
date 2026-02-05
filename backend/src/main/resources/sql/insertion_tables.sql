@@ -479,7 +479,7 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
-             0, 4, 1, 1, FALSE, FALSE,
+             0, 4, 0, 1, FALSE, FALSE,
              0, 99, 99, 'NONE', 'STEP'
          );
 
