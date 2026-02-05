@@ -19,6 +19,45 @@ import { ClassStrategyFactory } from '../strategies/class-strategy-factory.servi
 import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy.interface';
 import { firstValueFrom } from 'rxjs';
 
+/**
+ * Phases d'exécution des effets de sorts
+ * Correspond à la colonne `phase` de la table `spell_effect`
+ */
+export type EffectPhase =
+  | 'PRE_CAST'           // Avant le cast (vérification de coûts supplémentaires)
+  | 'ON_CAST'            // Au moment du lancer
+  | 'IMMEDIATE'          // Immédiat (équivalent à ON_CAST)
+  | 'ON_HIT'             // Quand le sort touche
+  | 'ON_END_TURN'        // À la fin du tour du lanceur
+  | 'ON_TARGET_TURN_START' // Au début du tour de la cible
+  | 'ON_TARGET_TURN_END'   // À la fin du tour de la cible
+  | 'ON_HOUR_WRAPPED';     // Quand l'heure du cadran fait un tour complet
+
+/**
+ * Effet différé - Effet d'un sort qui sera résolu plus tard
+ * Le passif "Maître du Cadran" déclenche RESOLVE_DELAYED_EFFECTS sur ON_HOUR_WRAPPED
+ * pour résoudre ces effets immédiatement
+ */
+export interface DelayedEffect {
+  id: string;
+  spellId: string;
+  spellName: string;
+  originalPhase: EffectPhase;
+  effectType: string;
+  targetScope: string;
+  targetPosition: Position;
+  casterPosition: Position;
+  params: Record<string, any>;
+  registeredOnTurn: number;
+  contextSnapshot?: {
+    masteryPrimary?: number;
+    masterySecondary?: number;
+    critRate?: number;
+    critMastery?: number;
+    dommageInflict?: number;
+  };
+}
+
 export interface SimulationContext {
   availablePa: number;
   availablePw: number;
@@ -45,6 +84,10 @@ export interface SimulationContext {
 
   // Compteur d'utilisation de sorts par cible (spellId -> Map<targetKey, usageCount>)
   spellUsagePerTarget?: Map<string, Map<string, number>>;
+
+  // Effets différés pour le passif "Maître du Cadran"
+  // Ces effets sont joués lors d'un tour de cadran (hour wrap)
+  delayedEffects?: DelayedEffect[];
 }
 
 export interface SimulationActionResult {

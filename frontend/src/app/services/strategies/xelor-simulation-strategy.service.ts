@@ -7,7 +7,7 @@ import { Injectable, inject } from '@angular/core';
 import { ClassSimulationStrategy, ClassValidationResult } from './class-simulation-strategy.interface';
 import { Spell } from '../../models/spell.model';
 import { Position, TimelineAction } from '../../models/timeline.model';
-import { SimulationContext, SimulationActionResult } from '../calculators/simulation-engine.service';
+import { SimulationContext, SimulationActionResult, DelayedEffect } from '../calculators/simulation-engine.service';
 import { Build } from '../../models/build.model';
 import { TotalStats } from '../calculators/stats-calculator.service';
 import { Mechanism } from '../../models/board.model';
@@ -426,6 +426,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     context.activeAuras = new Set<string>();
     context.currentDialHour = undefined;
     context.dialId = undefined;
+    context.delayedEffects = []; // Effets différés pour Maître du Cadran
 
     // Charger les mécanismes existants et leurs charges
     const mechanisms = this.boardService.mechanisms();
@@ -679,21 +680,319 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
   /**
    * Traite les effets de tour de cadran (hour wrap)
+   * Un tour de cadran se produit lorsque l'heure courante fait un tour complet (passe par 12→1)
    */
   private processHourWrap(context: SimulationContext): void {
-    console.log('[XELOR] Processing hour wrap effects');
+    console.log('[XELOR] 🔄 Processing hour wrap effects (dial completed a full rotation)');
 
-    // Les Rouages infligent des dégâts supplémentaires
+    // Les Rouages infligent des dégâts supplémentaires (status_effect avec tick_phase = ON_HOUR_WRAPPED)
     if (context.activeAuras?.has('ROUAGE_AURA')) {
       this.applyRouageDamage(context);
     }
 
-    // Les Sinistros soignent à nouveau
+    // Les Sinistros soignent à nouveau (status_effect avec tick_phase = ON_HOUR_WRAPPED)
     if (context.activeAuras?.has('SINISTRO_AURA')) {
       this.applySinistroHealing(context);
     }
 
-    // TODO: Autres effets ON_HOUR_WRAPPED
+    // Passif "Maître du Cadran" (XEL_MAITRE_CADRAN):
+    // Quand l'heure courante fait un tour complet du cadran,
+    // les effets délayés (ON_END_TURN, ON_TARGET_TURN_START, etc.) se résolvent immédiatement
+    if (this.hasMaitreDuCadranPassive(context)) {
+      this.resolveDelayedEffects(context);
+    }
+  }
+
+  // ============================================
+  // PASSIF "MAÎTRE DU CADRAN" - RESOLVE_DELAYED_EFFECTS
+  // Correspond à: passive_effect.effect_type = 'RESOLVE_DELAYED_EFFECTS'
+  // avec trigger = 'ON_HOUR_WRAPPED'
+  // ============================================
+
+  /** Liste des IDs possibles pour le passif Maître du Cadran */
+  private static readonly MAITRE_DU_CADRAN_IDS = [
+    'maitre_du_cadran',
+    'XEL_MAITRE_DU_CADRAN',
+    'master_of_dial',
+    'maitre-du-cadran',
+    'maitreducadran'
+  ];
+
+  /**
+   * Vérifie si le passif "Maître du Cadran" est actif
+   * Ce passif permet de résoudre les effets différés lors d'un tour de cadran
+   */
+  private hasMaitreDuCadranPassive(context: SimulationContext): boolean {
+    const passiveIds = context.activePassiveIds || [];
+    return XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.some(id =>
+      passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
+    );
+  }
+
+  /**
+   * Enregistre un effet différé qui sera résolu lors du prochain tour de cadran
+   *
+   * Les effets différés sont des effets de sort avec une phase comme:
+   * - ON_END_TURN (fin de tour du lanceur)
+   * - ON_TARGET_TURN_START (début de tour de la cible)
+   * - ON_TARGET_TURN_END (fin de tour de la cible)
+   *
+   * Avec le passif Maître du Cadran, ces effets se résolvent AUSSI sur ON_HOUR_WRAPPED
+   *
+   * @param effect L'effet différé à enregistrer (correspond à un spell_effect avec phase différée)
+   * @param context Le contexte de simulation
+   * @returns true si l'effet a été enregistré, false sinon
+   */
+  public registerDelayedEffect(effect: DelayedEffect, context: SimulationContext): boolean {
+    // On enregistre l'effet même si le passif n'est pas actif
+    // (il sera simplement résolu à son moment normal, pas sur hour wrap)
+    if (!context.delayedEffects) {
+      context.delayedEffects = [];
+    }
+
+    // Générer un ID unique si non fourni
+    if (!effect.id) {
+      effect.id = `delayed_${effect.spellId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    }
+
+    // Enregistrer le tour si non fourni
+    if (!effect.registeredOnTurn) {
+      effect.registeredOnTurn = context.turn || 1;
+    }
+
+    context.delayedEffects.push(effect);
+
+    const willResolveOnHourWrap = this.hasMaitreDuCadranPassive(context);
+    console.log(`[XELOR DELAYED] ✅ Registered delayed effect: ${effect.spellName}`);
+    console.log(`[XELOR DELAYED]    Effect type: ${effect.effectType}, Phase: ${effect.originalPhase}`);
+    console.log(`[XELOR DELAYED]    Target scope: ${effect.targetScope}`);
+    console.log(`[XELOR DELAYED]    Will resolve on hour wrap: ${willResolveOnHourWrap ? 'YES (Maître du Cadran active)' : 'NO'}`);
+    console.log(`[XELOR DELAYED] 📋 Total delayed effects: ${context.delayedEffects.length}`);
+
+    return true;
+  }
+
+  /**
+   * Résout tous les effets différés enregistrés
+   * Appelé lors d'un tour de cadran si le passif "Maître du Cadran" est actif
+   *
+   * Correspond à l'effet 'RESOLVE_DELAYED_EFFECTS' avec params: {"owner":"CASTER"}
+   */
+  private resolveDelayedEffects(context: SimulationContext): void {
+    if (!context.delayedEffects || context.delayedEffects.length === 0) {
+      console.log(`[XELOR MAITRE_CADRAN] 📭 No delayed effects to resolve`);
+      return;
+    }
+
+    console.log(`[XELOR MAITRE_CADRAN] ⚡ RESOLVE_DELAYED_EFFECTS triggered on ON_HOUR_WRAPPED`);
+    console.log(`[XELOR MAITRE_CADRAN] 📋 Resolving ${context.delayedEffects.length} delayed effect(s)...`);
+
+    // Copier le tableau pour éviter les modifications pendant l'itération
+    const effectsToResolve = [...context.delayedEffects];
+
+    // Vider le tableau des effets différés
+    context.delayedEffects = [];
+
+    effectsToResolve.forEach((effect, index) => {
+      console.log(`[XELOR MAITRE_CADRAN] 🎯 Resolving effect ${index + 1}/${effectsToResolve.length}:`);
+      console.log(`[XELOR MAITRE_CADRAN]    Spell: ${effect.spellName}`);
+      console.log(`[XELOR MAITRE_CADRAN]    Effect type: ${effect.effectType}`);
+      console.log(`[XELOR MAITRE_CADRAN]    Original phase: ${effect.originalPhase}`);
+      console.log(`[XELOR MAITRE_CADRAN]    Target: (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
+
+      this.executeEffect(effect, context);
+    });
+
+    console.log(`[XELOR MAITRE_CADRAN] ✅ All delayed effects resolved!`);
+  }
+
+  /**
+   * Exécute un effet selon son type (correspond à effect_type dans la table spell_effect)
+   */
+  private executeEffect(effect: DelayedEffect, context: SimulationContext): void {
+    switch (effect.effectType) {
+      case 'DEAL_DAMAGE':
+        this.executeDealDamage(effect, context);
+        break;
+
+      case 'HEAL':
+      case 'HEAL_AROUND_MECHANISM':
+        this.executeHeal(effect, context);
+        break;
+
+      case 'TELEPORT':
+      case 'TELEPORT_SAVED_POS':
+      case 'TELEPORT_TO_DIAL_HOUR':
+        this.executeTeleport(effect, context);
+        break;
+
+      case 'APPLY_STATUS':
+      case 'APPLY_STATUS_IF':
+        this.executeApplyStatus(effect, context);
+        break;
+
+      case 'ADD_AP':
+      case 'ADD_AP_AROUND_MECHANISM':
+        this.executeAddAp(effect, context);
+        break;
+
+      case 'SUB_AP':
+        this.executeSubAp(effect, context);
+        break;
+
+      case 'ADVANCE_DIAL':
+      case 'ADVANCE_DIAL_HOUR':
+        this.executeAdvanceDial(effect, context);
+        break;
+
+      case 'DEAL_AROUND_MECHANISM':
+        this.executeDealAroundMechanism(effect, context);
+        break;
+
+      default:
+        console.warn(`[XELOR MAITRE_CADRAN] ⚠️ Unknown effect type: ${effect.effectType}`);
+        console.warn(`[XELOR MAITRE_CADRAN]    Params: ${JSON.stringify(effect.params)}`);
+    }
+  }
+
+  /**
+   * Exécute un effet DEAL_DAMAGE
+   */
+  private executeDealDamage(effect: DelayedEffect, context: SimulationContext): void {
+    const amount = effect.params['amount'] || 0;
+    const element = effect.params['element'] || 'LIGHT';
+
+    console.log(`[XELOR MAITRE_CADRAN] ⚔️ DEAL_DAMAGE: ${amount} ${element}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope} at (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
+
+    // TODO: Appliquer les dégâts via DamageCalculatorService
+  }
+
+  /**
+   * Exécute un effet HEAL
+   */
+  private executeHeal(effect: DelayedEffect, context: SimulationContext): void {
+    const amount = effect.params['amount'] || 0;
+    const percentMissing = effect.params['percentMissingPerCharge'] || 0;
+
+    console.log(`[XELOR MAITRE_CADRAN] 💚 HEAL: ${amount > 0 ? amount : percentMissing + '% missing HP per charge'}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+
+    // TODO: Appliquer les soins
+  }
+
+  /**
+   * Exécute un effet TELEPORT
+   */
+  private executeTeleport(effect: DelayedEffect, context: SimulationContext): void {
+    const to = effect.params['to'] || 'CAST_POS';
+
+    console.log(`[XELOR MAITRE_CADRAN] 🌀 TELEPORT: to ${to}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+
+    // TODO: Effectuer la téléportation
+  }
+
+  /**
+   * Exécute un effet APPLY_STATUS
+   */
+  private executeApplyStatus(effect: DelayedEffect, context: SimulationContext): void {
+    const status = effect.params['status'];
+    const duration = effect.params['duration'];
+
+    console.log(`[XELOR MAITRE_CADRAN] 📌 APPLY_STATUS: ${status} (duration: ${duration || 'infinite'})`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+
+    // TODO: Appliquer le statut
+  }
+
+  /**
+   * Exécute un effet ADD_AP
+   */
+  private executeAddAp(effect: DelayedEffect, context: SimulationContext): void {
+    const amount = effect.params['amount'] || effect.params['amountPerStep'] || 1;
+
+    console.log(`[XELOR MAITRE_CADRAN] ➕ ADD_AP: +${amount} AP`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+
+    // Pour SELF, on peut l'appliquer directement
+    if (effect.targetScope === 'SELF') {
+      context.availablePa += amount;
+      console.log(`[XELOR MAITRE_CADRAN]    ✅ Applied to caster: now ${context.availablePa} AP`);
+    }
+  }
+
+  /**
+   * Exécute un effet SUB_AP
+   */
+  private executeSubAp(effect: DelayedEffect, context: SimulationContext): void {
+    const amount = effect.params['amount'] || 1;
+
+    console.log(`[XELOR MAITRE_CADRAN] ➖ SUB_AP: -${amount} AP`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+
+    // TODO: Retirer les PA à la cible
+  }
+
+  /**
+   * Exécute un effet ADVANCE_DIAL
+   */
+  private executeAdvanceDial(effect: DelayedEffect, context: SimulationContext): void {
+    const hours = effect.params['hours'] || effect.params['by'] || 1;
+
+    console.log(`[XELOR MAITRE_CADRAN] ⏰ ADVANCE_DIAL: +${hours} hour(s)`);
+
+    if (context.currentDialHour !== undefined) {
+      const oldHour = context.currentDialHour;
+      const newHour = ((oldHour + hours - 1) % 12) + 1;
+      context.currentDialHour = newHour;
+      console.log(`[XELOR MAITRE_CADRAN]    ✅ Dial hour: ${oldHour} → ${newHour}`);
+    }
+  }
+
+  /**
+   * Exécute un effet DEAL_AROUND_MECHANISM
+   */
+  private executeDealAroundMechanism(effect: DelayedEffect, context: SimulationContext): void {
+    const kind = effect.params['kind'];
+    const element = effect.params['element'];
+    const perChargeAmount = effect.params['perChargeAmount'] || 0;
+    const area = effect.params['area'];
+
+    console.log(`[XELOR MAITRE_CADRAN] 💥 DEAL_AROUND_MECHANISM: ${kind}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Element: ${element}, Area: ${area}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Damage per charge: ${perChargeAmount}`);
+
+    // Récupérer les mécanismes du type correspondant
+    const mechanisms = this.boardService.getMechanismsByType(kind.toLowerCase());
+    mechanisms.forEach(mechanism => {
+      const charges = context.mechanismCharges?.get(mechanism.id) || 0;
+      const damage = charges * perChargeAmount;
+      console.log(`[XELOR MAITRE_CADRAN]    ${kind} at (${mechanism.position.x}, ${mechanism.position.y}): ${charges} charges → ${damage} ${element} damage`);
+    });
+  }
+
+  /**
+   * Retourne le nombre d'effets différés en attente
+   */
+  public getDelayedEffectsCount(context: SimulationContext): number {
+    return context.delayedEffects?.length || 0;
+  }
+
+  /**
+   * Vide tous les effets différés sans les exécuter
+   */
+  public clearDelayedEffects(context: SimulationContext): void {
+    const count = context.delayedEffects?.length || 0;
+    context.delayedEffects = [];
+    console.log(`[XELOR MAITRE_CADRAN] 🗑️ Cleared ${count} delayed effect(s)`);
+  }
+
+  /**
+   * Vérifie si le passif Maître du Cadran est actif (méthode publique)
+   */
+  public isMaitreDuCadranActive(context: SimulationContext): boolean {
+    return this.hasMaitreDuCadranPassive(context);
   }
 
   /**
