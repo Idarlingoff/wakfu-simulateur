@@ -204,6 +204,18 @@ export class BoardService {
       return;
     }
 
+    // Check if a mechanism of the same type already exists at this position
+    const existingMechanism = state.mechanisms.find(
+      m => m.position.x === mechanism.position.x &&
+           m.position.y === mechanism.position.y &&
+           m.type === mechanism.type
+    );
+
+    if (existingMechanism) {
+      console.warn(`Mechanism of type ${mechanism.type} already exists at position (${mechanism.position.x}, ${mechanism.position.y})`);
+      return;
+    }
+
     this.boardState.update(s => ({
       ...s,
       mechanisms: [...s.mechanisms, mechanism]
