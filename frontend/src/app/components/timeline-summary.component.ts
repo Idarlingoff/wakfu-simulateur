@@ -3,10 +3,12 @@
  * Affiche un résumé des actions et ressources de la timeline
  */
 
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, computed, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
+import { DataCacheService } from '../services/data-cache.service';
+import { Spell } from '../models/spell.model';
 
 interface ResourceSummary {
   apUsed: number;
@@ -421,9 +423,57 @@ interface ActionSummary {
 export class TimelineSummaryComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
+  dataCacheService = inject(DataCacheService);
+
+  // Cache local des sorts pour récupérer les coûts
+  private spellsCache = signal<Map<string, Spell>>(new Map());
 
   currentTimeline = computed(() => this.timelineService.currentTimeline());
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
+
+  constructor() {
+    // Charger les sorts quand la timeline ou le build change
+    effect(() => {
+      const timeline = this.currentTimeline();
+      const build = this.buildService.selectedBuildA();
+      if (timeline && build?.classId) {
+        this.loadSpells(build.classId);
+      }
+    });
+  }
+
+  /**
+   * Charge les sorts de la classe pour avoir accès aux coûts PA/PW
+   */
+  private async loadSpells(classId: string): Promise<void> {
+    try {
+      const spells = await this.dataCacheService.getSpells(classId);
+      const cache = new Map<string, Spell>();
+      spells.forEach(spell => cache.set(spell.id, spell));
+      this.spellsCache.set(cache);
+    } catch (error) {
+      console.error('Erreur lors du chargement des sorts:', error);
+    }
+  }
+
+  /**
+   * Récupère les coûts d'un sort depuis le cache
+   */
+  private getSpellCosts(spellId: string): { paCost: number; pwCost: number } {
+    const spell = this.spellsCache().get(spellId);
+    return {
+      paCost: spell?.paCost ?? 0,
+      pwCost: spell?.pwCost ?? 0
+    };
+  }
+
+  /**
+   * Récupère le nom d'un sort depuis le cache
+   */
+  private getSpellName(spellId: string): string {
+    const spell = this.spellsCache().get(spellId);
+    return spell?.name ?? spellId;
+  }
 
   totalSteps = computed(() => {
     const timeline = this.currentTimeline();
@@ -436,6 +486,8 @@ export class TimelineSummaryComponent {
   pastActions = computed((): ActionSummary[] => {
     const timeline = this.currentTimeline();
     const currentIndex = this.currentStepIndex();
+    // Déclencher la réactivité quand le cache de sorts change
+    const spellsCache = this.spellsCache();
 
     if (!timeline || currentIndex === 0) return [];
 
@@ -449,10 +501,14 @@ export class TimelineSummaryComponent {
         let resources = '';
 
         switch (action.type) {
-          case 'CastSpell':
-            description = `Sort: ${action.spellId || 'inconnu'}`;
-            resources = `PA: ${action.details?.['paCost'] || 0}, PW: ${action.details?.['pwCost'] || 0}`;
+          case 'CastSpell': {
+            const spellId = action.spellId || '';
+            const spellName = this.getSpellName(spellId);
+            const costs = this.getSpellCosts(spellId);
+            description = `Sort: ${spellName}`;
+            resources = `PA: ${costs.paCost}, PW: ${costs.pwCost}`;
             break;
+          }
           case 'Move':
             description = `Déplacement vers (${action.targetPosition?.x}, ${action.targetPosition?.y})`;
             resources = `PM: ${action.details?.['mpCost'] || 1}`;
@@ -485,6 +541,8 @@ export class TimelineSummaryComponent {
     const timeline = this.currentTimeline();
     const currentIndex = this.currentStepIndex();
     const build = this.buildService.selectedBuildA();
+    // Déclencher la réactivité quand le cache de sorts change
+    const spellsCache = this.spellsCache();
 
     if (!timeline || !build) {
       return {
@@ -512,8 +570,10 @@ export class TimelineSummaryComponent {
       const step = timeline.steps[i];
       step.actions.forEach(action => {
         if (action.type === 'CastSpell') {
-          apUsed += action.details?.['paCost'] || 0;
-          wpUsed += action.details?.['pwCost'] || 0;
+          // Récupérer les coûts du sort depuis le cache
+          const costs = this.getSpellCosts(action.spellId || '');
+          apUsed += costs.paCost;
+          wpUsed += costs.pwCost;
 
           // Détection des explosions de rouage
           if (action.details?.['gearExplosion']) {
