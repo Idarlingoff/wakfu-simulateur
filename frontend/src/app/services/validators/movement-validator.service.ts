@@ -64,7 +64,7 @@ export class MovementValidatorService {
     to: Position,
     context: SimulationContext
   ): MovementValidationResult {
-    const wpCost = this.calculateDistance(from, to);
+    const wpCost = 1
     const dialHour = this.getDialHourAtPosition(from);
     const dialHourNumber = dialHour?.hour || 0;
     if (context.availablePw < wpCost) {
