@@ -9,6 +9,7 @@ import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
 import { SimulationService } from '../services/simulation.service';
+import { ResourceRegenerationService } from '../services/processors/resource-regeneration.service';
 import { BoardEntity, Mechanism } from '../models/board.model';
 import { Position, TimelineAction } from '../models/timeline.model';
 import { Build } from '../models/build.model';
@@ -985,6 +986,7 @@ export class BoardComponent {
   buildService = inject(BuildService);
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
+  regenerationService = inject(ResourceRegenerationService);
 
   editPlayer = output<BoardEntity>();
   editEnemy = output<BoardEntity>();
@@ -1198,12 +1200,43 @@ export class BoardComponent {
     if (stepResult) {
       const actionResults = stepResult.actions.filter((a: any) => a.success);
       if (actionResults.length > 0) {
+        const paUsed = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
+        const wpUsed = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
+        const paRegenerated = actionResults.reduce((sum: number, a: any) => sum + (a.paRegenerated || 0), 0);
+        const wpRegenerated = actionResults.reduce((sum: number, a: any) => sum + (a.wpRegenerated || 0), 0);
+
         console.log('📊 Résultats du step:', {
           actionsReussies: actionResults.length,
-          paUtilises: actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0),
-          wpUtilises: actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0),
+          paUtilises: paUsed,
+          wpUtilises: wpUsed,
           degats: actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0)
         });
+
+        // 🆕 Logs détaillés pour la régénération de PA/PW
+        if (paRegenerated > 0 || wpRegenerated > 0) {
+          console.log('');
+          console.log('💫 ═══════════════════════════════════════════════════');
+          console.log('💫 RÉGÉNÉRATION DE RESSOURCES');
+          console.log('💫 ═══════════════════════════════════════════════════');
+          if (paRegenerated > 0) {
+            console.log(`💫 ⚡ PA régénérés: +${paRegenerated}`);
+          }
+          if (wpRegenerated > 0) {
+            console.log(`💫 🔮 PW régénérés: +${wpRegenerated}`);
+          }
+          console.log('💫 ═══════════════════════════════════════════════════');
+        }
+
+        // Log du contexte après le step (ressources restantes)
+        const contextAfter = stepResult.contextAfter;
+        if (contextAfter) {
+          console.log('');
+          console.log('📈 État des ressources après le step:', {
+            paRestants: contextAfter.availablePa,
+            wpRestants: contextAfter.availablePw,
+            mpRestants: contextAfter.availableMp
+          });
+        }
       }
     }
 
@@ -1336,6 +1369,9 @@ export class BoardComponent {
     // Nettoyer le cache de simulation
     this.simulationService.clearSimulation();
 
+    // Nettoyer l'historique de régénération
+    this.regenerationService.clearHistory();
+
     console.log('🔄 Timeline et Board réinitialisés');
   }
 
@@ -1373,6 +1409,8 @@ export class BoardComponent {
     let totalPaUsed = 0;
     let totalWpUsed = 0;
     let totalMpUsed = 0;
+    let totalPaRegenerated = 0;
+    let totalWpRegenerated = 0;
     let stepsExecuted = 0;
 
     // Exécuter chaque step un par un
@@ -1417,11 +1455,15 @@ export class BoardComponent {
         const stepPa = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
         const stepWp = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
         const stepMp = actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
+        const stepPaRegen = actionResults.reduce((sum: number, a: any) => sum + (a.paRegenerated || 0), 0);
+        const stepWpRegen = actionResults.reduce((sum: number, a: any) => sum + (a.wpRegenerated || 0), 0);
 
         totalDamage += stepDamage;
         totalPaUsed += stepPa;
         totalWpUsed += stepWp;
         totalMpUsed += stepMp;
+        totalPaRegenerated += stepPaRegen;
+        totalWpRegenerated += stepWpRegen;
 
         console.log('📊 Résultats du step:', {
           degats: stepDamage,
@@ -1429,6 +1471,31 @@ export class BoardComponent {
           WP: stepWp,
           MP: stepMp
         });
+
+        // 🆕 Logs détaillés pour la régénération de PA/PW
+        if (stepPaRegen > 0 || stepWpRegen > 0) {
+          console.log('');
+          console.log('💫 ═══════════════════════════════════════════════════');
+          console.log(`💫 RÉGÉNÉRATION AU STEP ${stepIndex + 1}`);
+          console.log('💫 ═══════════════════════════════════════════════════');
+          if (stepPaRegen > 0) {
+            console.log(`💫 ⚡ PA régénérés: +${stepPaRegen}`);
+          }
+          if (stepWpRegen > 0) {
+            console.log(`💫 🔮 PW régénérés: +${stepWpRegen}`);
+          }
+          console.log('💫 ═══════════════════════════════════════════════════');
+        }
+
+        // Log du contexte après le step (ressources restantes)
+        const contextAfter = stepResult.contextAfter;
+        if (contextAfter) {
+          console.log('📈 État des ressources après le step:', {
+            paRestants: contextAfter.availablePa,
+            wpRestants: contextAfter.availablePw,
+            mpRestants: contextAfter.availableMp
+          });
+        }
       }
 
       // Avancer l'index de la timeline
@@ -1458,6 +1525,42 @@ export class BoardComponent {
     console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
     console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
     console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
+
+    // 🆕 Afficher le résumé de régénération depuis le service centralisé
+    const regenSummary = this.regenerationService.getRegenerationSummary();
+    if (regenSummary.totalPaRegenerated > 0 || regenSummary.totalPwRegenerated > 0) {
+      console.log('');
+      console.log('💫 RÉGÉNÉRATION TOTALE (service centralisé):');
+      console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
+      console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
+      console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
+      console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
+
+      // Détail par source
+      if (regenSummary.bySource.size > 0) {
+        console.log('');
+        console.log('💫 Détail par source:');
+        regenSummary.bySource.forEach((stats, source) => {
+          const parts = [];
+          if (stats.pa > 0) parts.push(`+${stats.pa} PA`);
+          if (stats.pw > 0) parts.push(`+${stats.pw} PW`);
+          console.log(`  💫   • ${source}: ${parts.join(', ')}`);
+        });
+      }
+    } else if (totalPaRegenerated > 0 || totalWpRegenerated > 0) {
+      // Fallback sur les compteurs locaux si le service n'a pas d'événements
+      console.log('');
+      console.log('💫 RÉGÉNÉRATION TOTALE:');
+      if (totalPaRegenerated > 0) {
+        console.log(`  💫 ⚡ PA régénérés: +${totalPaRegenerated}`);
+      }
+      if (totalWpRegenerated > 0) {
+        console.log(`  💫 🔮 PW régénérés: +${totalWpRegenerated}`);
+      }
+      console.log(`  📈 Bilan net PA: ${totalPaRegenerated - totalPaUsed}`);
+      console.log(`  📈 Bilan net PW: ${totalWpRegenerated - totalWpUsed}`);
+    }
+
     console.log('═══════════════════════════════════════════════════════');
     console.log('');
   }

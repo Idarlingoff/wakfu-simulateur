@@ -17,6 +17,7 @@ import { SpellCastingValidatorService } from '../validators/spell-casting-valida
 import { MovementValidatorService } from '../validators/movement-validator.service';
 import { ClassStrategyFactory } from '../strategies/class-strategy-factory.service';
 import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy.interface';
+import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
 import { firstValueFrom } from 'rxjs';
 
 /**
@@ -75,6 +76,10 @@ export interface SimulationContext {
   activeAuras?: Set<string>;
   currentDialHour?: number;
   dialId?: string;
+
+  // Indique si le cadran a déjà fait un tour complet depuis sa pose
+  // Le passif "Connaissance du passé" ne proc pas au premier passage de 12 à 1
+  dialFirstLoopCompleted?: boolean;
 
   // IDs des passifs actifs du build (pour vérifier des conditions comme Rémanence)
   activePassiveIds?: string[];
@@ -138,6 +143,7 @@ export class SimulationEngineService {
   private readonly spellCastingValidator: SpellCastingValidatorService = inject(SpellCastingValidatorService);
   private readonly movementValidator: MovementValidatorService = inject(MovementValidatorService);
   private readonly classStrategyFactory: ClassStrategyFactory = inject(ClassStrategyFactory);
+  private readonly regenerationService: ResourceRegenerationService = inject(ResourceRegenerationService);
 
   // Stratégie de classe actuelle (sera définie au début de la simulation)
   private currentClassStrategy?: ClassSimulationStrategy;
@@ -160,6 +166,9 @@ export class SimulationEngineService {
    * Exécute une simulation complète
    */
   async runSimulation(build: Build, timeline: Timeline): Promise<SimulationResult> {
+    // Réinitialiser l'historique de régénération pour cette nouvelle simulation
+    this.regenerationService.clearHistory();
+
     console.log('');
     console.log('╔═══════════════════════════════════════════════════════╗');
     console.log('║  🎮 DÉMARRAGE DE LA SIMULATION                       ║');
@@ -273,6 +282,9 @@ export class SimulationEngineService {
       console.log('  ❌ Erreurs:', errors);
     }
     console.log('');
+
+    // Afficher le résumé de la régénération de ressources
+    this.regenerationService.logRegenerationSummary('RÉSUMÉ RÉGÉNÉRATION - FIN DE SIMULATION');
 
     return {
       buildId: build.id || '',
@@ -446,8 +458,21 @@ export class SimulationEngineService {
       }
     }
 
-    const paCost = spell.paCost || 0;
-    const pwCost = spell.pwCost || 0;
+    // Calculer les coûts de base
+    let paCost = spell.paCost || 0;
+    let pwCost = spell.pwCost || 0;
+
+    // Appliquer les coûts supplémentaires des passifs de classe (ex: Connaissance du passé)
+    if (this.currentClassStrategy?.getSpellExtraCost) {
+      const extraCost = this.currentClassStrategy.getSpellExtraCost(spell, context);
+      paCost += extraCost.extraPaCost;
+      pwCost += extraCost.extraPwCost;
+
+      if (extraCost.extraPaCost > 0 || extraCost.extraPwCost > 0) {
+        console.log(`💰 [EXTRA COST] Coûts supplémentaires appliqués: +${extraCost.extraPaCost} PA, +${extraCost.extraPwCost} PW`);
+        console.log(`💰 [EXTRA COST] Coût total: ${paCost} PA, ${pwCost} PW`);
+      }
+    }
 
     // Déterminer la position de la cible
     const targetPosition = action.targetPosition || context.currentPosition;
@@ -667,7 +692,8 @@ export class SimulationEngineService {
         element: effect.element,
         minValue: effect.minValue,
         maxValue: effect.maxValue,
-        targetScope: effect.targetScope
+        targetScope: effect.targetScope,
+        extendedData: effect.extendedData
       });
 
       // Vérifier si c'est un effet de dégâts
@@ -675,12 +701,30 @@ export class SimulationEngineService {
         || effect.effect?.toLowerCase().includes('damage')
         || effect.effect?.toLowerCase().includes('dégât');
 
-      if (isDamageEffect && effect.minValue !== undefined && effect.maxValue !== undefined) {
-        // Utiliser la moyenne entre min et max
-        const damage = (effect.minValue + effect.maxValue) / 2;
-        totalBaseDamage += damage;
+      if (isDamageEffect) {
+        let damage = 0;
 
-        console.log(`  ✅ Dégâts trouvés: ${effect.minValue}-${effect.maxValue} (moyenne: ${damage})`);
+        // D'abord essayer minValue/maxValue
+        if (effect.minValue !== undefined && effect.minValue !== null &&
+            effect.maxValue !== undefined && effect.maxValue !== null) {
+          damage = (effect.minValue + effect.maxValue) / 2;
+          console.log(`  ✅ Dégâts trouvés (min/max): ${effect.minValue}-${effect.maxValue} (moyenne: ${damage})`);
+        }
+        // Sinon, lire depuis extendedData (params_json du backend)
+        else if (effect.extendedData) {
+          const params = effect.extendedData;
+          if (params.amount !== undefined) {
+            damage = params.amount;
+            console.log(`  ✅ Dégâts trouvés (extendedData.amount): ${damage}`);
+          } else if (params.minValue !== undefined && params.maxValue !== undefined) {
+            damage = (params.minValue + params.maxValue) / 2;
+            console.log(`  ✅ Dégâts trouvés (extendedData min/max): ${params.minValue}-${params.maxValue} (moyenne: ${damage})`);
+          }
+        }
+
+        if (damage > 0) {
+          totalBaseDamage += damage;
+        }
       }
     }
 

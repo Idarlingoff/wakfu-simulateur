@@ -12,6 +12,7 @@ import { Build } from '../../models/build.model';
 import { TotalStats } from '../calculators/stats-calculator.service';
 import { Mechanism } from '../../models/board.model';
 import { BoardService } from '../board.service';
+import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
 import { isSpellMechanism, getSpellMechanismType, getMechanismImagePath } from '../../utils/mechanism-utils';
 
 @Injectable({
@@ -22,6 +23,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   readonly classId = 'XEL';
 
   private readonly boardService = inject(BoardService);
+  private readonly regenerationService = inject(ResourceRegenerationService);
 
   /**
    * Vérifie les conditions de lancement spécifiques au Xelor
@@ -88,7 +90,8 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       if (mechanismType === 'dial' && actionResult.details?.mechanismId) {
         context.dialId = actionResult.details.mechanismId;
         context.currentDialHour = 12; // Heure XII par défaut
-        console.log(`[XELOR] Dial activated - current hour set to ${context.currentDialHour}`);
+        context.dialFirstLoopCompleted = false; // Le cadran vient d'être posé, pas encore de tour complet
+        console.log(`[XELOR] Dial activated - current hour set to ${context.currentDialHour}, first loop not yet completed`);
       }
     }
 
@@ -289,6 +292,30 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
+   * Calcule le coût supplémentaire en ressources pour un sort basé sur les passifs actifs
+   * Implémente l'effet "Connaissance du passé": Le Cadran coûte +2 PW supplémentaires
+   */
+  public override getSpellExtraCost(spell: Spell, context: SimulationContext): { extraPaCost: number; extraPwCost: number } {
+    let extraPaCost = 0;
+    let extraPwCost = 0;
+
+    // Passif "Connaissance du passé": Le Cadran coûte +2 PW
+    if (this.hasConnaissancePassePassive(context)) {
+      // Vérifier si c'est le sort Cadran (plusieurs IDs possibles)
+      const isDialSpell = spell.id.toLowerCase().includes('cadran') ||
+                          spell.id === 'XEL_CADRAN' ||
+                          spell.id === 'xel_cadran';
+
+      if (isDialSpell) {
+        extraPwCost += 2;
+        console.log(`[XELOR CONNAISSANCE_PASSE] 💰 Cadran extra cost: +2 PW (total PW: ${spell.pwCost + extraPwCost})`);
+      }
+    }
+
+    return { extraPaCost, extraPwCost };
+  }
+
+  /**
    * Vérifie si un sort est un sort de mécanisme Xelor
    */
   isClassMechanismSpell(spellId: string): boolean {
@@ -396,6 +423,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       // Initialiser l'heure courante dans le contexte
       context.currentDialHour = 12;
       context.dialId = mechanism.id;
+      context.dialFirstLoopCompleted = false; // Cadran fraîchement posé
     }
 
     return {
@@ -442,8 +470,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       const dial = dials[0]; // On prend le premier cadran (max 1 normalement)
       context.dialId = dial.id;
       context.currentDialHour = 12; // Heure initiale (XII - où le Xélor est téléporté)
+      context.dialFirstLoopCompleted = false; // Le premier tour n'est pas encore complété
       context.activeAuras!.add('DIAL_AURA');
-      console.log(`[XELOR] Active dial found (${dial.id}), current hour: ${context.currentDialHour}`);
+      console.log(`[XELOR] Active dial found (${dial.id}), current hour: ${context.currentDialHour}, first loop not yet completed`);
     }
 
     // Vérifier les autres mécanismes pour ajouter leurs auras
@@ -492,17 +521,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   /**
    * Applique le bonus +1 PW du Régulateur si présent en fin de tour
    * Le Xelor gagne +1 PW par Régulateur présent sur le plateau à la fin de son tour
+   * Utilise le service centralisé ResourceRegenerationService
    */
   private applyRegulatorPwBonus(context: SimulationContext): void {
-    const regulateurs = this.boardService.getMechanismsByType('regulateur');
-
-    if (regulateurs.length > 0) {
-      const pwBonus = regulateurs.length; // +1 PW par Régulateur
-      context.availablePw += pwBonus;
-
-      console.log(`[XELOR] ✅ Régulateur end-of-turn effect: +${pwBonus} PW (now ${context.availablePw} PW)`);
-      console.log(`[XELOR] 📊 ${regulateurs.length} Régulateur(s) on board`);
-    }
+    // Déléguer au service centralisé qui gère tout
+    this.regenerationService.applyRegulateurRegeneration(context);
   }
 
   /**
@@ -544,6 +567,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
   /**
    * Applique les soins du Sinistro (fin de tour)
+   * Utilise le service centralisé ResourceRegenerationService pour la régénération de PA
    */
   private applySinistroHealing(context: SimulationContext): void {
     const sinistros = this.boardService.getMechanismsByType('sinistro');
@@ -555,15 +579,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
         console.log(`[XELOR] 💚 Sinistro (${sinistro.id}) heals adjacent allies (${charges} charges)`);
         // TODO: Calculer et appliquer les soins aux alliés adjacents
         // Soins = 2% PV manquant par charge
-
-        // Vérifier si on donne des PA (1 PA par 5 charges)
-        const paBonus = Math.floor(charges / 5);
-        if (paBonus > 0) {
-          console.log(`[XELOR] ⚡ Sinistro grants +${paBonus} AP to adjacent allies`);
-          // TODO: Appliquer le bonus PA
-        }
       }
     });
+
+    // Déléguer la régénération de PA au service centralisé
+    this.regenerationService.applySinistroRegeneration(context);
   }
 
   /**
@@ -685,6 +705,14 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   public override processHourWrap(context: SimulationContext): void {
     console.log('[XELOR] 🔄 Processing hour wrap effects (dial completed a full rotation)');
 
+    // Vérifier si c'est le premier tour de cadran après la pose
+    const isFirstLoop = !context.dialFirstLoopCompleted;
+
+    if (isFirstLoop) {
+      console.log('[XELOR] 🔄 First hour wrap since dial placement - marking first loop as completed');
+      context.dialFirstLoopCompleted = true;
+    }
+
     // Les Rouages infligent des dégâts supplémentaires (status_effect avec tick_phase = ON_HOUR_WRAPPED)
     if (context.activeAuras?.has('ROUAGE_AURA')) {
       this.applyRouageDamage(context);
@@ -693,6 +721,17 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     // Les Sinistros soignent à nouveau (status_effect avec tick_phase = ON_HOUR_WRAPPED)
     if (context.activeAuras?.has('SINISTRO_AURA')) {
       this.applySinistroHealing(context);
+    }
+
+    // Passif "Connaissance du passé" (XEL_CONNAISSANCE_PASSE):
+    // Quand l'heure courante fait un tour complet du cadran, régénère 2 PA et 2 PW
+    // IMPORTANT: Ne se déclenche PAS au premier passage de 12 à 1 après la pose du cadran
+    if (this.hasConnaissancePassePassive(context)) {
+      if (isFirstLoop) {
+        console.log('[XELOR CONNAISSANCE_PASSE] ⏳ First loop after dial placement - Connaissance du passé does NOT trigger');
+      } else {
+        this.applyConnaissancePasseRegeneration(context);
+      }
     }
 
     // Passif "Maître du Cadran" (XEL_MAITRE_CADRAN):
@@ -718,6 +757,15 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     'maitreducadran'
   ];
 
+  /** Liste des IDs possibles pour le passif Connaissance du passé */
+  private static readonly CONNAISSANCE_PASSE_IDS = [
+    'connaissance_passe',
+    'XEL_CONNAISSANCE_PASSE',
+    'connaissance_du_passe',
+    'connaissance-du-passe',
+    'connaissancedupasse'
+  ];
+
   /**
    * Vérifie si le passif "Maître du Cadran" est actif
    * Ce passif permet de résoudre les effets différés lors d'un tour de cadran
@@ -725,6 +773,19 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   private hasMaitreDuCadranPassive(context: SimulationContext): boolean {
     const passiveIds = context.activePassiveIds || [];
     return XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.some(id =>
+      passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
+    );
+  }
+
+  /**
+   * Vérifie si le passif "Connaissance du passé" est actif
+   * Ce passif :
+   * - Régénère 2 PA et 2 PW à chaque tour de cadran
+   * - Le Cadran coûte +2 PW supplémentaires
+   */
+  private hasConnaissancePassePassive(context: SimulationContext): boolean {
+    const passiveIds = context.activePassiveIds || [];
+    return XelorSimulationStrategy.CONNAISSANCE_PASSE_IDS.some(id =>
       passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
     );
   }
@@ -908,6 +969,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
   /**
    * Exécute un effet ADD_AP
+   * Utilise le service centralisé ResourceRegenerationService
    */
   private executeAddAp(effect: DelayedEffect, context: SimulationContext): void {
     const amount = effect.params['amount'] || effect.params['amountPerStep'] || 1;
@@ -915,11 +977,16 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     console.log(`[XELOR MAITRE_CADRAN] ➕ ADD_AP: +${amount} AP`);
     console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
 
-    // Pour SELF, on peut l'appliquer directement
+    // Pour SELF, utiliser le service centralisé
     if (effect.targetScope === 'SELF') {
-      context.availablePa += amount;
-      console.log(`[XELOR MAITRE_CADRAN]    ✅ Applied to caster: now ${context.availablePa} AP`);
+      this.regenerationService.applySpellEffectRegeneration(
+        context,
+        'PA',
+        amount,
+        effect.spellName
+      );
     }
+    // TODO: Gérer les autres scopes (TARGET, AREA, etc.)
   }
 
   /**
@@ -948,6 +1015,40 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       context.currentDialHour = newHour;
       console.log(`[XELOR MAITRE_CADRAN]    ✅ Dial hour: ${oldHour} → ${newHour}`);
     }
+  }
+
+  // ============================================
+  // PASSIF "CONNAISSANCE DU PASSÉ" - REGENERATION
+  // Correspond à: passive_effect.effect_type = 'ADD_AP' et 'ADD_PW'
+  // avec trigger = 'ON_HOUR_WRAPPED'
+  // ============================================
+
+  /**
+   * Applique la régénération du passif "Connaissance du passé"
+   * À chaque tour de cadran : +2 PA et +2 PW
+   */
+  private applyConnaissancePasseRegeneration(context: SimulationContext): void {
+    console.log('[XELOR CONNAISSANCE_PASSE] ⚡ Triggering Connaissance du passé regeneration on ON_HOUR_WRAPPED');
+
+    // Régénérer 2 PA
+    this.regenerationService.regeneratePA(
+      context,
+      2,
+      'CONNAISSANCE_PASSE',
+      'Connaissance du passé: +2 PA (tour de cadran)',
+      { trigger: 'ON_HOUR_WRAPPED' }
+    );
+
+    // Régénérer 2 PW
+    this.regenerationService.regeneratePW(
+      context,
+      2,
+      'CONNAISSANCE_PASSE',
+      'Connaissance du passé: +2 PW (tour de cadran)',
+      { trigger: 'ON_HOUR_WRAPPED' }
+    );
+
+    console.log('[XELOR CONNAISSANCE_PASSE] ✅ Regeneration complete: +2 PA, +2 PW');
   }
 
   /**

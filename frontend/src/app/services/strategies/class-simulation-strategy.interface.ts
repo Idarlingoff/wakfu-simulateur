@@ -129,4 +129,15 @@ export abstract class ClassSimulationStrategy {
    * @param context Contexte de simulation
    */
   processHourWrap?(context: SimulationContext): void;
+
+  /**
+   * Calcule le coût supplémentaire en ressources pour un sort basé sur les passifs actifs
+   * Méthode optionnelle - par défaut retourne 0
+   * (ex: pour Xelor avec "Connaissance du passé" - Cadran coûte +2 PW)
+   *
+   * @param spell Sort à vérifier
+   * @param context Contexte de simulation
+   * @returns Objet avec les coûts supplémentaires { extraPaCost, extraPwCost }
+   */
+  getSpellExtraCost?(spell: Spell, context: SimulationContext): { extraPaCost: number; extraPwCost: number };
 }

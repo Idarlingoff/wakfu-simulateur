@@ -7,11 +7,12 @@
  * - Gère les conditions d'application (phase, conditions, etc.)
  */
 
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { SpellEffect, Spell } from '../../models/spell.model';
 import { Position } from '../../models/timeline.model';
 import { SimulationContext } from '../calculators/simulation-engine.service';
 import { TotalStats } from '../calculators/stats-calculator.service';
+import { ResourceRegenerationService } from './resource-regeneration.service';
 
 export interface EffectApplicationResult {
   success: boolean;
@@ -61,6 +62,8 @@ export type TargetScope =
   providedIn: 'root'
 })
 export class SpellEffectProcessorService {
+
+  private readonly regenerationService = inject(ResourceRegenerationService);
 
   /**
    * Applique tous les effets d'un sort pour une phase donnée
@@ -241,6 +244,7 @@ export class SpellEffectProcessorService {
 
   /**
    * Applique un effet de modification de ressource (AP/WP)
+   * Utilise le service centralisé ResourceRegenerationService pour les ajouts
    */
   private applyResourceEffect(
     effect: SpellEffect,
@@ -249,21 +253,30 @@ export class SpellEffectProcessorService {
     operation: 'add' | 'sub'
   ): EffectApplicationResult {
     const amount = effect.minValue || 1;
-    const resourceName = resource === 'ap' ? 'PA' : 'WP';
+    const resourceName = resource === 'ap' ? 'PA' : 'PW';
 
     if (operation === 'add') {
-      if (resource === 'ap') {
-        context.availablePa += amount;
-      } else {
-        context.availablePw += amount;
-      }
+      // Utiliser le service centralisé pour la régénération
+      const resourceType = resource === 'ap' ? 'PA' : 'PW';
+      const event = this.regenerationService.applySpellEffectRegeneration(
+        context,
+        resourceType as 'PA' | 'PW',
+        amount
+      );
+
       return {
         success: true,
         effectType: `ADD_${resource.toUpperCase()}` as EffectType,
         message: `+${amount} ${resourceName}`,
-        details: { amount }
+        details: {
+          amount,
+          regenerationEventId: event.id,
+          before: event.details?.['before'],
+          after: event.details?.['after']
+        }
       };
     } else {
+      // La soustraction n'est pas une régénération, on la gère directement
       if (resource === 'ap') {
         context.availablePa = Math.max(0, context.availablePa - amount);
       } else {
@@ -280,6 +293,7 @@ export class SpellEffectProcessorService {
 
   /**
    * Applique un effet de remboursement de ressource
+   * Utilise le service centralisé ResourceRegenerationService
    */
   private applyRefundEffect(
     effect: SpellEffect,
@@ -287,19 +301,25 @@ export class SpellEffectProcessorService {
     resource: 'ap' | 'wp'
   ): EffectApplicationResult {
     const amount = effect.minValue || 1;
-    const resourceName = resource === 'ap' ? 'PA' : 'WP';
+    const resourceName = resource === 'ap' ? 'PA' : 'PW';
+    const resourceType = resource === 'ap' ? 'PA' : 'PW';
 
-    if (resource === 'ap') {
-      context.availablePa += amount;
-    } else {
-      context.availablePw += amount;
-    }
+    // Utiliser le service centralisé pour le remboursement
+    const event = this.regenerationService.applyRefund(
+      context,
+      resourceType as 'PA' | 'PW',
+      amount,
+      `Remboursement de ${amount} ${resourceName}`
+    );
 
     return {
       success: true,
       effectType: `REFUND_${resource.toUpperCase()}` as EffectType,
       message: `Remboursement de ${amount} ${resourceName}`,
-      details: { amount }
+      details: {
+        amount,
+        regenerationEventId: event.id
+      }
     };
   }
 
