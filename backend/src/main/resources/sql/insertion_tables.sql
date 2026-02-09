@@ -407,10 +407,11 @@ VALUES ('XEL_DEVOUEMENT', 185, 0);
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DEVOUEMENT', 'NORMAL');
 
--- Effets — Donne 3PA à la cible pour 1 tour
+-- Effets — Donne 3PA à la cible au début de son prochain tour
+-- Avec le passif "Maître du Cadran", cet effet se résout immédiatement lors d'un tour de cadran
 INSERT INTO spell_effect
 (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
-SELECT v.id, 'ON_CAST', 0, 'ADD_AP', 'TARGET',
+SELECT v.id, 'ON_TARGET_TURN_START', 0, 'ADD_AP', 'TARGET',
        '{"amount":3,"duration":1}', NULL
 FROM spell_variant v
 WHERE v.spell_id='XEL_DEVOUEMENT' AND v.kind='NORMAL';

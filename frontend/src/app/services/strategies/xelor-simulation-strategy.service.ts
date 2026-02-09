@@ -119,6 +119,81 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
         // TODO: Appliquer le buff Ponctualité (+50% DI pour le tour)
       }
     }
+
+    // 🆕 Enregistrer les effets différés du sort (ON_END_TURN, ON_TARGET_TURN_START, etc.)
+    // Ces effets seront résolus immédiatement lors d'un tour de cadran si le passif "Maître du Cadran" est actif
+    if (actionResult.success) {
+      this.registerSpellDelayedEffects(spell, action, context);
+    }
+  }
+
+  /**
+   * Enregistre les effets différés d'un sort
+   * Les effets avec phase ON_END_TURN, ON_TARGET_TURN_START, ON_TARGET_TURN_END
+   * sont enregistrés comme effets différés pour être résolus plus tard
+   * (ou immédiatement lors d'un tour de cadran avec le passif "Maître du Cadran")
+   */
+  private registerSpellDelayedEffects(
+    spell: Spell,
+    action: TimelineAction,
+    context: SimulationContext
+  ): void {
+    // Phases considérées comme "différées"
+    const delayedPhases = ['ON_END_TURN', 'ON_TARGET_TURN_START', 'ON_TARGET_TURN_END'];
+
+    // Utiliser la variante NORMAL par défaut (TODO: gérer les crits)
+    const variant = spell.variants.find(v => v.kind === 'NORMAL');
+    if (!variant) {
+      console.log(`[XELOR DELAYED] ⚠️ No NORMAL variant found for spell ${spell.name}`);
+      return;
+    }
+
+    // Filtrer les effets différés
+    const delayedEffects = variant.effects.filter(effect =>
+      effect.phase && delayedPhases.includes(effect.phase)
+    );
+
+    if (delayedEffects.length === 0) {
+      console.log(`[XELOR DELAYED] ℹ️ No delayed effects for spell ${spell.name}`);
+      return;
+    }
+
+    console.log(`[XELOR DELAYED] 📦 Found ${delayedEffects.length} delayed effect(s) for spell ${spell.name}`);
+
+    // Position du lanceur et de la cible
+    const playerEntity = this.boardService.player();
+    const casterPosition = playerEntity?.position || context.playerPosition || { x: 0, y: 0 };
+    const targetPosition = action.targetPosition || casterPosition;
+
+    // Enregistrer chaque effet différé
+    for (const effect of delayedEffects) {
+      // Extraire le montant - peut être dans extendedData.amount, minValue ou maxValue
+      const amount = effect.extendedData?.amount || effect.minValue || effect.maxValue || 0;
+
+      const delayedEffect: DelayedEffect = {
+        id: `delayed_${spell.id}_${effect.id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        spellId: spell.id,
+        spellName: spell.name,
+        originalPhase: effect.phase as any,
+        effectType: effect.effect,
+        targetScope: effect.targetScope,
+        targetPosition: targetPosition,
+        casterPosition: casterPosition,
+        params: {
+          amount: amount,
+          element: effect.element,
+          duration: effect.extendedData?.duration || effect.duration,
+          durationType: effect.durationType,
+          extendedData: effect.extendedData,
+          minValue: effect.minValue,
+          maxValue: effect.maxValue
+        },
+        registeredOnTurn: context.turn || 1
+      };
+
+      console.log(`[XELOR DELAYED] 📝 Creating delayed effect with amount: ${amount} (from extendedData: ${effect.extendedData?.amount}, minValue: ${effect.minValue}, maxValue: ${effect.maxValue})`);
+      this.registerDelayedEffect(delayedEffect, context);
+    }
   }
 
   /**
@@ -762,7 +837,8 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   /** Liste des IDs possibles pour le passif Maître du Cadran */
   private static readonly MAITRE_DU_CADRAN_IDS = [
     'maitre_du_cadran',
-    'XEL_MAITRE_DU_CADRAN',
+    'XEL_MAITRE_CADRAN',      // ID correct dans la base de données
+    'XEL_MAITRE_DU_CADRAN',   // Variante possible
     'master_of_dial',
     'maitre-du-cadran',
     'maitreducadran'
@@ -783,9 +859,16 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    */
   private hasMaitreDuCadranPassive(context: SimulationContext): boolean {
     const passiveIds = context.activePassiveIds || [];
-    return XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.some(id =>
+    console.log(`[XELOR MAITRE_CADRAN] 🔍 Checking for Maître du Cadran passive...`);
+    console.log(`[XELOR MAITRE_CADRAN]    Active passive IDs in context: [${passiveIds.join(', ')}]`);
+    console.log(`[XELOR MAITRE_CADRAN]    Looking for any of: [${XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.join(', ')}]`);
+
+    const found = XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.some(id =>
       passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
     );
+
+    console.log(`[XELOR MAITRE_CADRAN]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
+    return found;
   }
 
   /**
@@ -986,18 +1069,77 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     const amount = effect.params['amount'] || effect.params['amountPerStep'] || 1;
 
     console.log(`[XELOR MAITRE_CADRAN] ➕ ADD_AP: +${amount} AP`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target scope: ${effect.targetScope}`);
+    console.log(`[XELOR MAITRE_CADRAN]    Target position: (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
+    console.log(`[XELOR MAITRE_CADRAN]    Caster position at cast time: (${effect.casterPosition.x}, ${effect.casterPosition.y})`);
 
-    // Pour SELF, utiliser le service centralisé
-    if (effect.targetScope === 'SELF') {
-      this.regenerationService.applySpellEffectRegeneration(
+    // Vérifier si c'est un auto-cast (le lanceur s'est ciblé lui-même)
+    // Dans ce cas, on applique toujours l'effet au joueur, peu importe sa position actuelle
+    const wasAutocast = effect.targetPosition.x === effect.casterPosition.x &&
+                        effect.targetPosition.y === effect.casterPosition.y;
+
+    console.log(`[XELOR MAITRE_CADRAN]    Was autocast (self-targeted)? ${wasAutocast}`);
+
+    // Déterminer la source de régénération basée sur le sort
+    const regenerationSource = this.getRegenerationSourceForSpell(effect.spellId, effect.spellName);
+
+    // Pour SELF, ou pour TARGET si c'était un auto-cast, appliquer au joueur
+    if (effect.targetScope === 'SELF' || (effect.targetScope === 'TARGET' && wasAutocast)) {
+      console.log(`[XELOR MAITRE_CADRAN] ✅ Applying +${amount} AP to player (from ${effect.spellName}, source: ${regenerationSource})`);
+      this.regenerationService.regeneratePA(
         context,
-        'PA',
         amount,
-        effect.spellName
+        regenerationSource,
+        `${effect.spellName}: +${amount} PA`,
+        { spellId: effect.spellId, spellName: effect.spellName, trigger: 'ON_HOUR_WRAPPED' }
       );
+    } else if (effect.targetScope === 'TARGET') {
+      // La cible était une autre entité (allié, etc.)
+      // Vérifier si la cible est maintenant le joueur (il a pu se déplacer sur cette case)
+      const playerEntity = this.boardService.player();
+      const playerPositionFromBoard = playerEntity?.position;
+      const playerPositionFromContext = context.playerPosition;
+
+      const isTargetPlayerNow =
+        (playerPositionFromBoard &&
+         effect.targetPosition.x === playerPositionFromBoard.x &&
+         effect.targetPosition.y === playerPositionFromBoard.y) ||
+        (playerPositionFromContext &&
+         effect.targetPosition.x === playerPositionFromContext.x &&
+         effect.targetPosition.y === playerPositionFromContext.y);
+
+      if (isTargetPlayerNow) {
+        console.log(`[XELOR MAITRE_CADRAN] ✅ Target is now player position, applying +${amount} AP (source: ${regenerationSource})`);
+        this.regenerationService.regeneratePA(
+          context,
+          amount,
+          regenerationSource,
+          `${effect.spellName}: +${amount} PA`,
+          { spellId: effect.spellId, spellName: effect.spellName, trigger: 'ON_HOUR_WRAPPED' }
+        );
+      } else {
+        console.log(`[XELOR MAITRE_CADRAN] ℹ️ ADD_AP to non-player TARGET at (${effect.targetPosition.x}, ${effect.targetPosition.y}) - effect logged but not applied to context`);
+        // Note: Dans une simulation complète, il faudrait gérer les PA des alliés
+      }
     }
-    // TODO: Gérer les autres scopes (TARGET, AREA, etc.)
+  }
+
+  /**
+   * Détermine la source de régénération appropriée pour un sort donné
+   */
+  private getRegenerationSourceForSpell(spellId: string, spellName: string): any {
+    const spellIdLower = spellId.toLowerCase();
+
+    // Mapper les sorts connus vers leurs sources de régénération
+    if (spellIdLower.includes('devouement') || spellName.toLowerCase().includes('dévouement')) {
+      return 'DEVOUEMENT';
+    }
+    if (spellIdLower.includes('pointe_heure') || spellName.toLowerCase().includes('pointe-heure')) {
+      return 'POINTE_HEURE';
+    }
+
+    // Par défaut, utiliser SPELL_EFFECT
+    return 'SPELL_EFFECT';
   }
 
   /**
