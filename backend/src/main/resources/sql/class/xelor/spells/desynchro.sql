@@ -2,6 +2,12 @@
 --  DESYNCHRO
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_DESYNCHRO');
+DELETE FROM spell_variant      WHERE spell_id='XEL_DESYNCHRO';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_DESYNCHRO';
+DELETE FROM spell              WHERE id='XEL_DESYNCHRO';
+
 INSERT INTO spell  VALUES (
                               'XEL_DESYNCHRO', 'XEL', 'Désynchronisation', 'WATER', 'ELEMENTAL',
                               4, 0, 3, 6, TRUE, TRUE,

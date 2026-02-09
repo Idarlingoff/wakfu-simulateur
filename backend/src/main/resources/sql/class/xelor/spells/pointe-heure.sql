@@ -2,6 +2,12 @@
 --  POINTE-HEURE
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_POINTE_HEURE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_POINTE_HEURE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_POINTE_HEURE';
+DELETE FROM spell              WHERE id='XEL_POINTE_HEURE';
+
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,

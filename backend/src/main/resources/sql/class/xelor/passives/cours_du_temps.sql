@@ -1,5 +1,10 @@
--- On remplace proprement les règles existantes
+-- =========================================
+-- COURS DU TEMPS
+-- =========================================
+
+-- nettoyage si déjà présent
 DELETE FROM passive_effect WHERE passive_id = 'XEL_COURS_TEMPS';
+DELETE FROM passive WHERE id = 'XEL_COURS_TEMPS';
 
 INSERT INTO passive (id, class_id, name, description) VALUES
     ('XEL_COURS_TEMPS','XEL','Cours du temps',

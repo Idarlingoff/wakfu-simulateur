@@ -1,3 +1,11 @@
+-- =========================================
+-- MÉCANISME SPÉCIALISÉ
+-- =========================================
+
+-- nettoyage si déjà présent
+DELETE FROM passive_effect WHERE passive_id = 'XEL_MECANISME_SPECIALISE';
+DELETE FROM passive WHERE id = 'XEL_MECANISME_SPECIALISE';
+
 INSERT INTO passive (id, class_id, name, description) VALUES
     ('XEL_MECANISME_SPECIALISE','XEL','Mécanisme spécialisé',
      'À l''invocation d''un Rouage, Sinistro, Cadran ou Régulateur : échange immédiatement de position avec (6 cases max).');
