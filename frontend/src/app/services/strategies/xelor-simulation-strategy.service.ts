@@ -416,6 +416,17 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
         if (newPosition) {
           context.playerPosition = newPosition;
           context.currentPosition = newPosition;
+
+          // IMPORTANT: Mettre à jour aussi la position dans context.entities
+          // sinon le joueur "fantôme" à l'ancienne position bloquera la ligne de vue
+          if (context.entities) {
+            const playerEntityInContext = context.entities.find(e => e.type === 'player');
+            if (playerEntityInContext) {
+              playerEntityInContext.position = newPosition;
+              console.log(`[XELOR] 📍 Player entity in context.entities also updated to (${newPosition.x}, ${newPosition.y})`);
+            }
+          }
+
           console.log(`[XELOR] 📍 Context updated with new player position: (${newPosition.x}, ${newPosition.y})`);
         }
       }

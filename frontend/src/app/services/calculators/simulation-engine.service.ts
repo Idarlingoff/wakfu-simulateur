@@ -488,6 +488,14 @@ export class SimulationEngineService {
       console.log(`🔄 [SYNC] Synchronizing context position with BoardService: (${context.playerPosition?.x}, ${context.playerPosition?.y}) → (${playerFromBoard.position.x}, ${playerFromBoard.position.y})`);
       context.playerPosition = playerFromBoard.position;
       context.currentPosition = playerFromBoard.position;
+
+      // IMPORTANT: Mettre à jour aussi la position dans context.entities
+      if (context.entities) {
+        const playerEntityInContext = context.entities.find(e => e.type === 'player');
+        if (playerEntityInContext) {
+          playerEntityInContext.position = playerFromBoard.position;
+        }
+      }
     }
 
     if (!targetPosition || !casterPosition) {
