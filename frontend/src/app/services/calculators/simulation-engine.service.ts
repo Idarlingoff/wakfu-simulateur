@@ -649,6 +649,8 @@ export class SimulationEngineService {
 
   /**
    * Met à jour les compteurs d'utilisation de sort
+   * Note: Pour usePerTarget, on utilise l'ID de l'entité ciblée (pas la position)
+   * afin que le compteur suive l'entité même si elle se déplace
    */
   private updateSpellUsageCounters(spell: Spell, targetPosition: Position | undefined, context: SimulationContext): void {
     // Initialiser les Maps si nécessaire
@@ -664,9 +666,15 @@ export class SimulationEngineService {
     context.spellUsageThisTurn.set(spell.id, currentUsage + 1);
     console.log(`📊 [USAGE] ${spell.name}: ${currentUsage + 1} utilisation(s) ce tour`);
 
-    // Incrémenter le compteur d'utilisation par cible
+    // Incrémenter le compteur d'utilisation par cible (basé sur l'entité, pas la position)
     if (targetPosition) {
-      const targetKey = `${targetPosition.x},${targetPosition.y}`;
+      // Chercher l'entité à la position cible
+      const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
+
+      // Utiliser l'ID de l'entité si trouvée, sinon fallback sur la position
+      const targetKey = targetEntity
+        ? `entity:${targetEntity.id}`
+        : `pos:${targetPosition.x},${targetPosition.y}`;
 
       if (!context.spellUsagePerTarget.has(spell.id)) {
         context.spellUsagePerTarget.set(spell.id, new Map<string, number>());
@@ -675,7 +683,12 @@ export class SimulationEngineService {
       const spellTargetUsage = context.spellUsagePerTarget.get(spell.id)!;
       const currentTargetUsage = spellTargetUsage.get(targetKey) || 0;
       spellTargetUsage.set(targetKey, currentTargetUsage + 1);
-      console.log(`📊 [USAGE] ${spell.name} sur (${targetPosition.x}, ${targetPosition.y}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
+
+      if (targetEntity) {
+        console.log(`📊 [USAGE] ${spell.name} sur ${targetEntity.name} (${targetEntity.id}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
+      } else {
+        console.log(`📊 [USAGE] ${spell.name} sur position (${targetPosition.x}, ${targetPosition.y}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
+      }
     }
   }
 

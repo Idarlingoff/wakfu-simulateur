@@ -27,12 +27,24 @@ VALUES
     ('XEL_POINTE_HEURE', 'NORMAL'),
     ('XEL_POINTE_HEURE', 'CRIT');
 
+-- Effets variante NORMAL
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-VALUES
-    (1, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":46, "element":"AIR"}'),
-    (1, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}');
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":46, "element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-VALUES
-    (2, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":57, "element":"AIR"}'),
-    (2, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}');
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
+
+-- Effets variante CRIT
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":57, "element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';

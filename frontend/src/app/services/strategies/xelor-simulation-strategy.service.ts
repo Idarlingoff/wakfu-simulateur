@@ -107,6 +107,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       }
     }
 
+    // 🆕 Traiter les effets TELEPORT (Pointe-heure, etc.)
+    if (actionResult.success) {
+      this.processTeleportEffects(spell, action, context, actionResult);
+    }
+
     // Avancer l'heure du cadran selon le PW dépensé (1h par PW)
     // Cela s'applique à TOUS les sorts qui coûtent du PW
     console.log(`[XELOR] 🔍 Checking PW advancement: pwCost=${spell.pwCost}, success=${actionResult.success}, dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
@@ -136,6 +141,319 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     // Ces effets seront résolus immédiatement lors d'un tour de cadran si le passif "Maître du Cadran" est actif
     if (actionResult.success) {
       this.registerSpellDelayedEffects(spell, action, context);
+    }
+  }
+
+  /**
+   * Traite les effets TELEPORT d'un sort (Pointe-heure, etc.)
+   * - Téléporte la cible X cases plus loin (en fonction de la position du lanceur)
+   * - Si la case est occupée -> échange de position
+   * - Regagne 1 PA si un échange a lieu
+   */
+  private processTeleportEffects(
+    spell: Spell,
+    action: TimelineAction,
+    context: SimulationContext,
+    actionResult: SimulationActionResult
+  ): void {
+    // Récupérer la variante appropriée
+    const variant = spell.variants.find(v => v.kind === 'NORMAL');
+    if (!variant) return;
+
+    // Chercher les effets TELEPORT
+    const teleportEffects = variant.effects.filter(e => e.effect === 'TELEPORT');
+    if (teleportEffects.length === 0) return;
+
+    for (const effect of teleportEffects) {
+      // Extraire les paramètres du teleport
+      const cells = effect.extendedData?.cells || 2;
+      const direction = effect.extendedData?.direction || 'BACK';
+
+      console.log(`[XELOR TELEPORT] 🌀 Processing TELEPORT effect: ${cells} cells, direction: ${direction}`);
+
+      // Position du lanceur (joueur)
+      const playerEntity = this.boardService.player();
+      const casterPosition = playerEntity?.position || context.playerPosition;
+      if (!casterPosition) {
+        console.warn(`[XELOR TELEPORT] ⚠️ No caster position found`);
+        continue;
+      }
+
+      // Position de la cible
+      const targetPosition = action.targetPosition;
+      if (!targetPosition) {
+        console.warn(`[XELOR TELEPORT] ⚠️ No target position found`);
+        continue;
+      }
+
+      // Trouver l'entité cible à la position
+      const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
+
+      // Si pas d'entité, vérifier s'il y a un mécanisme à la position cible
+      const targetMechanism = !targetEntity ? this.boardService.getMechanismAtPosition(targetPosition) : null;
+
+      if (!targetEntity && !targetMechanism) {
+        console.warn(`[XELOR TELEPORT] ⚠️ No entity or mechanism found at target position (${targetPosition.x}, ${targetPosition.y})`);
+        continue;
+      }
+
+      if (targetEntity) {
+        console.log(`[XELOR TELEPORT] 🎯 Target entity: ${targetEntity.name} at (${targetPosition.x}, ${targetPosition.y})`);
+      } else if (targetMechanism) {
+        console.log(`[XELOR TELEPORT] 🎯 Target mechanism: ${targetMechanism.type} (${targetMechanism.id}) at (${targetPosition.x}, ${targetPosition.y})`);
+      }
+
+      // Calculer la direction de téléportation (du lanceur vers la cible)
+      const dx = targetPosition.x - casterPosition.x;
+      const dy = targetPosition.y - casterPosition.y;
+
+      // Normaliser la direction
+      let dirX = 0, dirY = 0;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        dirX = dx > 0 ? 1 : -1;
+      } else if (Math.abs(dy) > Math.abs(dx)) {
+        dirY = dy > 0 ? 1 : -1;
+      } else {
+        // Diagonale : on priorise X par convention
+        dirX = dx !== 0 ? (dx > 0 ? 1 : -1) : 0;
+        dirY = dy !== 0 ? (dy > 0 ? 1 : -1) : 0;
+      }
+
+      // Direction BACK signifie "pousser la cible loin du lanceur"
+      // Direction FRONT signifie "tirer la cible vers le lanceur"
+      const pushMultiplier = direction === 'BACK' ? 1 : -1;
+
+      // Calculer la position de destination
+      const destinationPosition: Position = {
+        x: targetPosition.x + (dirX * cells * pushMultiplier),
+        y: targetPosition.y + (dirY * cells * pushMultiplier)
+      };
+
+      console.log(`[XELOR TELEPORT] 📍 Destination calculated: (${destinationPosition.x}, ${destinationPosition.y})`);
+
+      // Vérifier les limites du plateau
+      const state = this.boardService.state();
+      if (destinationPosition.x < 0 || destinationPosition.x >= state.cols ||
+          destinationPosition.y < 0 || destinationPosition.y >= state.rows) {
+        console.warn(`[XELOR TELEPORT] ⚠️ Destination out of bounds: (${destinationPosition.x}, ${destinationPosition.y})`);
+        continue;
+      }
+
+      // Vérifier si la position de destination est occupée par une ENTITÉ
+      const entityAtDestination = this.boardService.getEntityAtPosition(destinationPosition);
+
+      // Vérifier si la position de destination est occupée par un MÉCANISME
+      const mechanismAtDestination = this.boardService.getMechanismAtPosition(destinationPosition);
+
+      console.log(`[XELOR TELEPORT] 🔍 Checking destination (${destinationPosition.x}, ${destinationPosition.y}):`);
+      console.log(`[XELOR TELEPORT]    - Entity: ${entityAtDestination?.name || 'none'}`);
+      console.log(`[XELOR TELEPORT]    - Mechanism: ${mechanismAtDestination?.type || 'none'}`);
+
+      // === CAS 1: La cible est une ENTITÉ ===
+      if (targetEntity) {
+        if (entityAtDestination) {
+          // Échange de position avec une autre entité !
+          console.log(`[XELOR TELEPORT] 🔄 Position occupied by entity ${entityAtDestination.name} - SWAP!`);
+
+          const swapSuccess = this.boardService.swapEntityPositions(targetEntity.id, entityAtDestination.id);
+
+          if (swapSuccess) {
+            console.log(`[XELOR TELEPORT] ✅ Swap successful!`);
+
+            // Regain de 1 PA pour le lanceur
+            this.regenerationService.regeneratePA(
+              context,
+              1,
+              'POINTE_HEURE',
+              'Pointe-heure: +1 PA (échange de position)',
+              { spellId: spell.id, trigger: 'ON_SWAP' }
+            );
+
+            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap bonus)`);
+
+            // Mettre à jour le contexte avec les nouvelles positions
+            this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
+            this.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
+
+            // Mettre à jour playerPosition/currentPosition si nécessaire
+            if (targetEntity.type === 'player') {
+              context.playerPosition = destinationPosition;
+              context.currentPosition = destinationPosition;
+            }
+            if (entityAtDestination.type === 'player') {
+              context.playerPosition = targetPosition;
+              context.currentPosition = targetPosition;
+            }
+
+            // Ajouter les détails de l'échange au résultat
+            if (!actionResult.details) actionResult.details = {};
+            actionResult.details.teleport = {
+              type: 'swap',
+              targetEntity: targetEntity.name,
+              swappedWith: entityAtDestination.name,
+              from: targetPosition,
+              to: destinationPosition,
+              paGained: 1
+            };
+          }
+        } else if (mechanismAtDestination) {
+          // Échange de position avec un mécanisme !
+          console.log(`[XELOR TELEPORT] 🔄 Position occupied by mechanism ${mechanismAtDestination.type} (${mechanismAtDestination.id}) - SWAP!`);
+
+          const swapSuccess = this.boardService.swapEntityWithMechanism(targetEntity.id, mechanismAtDestination.id);
+
+          if (swapSuccess) {
+            console.log(`[XELOR TELEPORT] ✅ Entity/Mechanism swap successful!`);
+
+            // Regain de 1 PA pour le lanceur
+            this.regenerationService.regeneratePA(
+              context,
+              1,
+              'POINTE_HEURE',
+              'Pointe-heure: +1 PA (échange de position avec mécanisme)',
+              { spellId: spell.id, trigger: 'ON_SWAP_MECHANISM' }
+            );
+
+            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap with mechanism bonus)`);
+
+            // Mettre à jour le contexte avec la nouvelle position de l'entité
+            this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
+
+            // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est échangé
+            if (targetEntity.type === 'player') {
+              context.playerPosition = destinationPosition;
+              context.currentPosition = destinationPosition;
+            }
+
+            // Ajouter les détails de l'échange au résultat
+            if (!actionResult.details) actionResult.details = {};
+            actionResult.details.teleport = {
+              type: 'swap_mechanism',
+              targetEntity: targetEntity.name,
+              swappedWith: `${mechanismAtDestination.type} (${mechanismAtDestination.id})`,
+              from: targetPosition,
+              to: destinationPosition,
+              paGained: 1
+            };
+          }
+        } else {
+          // Téléportation simple
+          console.log(`[XELOR TELEPORT] 🌀 Simple teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
+
+          this.boardService.updateEntityPosition(targetEntity.id, destinationPosition);
+
+          // Mettre à jour le contexte avec la nouvelle position de l'entité
+          this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
+
+          // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est téléporté
+          if (targetEntity.type === 'player') {
+            context.playerPosition = destinationPosition;
+            context.currentPosition = destinationPosition;
+          }
+
+          // Ajouter les détails au résultat
+          if (!actionResult.details) actionResult.details = {};
+          actionResult.details.teleport = {
+            type: 'simple',
+            targetEntity: targetEntity.name,
+            from: targetPosition,
+            to: destinationPosition
+          };
+
+          console.log(`[XELOR TELEPORT] ✅ Teleport successful!`);
+        }
+      }
+      // === CAS 2: La cible est un MÉCANISME ===
+      else if (targetMechanism) {
+        if (entityAtDestination) {
+          // Échange mécanisme <-> entité
+          console.log(`[XELOR TELEPORT] 🔄 Mechanism target, destination occupied by entity ${entityAtDestination.name} - SWAP!`);
+
+          const swapSuccess = this.boardService.swapEntityWithMechanism(entityAtDestination.id, targetMechanism.id);
+
+          if (swapSuccess) {
+            console.log(`[XELOR TELEPORT] ✅ Mechanism/Entity swap successful!`);
+
+            // Regain de 1 PA pour le lanceur
+            this.regenerationService.regeneratePA(
+              context,
+              1,
+              'POINTE_HEURE',
+              'Pointe-heure: +1 PA (échange mécanisme avec entité)',
+              { spellId: spell.id, trigger: 'ON_SWAP_MECHANISM' }
+            );
+
+            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
+
+            // Mettre à jour le contexte avec la nouvelle position de l'entité
+            this.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
+
+            // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est échangé
+            if (entityAtDestination.type === 'player') {
+              context.playerPosition = targetPosition;
+              context.currentPosition = targetPosition;
+            }
+
+            // Ajouter les détails de l'échange au résultat
+            if (!actionResult.details) actionResult.details = {};
+            actionResult.details.teleport = {
+              type: 'swap_mechanism',
+              targetMechanism: `${targetMechanism.type} (${targetMechanism.id})`,
+              swappedWith: entityAtDestination.name,
+              from: targetPosition,
+              to: destinationPosition,
+              paGained: 1
+            };
+          }
+        } else if (mechanismAtDestination) {
+          // Échange mécanisme <-> mécanisme
+          console.log(`[XELOR TELEPORT] 🔄 Mechanism target, destination occupied by mechanism ${mechanismAtDestination.type} - SWAP!`);
+
+          const swapSuccess = this.boardService.swapMechanismPositions(targetMechanism.id, mechanismAtDestination.id);
+
+          if (swapSuccess) {
+            console.log(`[XELOR TELEPORT] ✅ Mechanism/Mechanism swap successful!`);
+
+            // Regain de 1 PA pour le lanceur
+            this.regenerationService.regeneratePA(
+              context,
+              1,
+              'POINTE_HEURE',
+              'Pointe-heure: +1 PA (échange de mécanismes)',
+              { spellId: spell.id, trigger: 'ON_SWAP_MECHANISM' }
+            );
+
+            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
+
+            // Ajouter les détails de l'échange au résultat
+            if (!actionResult.details) actionResult.details = {};
+            actionResult.details.teleport = {
+              type: 'swap_mechanisms',
+              targetMechanism: `${targetMechanism.type} (${targetMechanism.id})`,
+              swappedWith: `${mechanismAtDestination.type} (${mechanismAtDestination.id})`,
+              from: targetPosition,
+              to: destinationPosition,
+              paGained: 1
+            };
+          }
+        } else {
+          // Téléportation simple du mécanisme
+          console.log(`[XELOR TELEPORT] 🌀 Simple mechanism teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
+
+          this.boardService.updateMechanismPosition(targetMechanism.id, destinationPosition);
+
+          // Ajouter les détails au résultat
+          if (!actionResult.details) actionResult.details = {};
+          actionResult.details.teleport = {
+            type: 'simple_mechanism',
+            targetMechanism: `${targetMechanism.type} (${targetMechanism.id})`,
+            from: targetPosition,
+            to: destinationPosition
+          };
+
+          console.log(`[XELOR TELEPORT] ✅ Mechanism teleport successful!`);
+        }
+      }
     }
   }
 
@@ -1428,6 +1746,30 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     // Les mécanismes n'ont pas de résistance, les dégâts sont appliqués directement
     // TODO: Vérifier si certains passifs modifient les dégâts sur les mécanismes
     return baseDamage;
+  }
+
+  /**
+   * Met à jour la position d'une entité dans le contexte de simulation (context.entities)
+   * Cette méthode est importante pour maintenir la cohérence entre BoardService et le contexte
+   *
+   * @param context Le contexte de simulation
+   * @param entityId L'ID de l'entité à mettre à jour
+   * @param newPosition La nouvelle position
+   */
+  private updateEntityPositionInContext(context: SimulationContext, entityId: string, newPosition: Position): void {
+    if (!context.entities) {
+      console.warn(`[XELOR] ⚠️ context.entities is undefined, cannot update position for entity ${entityId}`);
+      return;
+    }
+
+    const entityInContext = context.entities.find(e => e.id === entityId);
+    if (entityInContext) {
+      const oldPosition = entityInContext.position;
+      entityInContext.position = { ...newPosition };
+      console.log(`[XELOR] 📍 Updated entity ${entityId} position in context: (${oldPosition.x}, ${oldPosition.y}) → (${newPosition.x}, ${newPosition.y})`);
+    } else {
+      console.warn(`[XELOR] ⚠️ Entity ${entityId} not found in context.entities`);
+    }
   }
 
   /**

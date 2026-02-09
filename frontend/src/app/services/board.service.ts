@@ -148,6 +148,136 @@ export class BoardService {
     return this.boardState().entities.find(e => e.id === entityId);
   }
 
+  /**
+   * Récupère l'entité à une position donnée (s'il y en a une)
+   * @param position La position à vérifier
+   * @returns L'entité à cette position ou undefined
+   */
+  public getEntityAtPosition(position: Position): BoardEntity | undefined {
+    return this.boardState().entities.find(e =>
+      e.position.x === position.x && e.position.y === position.y
+    );
+  }
+
+  /**
+   * Récupère le mécanisme à une position donnée (s'il y en a un)
+   * @param position La position à vérifier
+   * @returns Le mécanisme à cette position ou undefined
+   */
+  public getMechanismAtPosition(position: Position): Mechanism | undefined {
+    return this.boardState().mechanisms.find(m =>
+      m.position.x === position.x && m.position.y === position.y
+    );
+  }
+
+  /**
+   * Échange la position d'une entité avec celle d'un mécanisme
+   * @param entityId ID de l'entité
+   * @param mechanismId ID du mécanisme
+   * @returns true si l'échange a réussi
+   */
+  public swapEntityWithMechanism(entityId: string, mechanismId: string): boolean {
+    const entity = this.getEntity(entityId);
+    const mechanism = this.getMechanism(mechanismId);
+
+    if (!entity || !mechanism) {
+      console.error(`[BoardService] Cannot swap: entity or mechanism not found (entity: ${entityId}, mechanism: ${mechanismId})`);
+      return false;
+    }
+
+    const entityPos = { ...entity.position };
+    const mechanismPos = { ...mechanism.position };
+
+    console.log(`[BoardService] 🔄 Swapping entity/mechanism: ${entity.name} (${entityPos.x}, ${entityPos.y}) <-> ${mechanism.type} (${mechanismPos.x}, ${mechanismPos.y})`);
+
+    this.boardState.update(state => ({
+      ...state,
+      entities: state.entities.map(e =>
+        e.id === entityId ? { ...e, position: mechanismPos } : e
+      ),
+      mechanisms: state.mechanisms.map(m =>
+        m.id === mechanismId ? { ...m, position: entityPos } : m
+      )
+    }));
+
+    console.log(`[BoardService] ✅ Entity/Mechanism swap successful`);
+    return true;
+  }
+
+  /**
+   * Échange les positions de deux entités
+   * @param entityId1 ID de la première entité
+   * @param entityId2 ID de la deuxième entité
+   * @returns true si l'échange a réussi
+   */
+  public swapEntityPositions(entityId1: string, entityId2: string): boolean {
+    const entity1 = this.getEntity(entityId1);
+    const entity2 = this.getEntity(entityId2);
+
+    if (!entity1 || !entity2) {
+      console.error(`[BoardService] Cannot swap positions: entity not found (${entityId1} or ${entityId2})`);
+      return false;
+    }
+
+    const pos1 = { ...entity1.position };
+    const pos2 = { ...entity2.position };
+
+    console.log(`[BoardService] 🔄 Swapping positions: ${entity1.name} (${pos1.x}, ${pos1.y}) <-> ${entity2.name} (${pos2.x}, ${pos2.y})`);
+
+    this.boardState.update(state => ({
+      ...state,
+      entities: state.entities.map(e => {
+        if (e.id === entityId1) {
+          return { ...e, position: pos2 };
+        }
+        if (e.id === entityId2) {
+          return { ...e, position: pos1 };
+        }
+        return e;
+      })
+    }));
+
+    console.log(`[BoardService] ✅ Positions swapped successfully`);
+    return true;
+  }
+
+  /**
+   * Échange les positions de deux mécanismes
+   * @param mechanismId1 ID du premier mécanisme
+   * @param mechanismId2 ID du deuxième mécanisme
+   * @returns true si l'échange a réussi
+   */
+  public swapMechanismPositions(mechanismId1: string, mechanismId2: string): boolean {
+    const mechanism1 = this.getMechanism(mechanismId1);
+    const mechanism2 = this.getMechanism(mechanismId2);
+
+    if (!mechanism1 || !mechanism2) {
+      console.error(`[BoardService] Cannot swap mechanism positions: mechanism not found (${mechanismId1} or ${mechanismId2})`);
+      return false;
+    }
+
+    const pos1 = { ...mechanism1.position };
+    const pos2 = { ...mechanism2.position };
+
+    console.log(`[BoardService] 🔄 Swapping mechanism positions: ${mechanism1.type} (${pos1.x}, ${pos1.y}) <-> ${mechanism2.type} (${pos2.x}, ${pos2.y})`);
+
+    this.boardState.update(state => ({
+      ...state,
+      mechanisms: state.mechanisms.map(m => {
+        if (m.id === mechanismId1) {
+          return { ...m, position: pos2 };
+        }
+        if (m.id === mechanismId2) {
+          return { ...m, position: pos1 };
+        }
+        return m;
+      })
+    }));
+
+    console.log(`[BoardService] ✅ Mechanism positions swapped successfully`);
+    return true;
+  }
+
   // ============ Positioning ============
 
   public updateEntityPosition(entityId: string, position: Position): void {

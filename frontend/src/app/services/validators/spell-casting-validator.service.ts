@@ -7,10 +7,11 @@
  * - Vérification de la zone de lancement (ligne droite, croix, allié, etc.)
  */
 
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Spell } from '../../models/spell.model';
 import { Position } from '../../models/timeline.model';
 import { SimulationContext } from '../calculators/simulation-engine.service';
+import { BoardService } from '../board.service';
 
 export interface SpellCastValidationResult {
   canCast: boolean;
@@ -29,6 +30,7 @@ export interface SpellCastValidationResult {
   providedIn: 'root'
 })
 export class SpellCastingValidatorService {
+  private readonly boardService = inject(BoardService);
 
   /**
    * Valide si un sort peut être lancé dans les conditions actuelles
