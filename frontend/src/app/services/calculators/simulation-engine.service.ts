@@ -93,6 +93,10 @@ export interface SimulationContext {
   // Effets différés pour le passif "Maître du Cadran"
   // Ces effets sont joués lors d'un tour de cadran (hour wrap)
   delayedEffects?: DelayedEffect[];
+
+  // Compteur de mécanismes posés ce tour (type -> nombre de poses)
+  // Utilisé pour les restrictions comme "1 cadran par tour max"
+  mechanismsPlacedThisTurn?: Map<string, number>;
 }
 
 export interface SimulationActionResult {
@@ -221,7 +225,9 @@ export class SimulationEngineService {
       activePassiveIds: activePassiveIds,
       // Compteurs d'utilisation de sorts (réinitialisés chaque tour)
       spellUsageThisTurn: new Map<string, number>(),
-      spellUsagePerTarget: new Map<string, Map<string, number>>()
+      spellUsagePerTarget: new Map<string, Map<string, number>>(),
+      // Compteur de mécanismes posés ce tour (réinitialisé chaque tour)
+      mechanismsPlacedThisTurn: new Map<string, number>()
     };
 
     if (this.currentClassStrategy) {

@@ -36,6 +36,18 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   ): ClassValidationResult {
     const mechanismType = getSpellMechanismType(spell.id);
 
+    // Validation: 1 cadran par tour maximum
+    if (mechanismType === 'dial') {
+      const dialsPlacedThisTurn = context.mechanismsPlacedThisTurn?.get('dial') || 0;
+      if (dialsPlacedThisTurn >= 1) {
+        console.log(`[XELOR] ❌ Cadran déjà posé ce tour (${dialsPlacedThisTurn}/1)`);
+        return {
+          canCast: false,
+          reason: 'Un seul Cadran peut être posé par tour'
+        };
+      }
+    }
+
     // Validation spécifique pour le Régulateur
     if (mechanismType === 'regulateur') {
       // Le régulateur ne peut être posé QUE sur les cases heures du cadran
@@ -467,6 +479,14 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     // Ajouter le mécanisme au plateau via le BoardService
     this.boardService.addMechanism(mechanism);
+
+    // Incrémenter le compteur de mécanismes posés ce tour
+    if (!context.mechanismsPlacedThisTurn) {
+      context.mechanismsPlacedThisTurn = new Map<string, number>();
+    }
+    const currentCount = context.mechanismsPlacedThisTurn.get(mechanismType) || 0;
+    context.mechanismsPlacedThisTurn.set(mechanismType, currentCount + 1);
+    console.log(`[XELOR] 📊 ${mechanismType} posé ce tour: ${currentCount + 1}`);
 
     console.log(`[XELOR] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
 

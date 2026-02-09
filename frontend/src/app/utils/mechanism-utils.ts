@@ -19,11 +19,7 @@ export function getSpellMechanismType(spellId: string): 'cog' | 'sinistro' | 'di
 
   // Cadran - dial (ATTENTION: le sort pourrait avoir différents noms)
   if (spellIdLower.includes('cadran') ||
-      spellIdLower.includes('dial') ||  // ✅ Corrigé: includes au lieu de ===
-      spellIdLower.includes('clock') ||
-      spellIdLower.includes('horloge') ||
-      spellIdLower.includes('frappes') || // "Frappes de l'heure" pose un cadran
-      spellIdLower.includes('heure')) {
+      spellIdLower.includes('dial')) {
     console.log('  ✅ Détecté comme CADRAN (dial)');
     return 'dial';
   }
