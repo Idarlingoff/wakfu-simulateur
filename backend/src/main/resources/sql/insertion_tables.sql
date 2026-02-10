@@ -1383,3 +1383,4 @@ INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, targe
 VALUES
     ('XEL_REMANENCE','ON_PASSIVE_EQUIPPED',2,'INCREASE_MECHANISM_LIMIT','SELF',
      '{"kind":"ROUAGE","delta":1}');
+

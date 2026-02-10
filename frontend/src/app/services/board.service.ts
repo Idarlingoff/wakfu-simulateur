@@ -190,15 +190,22 @@ export class BoardService {
 
     console.log(`[BoardService] 🔄 Swapping entity/mechanism: ${entity.name} (${entityPos.x}, ${entityPos.y}) <-> ${mechanism.type} (${mechanismPos.x}, ${mechanismPos.y})`);
 
-    this.boardState.update(state => ({
-      ...state,
-      entities: state.entities.map(e =>
-        e.id === entityId ? { ...e, position: mechanismPos } : e
-      ),
-      mechanisms: state.mechanisms.map(m =>
-        m.id === mechanismId ? { ...m, position: entityPos } : m
-      )
-    }));
+    this.boardState.update(state => {
+      console.log(`[BoardService] 📍 BEFORE UPDATE - mechanisms:`, state.mechanisms.map(m => ({ id: m.id, type: m.type, pos: m.position })));
+
+      const newState = {
+        ...state,
+        entities: state.entities.map(e =>
+          e.id === entityId ? { ...e, position: mechanismPos } : e
+        ),
+        mechanisms: state.mechanisms.map(m =>
+          m.id === mechanismId ? { ...m, position: entityPos } : m
+        )
+      };
+
+      console.log(`[BoardService] 📍 AFTER UPDATE - mechanisms:`, newState.mechanisms.map(m => ({ id: m.id, type: m.type, pos: m.position })));
+      return newState;
+    });
 
     console.log(`[BoardService] ✅ Entity/Mechanism swap successful`);
     return true;

@@ -308,6 +308,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Entity/Mechanism swap successful!`);
 
+            // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
+            if (mechanismAtDestination.type === 'dial') {
+              this.updateDialHoursAfterSwap(mechanismAtDestination.id, context);
+            }
+
             // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
@@ -380,6 +385,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Mechanism/Entity swap successful!`);
 
+            // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
+            if (targetMechanism.type === 'dial') {
+              this.updateDialHoursAfterSwap(targetMechanism.id, context);
+            }
+
             // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
@@ -423,6 +433,14 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Mechanism/Mechanism swap successful!`);
 
+            // 🆕 Si l'un des mécanismes est un cadran, mettre à jour les heures
+            if (targetMechanism.type === 'dial') {
+              this.updateDialHoursAfterSwap(targetMechanism.id, context);
+            }
+            if (mechanismAtDestination.type === 'dial') {
+              this.updateDialHoursAfterSwap(mechanismAtDestination.id, context);
+            }
+
             // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
@@ -453,6 +471,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
           console.log(`[XELOR TELEPORT] 🌀 Simple mechanism teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
 
           this.boardService.updateMechanismPosition(targetMechanism.id, destinationPosition);
+
+          // 🆕 Si le mécanisme est un cadran, mettre à jour les heures après la téléportation
+          if (targetMechanism.type === 'dial') {
+            this.updateDialHoursAfterSwap(targetMechanism.id, context);
+          }
 
           // Ajouter les détails au résultat
           if (!actionResult.details) actionResult.details = {};
@@ -820,13 +843,29 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     console.log(`[XELOR] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
+    // 🆕 Appliquer le passif "Mécanisme spécialisé" : échange de position avec le mécanisme
+    // IMPORTANT: Pour le cadran, le swap doit se faire APRÈS la téléportation sur l'heure 6
+    // Pour les autres mécanismes (rouage, sinistro, régulateur), le swap se fait immédiatement
+    if (mechanismType !== 'dial') {
+      this.applyMecanismeSpecialiseSwap(mechanismType, mechanism.id, action.targetPosition, context);
+    }
+
     // Si c'est un cadran, créer les 12 heures autour et téléporter le joueur sur l'heure 6
     if (mechanismType === 'dial') {
       const playerEntity = this.boardService.player();
-      const playerPosition = playerEntity?.position || context.playerPosition || { x: 6, y: 6 };
+      // 🔧 Sauvegarder la position ORIGINALE du joueur avant toute manipulation
+      // Cette position sera utilisée pour calculer l'orientation du cadran (même après swap)
+      const originalPlayerPosition = playerEntity?.position
+        ? { x: playerEntity.position.x, y: playerEntity.position.y }
+        : context.playerPosition
+          ? { x: context.playerPosition.x, y: context.playerPosition.y }
+          : { x: 6, y: 6 };
 
-      // Créer les 12 heures autour du cadran
-      this.createDialHours(mechanism.id, action.targetPosition, playerPosition);
+      console.log(`[XELOR DIAL] 📍 Original player position (for dial orientation): (${originalPlayerPosition.x}, ${originalPlayerPosition.y})`);
+      console.log(`[XELOR DIAL] 📍 Dial target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+      // Créer les 12 heures autour du cadran (position initiale de pose)
+      this.createDialHours(mechanism.id, action.targetPosition, originalPlayerPosition);
 
       // Définir l'heure courante à 12 dans le BoardService
       this.boardService.setCurrentDialHour(12, mechanism.id);
@@ -836,23 +875,22 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       if (teleported) {
         console.log(`[XELOR] 🌀 Player automatically teleported to hour 6`);
 
-        // Mettre à jour le contexte avec la nouvelle position du joueur (heure 6, PAS 12)
-        const newPosition = this.boardService.getDialHourPosition(6, mechanism.id);
-        if (newPosition) {
-          context.playerPosition = newPosition;
-          context.currentPosition = newPosition;
+        // Mettre à jour le contexte avec la nouvelle position du joueur (heure 6)
+        const hour6Position = this.boardService.getDialHourPosition(6, mechanism.id);
+        if (hour6Position) {
+          context.playerPosition = hour6Position;
+          context.currentPosition = hour6Position;
 
           // IMPORTANT: Mettre à jour aussi la position dans context.entities
-          // sinon le joueur "fantôme" à l'ancienne position bloquera la ligne de vue
           if (context.entities) {
             const playerEntityInContext = context.entities.find(e => e.type === 'player');
             if (playerEntityInContext) {
-              playerEntityInContext.position = newPosition;
-              console.log(`[XELOR] 📍 Player entity in context.entities also updated to (${newPosition.x}, ${newPosition.y})`);
+              playerEntityInContext.position = hour6Position;
+              console.log(`[XELOR] 📍 Player entity in context.entities also updated to (${hour6Position.x}, ${hour6Position.y})`);
             }
           }
 
-          console.log(`[XELOR] 📍 Context updated with new player position: (${newPosition.x}, ${newPosition.y})`);
+          console.log(`[XELOR] 📍 Context updated with new player position: (${hour6Position.x}, ${hour6Position.y})`);
         }
       }
 
@@ -860,6 +898,26 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       context.currentDialHour = 12;
       context.dialId = mechanism.id;
       context.dialFirstLoopCompleted = false; // Cadran fraîchement posé
+
+      // 🆕 MAINTENANT appliquer le passif "Mécanisme spécialisé" pour le cadran
+      // Le joueur est sur l'heure 6, on échange avec le cadran (au centre)
+      // Le joueur va au centre, le cadran va à l'heure 6
+      const swapApplied = this.applyMecanismeSpecialiseSwapForDial(mechanism.id, context);
+
+      // Si le swap a été appliqué, translater les heures vers la NOUVELLE position du cadran
+      if (swapApplied) {
+        const updatedMechanism = this.boardService.getMechanism(mechanism.id);
+
+        if (updatedMechanism) {
+          console.log(`[XELOR] 🔄 Swap applied - translating dial hours to new dial position: (${updatedMechanism.position.x}, ${updatedMechanism.position.y})`);
+
+          // 🔧 Utiliser updateDialHoursAfterSwap pour une simple translation
+          // Les heures gardent leur orientation originale et sont juste déplacées
+          this.updateDialHoursAfterSwap(mechanism.id, context);
+
+          console.log(`[XELOR] ✅ Dial hours translated to new position (orientation preserved)`);
+        }
+      }
     }
 
     return {
@@ -1220,6 +1278,16 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     'flow_of_time'
   ];
 
+  /** Liste des IDs possibles pour le passif Mécanisme spécialisé */
+  private static readonly MECANISME_SPECIALISE_IDS = [
+    'mecanisme_specialise',
+    'XEL_MECANISME_SPECIALISE',
+    'XEL_MECANISMES_SPECIALISES',  // Variante avec S au pluriel
+    'mecanisme-specialise',
+    'mecanismespe',
+    'specialized_mechanism'
+  ];
+
   /**
    * Vérifie si le passif "Maître du Cadran" est actif
    * Ce passif permet de résoudre les effets différés lors d'un tour de cadran
@@ -1263,6 +1331,217 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     return XelorSimulationStrategy.COURS_DU_TEMPS_IDS.some(id =>
       passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
     );
+  }
+
+  /**
+   * Vérifie si le passif "Mécanisme spécialisé" est actif
+   * Ce passif :
+   * - À l'invocation d'un Rouage, Sinistro, Cadran ou Régulateur :
+   *   - Échange immédiatement de position avec (6 cases max)
+   */
+  private hasMecanismeSpecialisePassive(context: SimulationContext): boolean {
+    const passiveIds = context.activePassiveIds || [];
+    return XelorSimulationStrategy.MECANISME_SPECIALISE_IDS.some(id =>
+      passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
+    );
+  }
+
+  /**
+   * Applique l'effet du passif "Mécanisme spécialisé"
+   * Échange immédiatement de position avec le mécanisme invoqué si la distance est <= 6 cases
+   *
+   * @param mechanismType Type de mécanisme invoqué ('cog', 'sinistro', 'dial', 'regulateur')
+   * @param mechanismId ID du mécanisme invoqué
+   * @param mechanismPosition Position du mécanisme invoqué
+   * @param context Contexte de simulation
+   */
+  private applyMecanismeSpecialiseSwap(
+    mechanismType: string,
+    mechanismId: string,
+    _mechanismPosition: Position, // Position initiale, ignorée - on récupère la position actuelle du BoardService
+    context: SimulationContext
+  ): void {
+    // Vérifier si le passif est actif
+    if (!this.hasMecanismeSpecialisePassive(context)) {
+      return;
+    }
+
+    // Vérifier si le type de mécanisme est concerné (Rouage, Sinistro, Cadran, Régulateur)
+    const eligibleTypes = ['cog', 'sinistro', 'dial', 'regulateur'];
+    if (!eligibleTypes.includes(mechanismType)) {
+      return;
+    }
+
+    console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Passive active - checking swap conditions for ${mechanismType}`);
+
+    // Récupérer la position ACTUELLE du mécanisme depuis le BoardService
+    const mechanism = this.boardService.getMechanism(mechanismId);
+    if (!mechanism) {
+      console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Mechanism not found - cannot swap`);
+      return;
+    }
+    const actualMechanismPosition = mechanism.position;
+
+    // Récupérer la position actuelle du joueur depuis le BoardService
+    const playerEntity = this.boardService.player();
+    const playerPosition = playerEntity?.position;
+
+    if (!playerPosition) {
+      console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Player position not found - cannot swap`);
+      return;
+    }
+
+    // Calculer la distance entre le joueur et le mécanisme
+    const distance = Math.abs(actualMechanismPosition.x - playerPosition.x) +
+                     Math.abs(actualMechanismPosition.y - playerPosition.y);
+
+    console.log(`[XELOR MECANISME_SPECIALISE] 📏 Distance: ${distance} cases (max: 6)`);
+    console.log(`[XELOR MECANISME_SPECIALISE]    Player: (${playerPosition.x}, ${playerPosition.y})`);
+    console.log(`[XELOR MECANISME_SPECIALISE]    Mechanism: (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
+
+    // Vérifier si la distance est <= 6 cases
+    if (distance > 6) {
+      console.log(`[XELOR MECANISME_SPECIALISE] ❌ Distance too large (${distance} > 6) - no swap`);
+      return;
+    }
+
+    // Effectuer l'échange de position
+    console.log(`[XELOR MECANISME_SPECIALISE] 🔄 Swapping player with mechanism ${mechanismType} (${mechanismId})`);
+
+    // S'assurer d'avoir l'ID correct du joueur
+    const playerId = playerEntity?.id;
+    if (!playerId) {
+      console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Player entity ID not found - cannot swap`);
+      return;
+    }
+
+    console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Player ID: ${playerId}, Mechanism ID: ${mechanismId}`);
+    console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Mechanism current position: (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
+
+    const swapSuccess = this.boardService.swapEntityWithMechanism(playerId, mechanismId);
+
+    if (swapSuccess) {
+      console.log(`[XELOR MECANISME_SPECIALISE] ✅ Swap successful!`);
+
+      // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
+      if (mechanismType === 'dial') {
+        this.updateDialHoursAfterSwap(mechanismId, context);
+      }
+
+      // 🔍 Vérifier que le mécanisme a bien bougé
+      const mechanismAfterSwap = this.boardService.getMechanism(mechanismId);
+      console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Mechanism position AFTER swap: (${mechanismAfterSwap?.position.x}, ${mechanismAfterSwap?.position.y})`);
+      console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Expected mechanism position: (${playerPosition.x}, ${playerPosition.y})`);
+
+      // 🔍 Vérifier que le joueur a bien bougé
+      const playerAfterSwap = this.boardService.player();
+      console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Player position AFTER swap: (${playerAfterSwap?.position.x}, ${playerAfterSwap?.position.y})`);
+      console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Expected player position: (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
+
+      // Mettre à jour le contexte avec la nouvelle position du joueur (= ancienne position du mécanisme)
+      context.playerPosition = actualMechanismPosition;
+      context.currentPosition = actualMechanismPosition;
+
+      // Mettre à jour aussi la position dans context.entities si nécessaire
+      if (context.entities) {
+        const playerEntityInContext = context.entities.find(e => e.type === 'player');
+        if (playerEntityInContext) {
+          playerEntityInContext.position = actualMechanismPosition;
+          console.log(`[XELOR MECANISME_SPECIALISE] 📍 Player entity in context.entities updated`);
+        }
+      }
+
+      // 🆕 Appliquer le passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
+      this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_swap');
+
+      console.log(`[XELOR MECANISME_SPECIALISE] 📍 Player now at (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
+      console.log(`[XELOR MECANISME_SPECIALISE] 📍 Mechanism now at (${playerPosition.x}, ${playerPosition.y})`);
+    } else {
+      console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Swap failed`);
+    }
+  }
+
+  /**
+   * Applique l'effet du passif "Mécanisme spécialisé" pour le cadran spécifiquement
+   * Retourne true si le swap a été effectué, false sinon
+   *
+   * @param mechanismId ID du cadran
+   * @param context Contexte de simulation
+   * @returns true si le swap a été effectué
+   */
+  private applyMecanismeSpecialiseSwapForDial(
+    mechanismId: string,
+    context: SimulationContext
+  ): boolean {
+    // Vérifier si le passif est actif
+    if (!this.hasMecanismeSpecialisePassive(context)) {
+      console.log(`[XELOR MECANISME_SPECIALISE_DIAL] Passive not active - no swap`);
+      return false;
+    }
+
+    console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 🔍 Passive active - applying swap for dial`);
+
+    // Récupérer la position ACTUELLE du mécanisme (cadran) depuis le BoardService
+    const mechanism = this.boardService.getMechanism(mechanismId);
+    if (!mechanism) {
+      console.warn(`[XELOR MECANISME_SPECIALISE_DIAL] ⚠️ Mechanism not found - cannot swap`);
+      return false;
+    }
+    const dialPosition = mechanism.position;
+
+    // Récupérer la position actuelle du joueur (sur l'heure 6 après téléportation)
+    const playerEntity = this.boardService.player();
+    if (!playerEntity?.position || !playerEntity?.id) {
+      console.warn(`[XELOR MECANISME_SPECIALISE_DIAL] ⚠️ Player not found - cannot swap`);
+      return false;
+    }
+    const playerPosition = playerEntity.position;
+
+    // Calculer la distance entre le joueur et le cadran
+    const distance = Math.abs(dialPosition.x - playerPosition.x) +
+                     Math.abs(dialPosition.y - playerPosition.y);
+
+    console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 📏 Distance: ${distance} cases (max: 6)`);
+    console.log(`[XELOR MECANISME_SPECIALISE_DIAL]    Player (hour 6): (${playerPosition.x}, ${playerPosition.y})`);
+    console.log(`[XELOR MECANISME_SPECIALISE_DIAL]    Dial (center): (${dialPosition.x}, ${dialPosition.y})`);
+
+    // Vérifier si la distance est <= 6 cases
+    if (distance > 6) {
+      console.log(`[XELOR MECANISME_SPECIALISE_DIAL] ❌ Distance too large (${distance} > 6) - no swap`);
+      return false;
+    }
+
+    // Effectuer l'échange de position
+    console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 🔄 Swapping player with dial (${mechanismId})`);
+
+    const swapSuccess = this.boardService.swapEntityWithMechanism(playerEntity.id, mechanismId);
+
+    if (swapSuccess) {
+      console.log(`[XELOR MECANISME_SPECIALISE_DIAL] ✅ Swap successful!`);
+
+      // Mettre à jour le contexte avec la nouvelle position du joueur (= ancienne position du cadran = centre)
+      context.playerPosition = dialPosition;
+      context.currentPosition = dialPosition;
+
+      // Mettre à jour aussi la position dans context.entities
+      if (context.entities) {
+        const playerEntityInContext = context.entities.find(e => e.type === 'player');
+        if (playerEntityInContext) {
+          playerEntityInContext.position = dialPosition;
+        }
+      }
+
+      // Appliquer le passif "Cours du temps"
+      this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_dial_swap');
+
+      console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 📍 Player now at dial center: (${dialPosition.x}, ${dialPosition.y})`);
+      console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 📍 Dial now at hour 6 position: (${playerPosition.x}, ${playerPosition.y})`);
+
+      return true;
+    } else {
+      console.warn(`[XELOR MECANISME_SPECIALISE_DIAL] ⚠️ Swap failed`);
+      return false;
+    }
   }
 
   /**
@@ -1708,6 +1987,93 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    */
   public isMaitreDuCadranActive(context: SimulationContext): boolean {
     return this.hasMaitreDuCadranPassive(context);
+  }
+
+  /**
+   * Met à jour les heures du cadran après un swap de position
+   * Les heures sont simplement translatées en fonction du déplacement du cadran
+   * (ancienne position du cadran -> nouvelle position du cadran)
+   *
+   * @param dialId ID du cadran
+   * @param context Contexte de simulation (non utilisé mais conservé pour compatibilité)
+   */
+  private updateDialHoursAfterSwap(dialId: string, context?: SimulationContext): void {
+    const dial = this.boardService.getMechanism(dialId);
+    if (!dial || dial.type !== 'dial') {
+      console.warn(`[XELOR DIAL] ⚠️ Cannot update dial hours: dial not found (${dialId})`);
+      return;
+    }
+
+    const newDialPosition = dial.position;
+    console.log(`[XELOR DIAL] 🔄 Updating dial hours after swap - new dial position: (${newDialPosition.x}, ${newDialPosition.y})`);
+
+    // Récupérer les heures existantes (copie profonde pour éviter les problèmes de références)
+    const existingHours = this.boardService.getDialHours(dialId).map(h => ({
+      hour: h.hour,
+      position: { x: h.position.x, y: h.position.y }
+    }));
+    if (existingHours.length === 0) {
+      console.warn(`[XELOR DIAL] ⚠️ No existing hours found for dial ${dialId}`);
+      return;
+    }
+
+    // Trouver l'heure 6 et l'heure 12 pour calculer l'ancien centre du cadran
+    const hour12 = existingHours.find(h => h.hour === 12);
+    const hour6 = existingHours.find(h => h.hour === 6);
+    if (!hour12 || !hour6) {
+      console.warn(`[XELOR DIAL] ⚠️ Hour 12 or Hour 6 not found - cannot determine old center position`);
+      return;
+    }
+
+    // L'ancien centre était entre l'heure 12 et l'heure 6
+    const oldCenterX = Math.round((hour12.position.x + hour6.position.x) / 2);
+    const oldCenterY = Math.round((hour12.position.y + hour6.position.y) / 2);
+
+    // Calculer le vecteur de translation (ancienne position -> nouvelle position)
+    const translationX = newDialPosition.x - oldCenterX;
+    const translationY = newDialPosition.y - oldCenterY;
+
+    console.log(`[XELOR DIAL] 📍 Old center: (${oldCenterX}, ${oldCenterY})`);
+    console.log(`[XELOR DIAL] 📍 New center (dial position): (${newDialPosition.x}, ${newDialPosition.y})`);
+    console.log(`[XELOR DIAL] 📍 Hour 12 was at: (${hour12.position.x}, ${hour12.position.y})`);
+    console.log(`[XELOR DIAL] 📍 Hour 6 was at: (${hour6.position.x}, ${hour6.position.y})`);
+    console.log(`[XELOR DIAL] 📍 Translation vector: (${translationX}, ${translationY})`);
+
+    // Log toutes les heures pour diagnostic
+    console.log(`[XELOR DIAL] 📋 All existing hours BEFORE translation:`);
+    existingHours.forEach(h => {
+      console.log(`[XELOR DIAL]   Hour ${h.hour}: (${h.position.x}, ${h.position.y})`);
+    });
+
+    // Supprimer les anciennes heures
+    this.boardService.removeDialHoursForDial(dialId);
+
+    // Recréer les heures avec la translation appliquée
+    let hoursCreated = 0;
+    existingHours.forEach(oldHour => {
+      const newHourPosition: Position = {
+        x: oldHour.position.x + translationX,
+        y: oldHour.position.y + translationY
+      };
+
+      // Vérifier que la position est dans les limites du plateau (13x13)
+      if (newHourPosition.x >= 0 && newHourPosition.x < 13 && newHourPosition.y >= 0 && newHourPosition.y < 13) {
+        const dialHour = {
+          id: `dial_hour_${oldHour.hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          dialId: dialId,
+          hour: oldHour.hour,
+          position: newHourPosition
+        };
+
+        this.boardService.addDialHour(dialHour);
+        hoursCreated++;
+        console.log(`[XELOR DIAL] Hour ${oldHour.hour}: (${oldHour.position.x}, ${oldHour.position.y}) -> (${newHourPosition.x}, ${newHourPosition.y})`);
+      } else {
+        console.warn(`[XELOR DIAL] Hour ${oldHour.hour} skipped - out of bounds: (${newHourPosition.x}, ${newHourPosition.y})`);
+      }
+    });
+
+    console.log(`[XELOR DIAL] ✅ Dial hours updated after swap (${hoursCreated}/${existingHours.length} hours translated)`);
   }
 
   /**

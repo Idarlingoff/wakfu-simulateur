@@ -1252,6 +1252,24 @@ export class BoardComponent {
       console.log(`🎯 Type de mécanisme détecté: ${mechanismType || 'aucun'}`);
 
       if (mechanismType && action.targetPosition) {
+        // 🆕 Vérifier si un mécanisme de ce type existe déjà sur le plateau
+        // La stratégie de classe (XelorSimulationStrategy) a déjà créé le mécanisme
+        // lors de l'exécution de la simulation. On ne doit pas en créer un doublon.
+        const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
+
+        if (existingMechanisms.length > 0) {
+          console.log(`ℹ️ Mécanisme ${mechanismType} déjà créé par la stratégie de classe - pas de doublon`);
+
+          // 🆕 Pour les cadrans, vérifier aussi que les heures existent déjà
+          if (mechanismType === 'dial') {
+            const dialHours = this.boardService.dialHours();
+            if (dialHours.length > 0) {
+              console.log(`ℹ️ Heures du cadran déjà créées (${dialHours.length} heures) - pas de doublon`);
+            }
+          }
+          return;
+        }
+
         console.log(`✅ Création d'un mécanisme ${mechanismType} à la position (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
         // Créer le mécanisme

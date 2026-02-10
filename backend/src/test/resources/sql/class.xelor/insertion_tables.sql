@@ -1383,3 +1383,28 @@ INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, targe
 VALUES
     ('XEL_REMANENCE','ON_PASSIVE_EQUIPPED',2,'INCREASE_MECHANISM_LIMIT','SELF',
      '{"kind":"ROUAGE","delta":1}');
+
+INSERT INTO passive (id, class_id, name, description) VALUES
+    ('XEL_MECANISMES_SPECIALISES','XEL','Mécanismes spécialisés',
+     'En invoquant un Rouage, Sinistro, Cadran ou Régulateur : échange immédiatement de position avec (6 cases max).');
+
+-- Groupe de conditions : l’entité invoquée doit être dans la liste autorisée
+INSERT INTO effect_condition_group (op) VALUES ('AND');
+
+-- Condition : invoqué ∈ {ROUAGE, SINISTRO, CADRAN, REGULATEUR}
+-- (adapter les ids si ton jeu utilise d’autres identifiants)
+INSERT INTO effect_condition (group_id, cond_type, params_json)
+SELECT MAX(id), 'SUMMONED_IN', '{"summonIds":["XEL_ROUAGE","XEL_SINISTRO","XEL_CADRAN","XEL_REGULATEUR"]}'
+FROM effect_condition_group;
+
+-- Effet : échange de position immédiat (portée max 6)
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json, cond_group_id)
+VALUES (
+           'XEL_MECANISMES_SPECIALISES',
+           'ON_SUMMON',
+           0,
+           'SWAP_POSITIONS',
+           'SUMMONED',
+           '{"maxRange":6,"immediate":true}',
+           (SELECT MAX(id) FROM effect_condition_group)
+       );
