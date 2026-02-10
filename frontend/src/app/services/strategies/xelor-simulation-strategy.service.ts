@@ -2593,7 +2593,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     console.log(`[XELOR RETOUR_SPONTANE]    From: (${lastMovement.toPosition.x}, ${lastMovement.toPosition.y}) → To: (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`);
 
     // Calculer le coût du sort
-    const paCost = spell.paCost || 2;
+    const paCost = spell.paCost || 3;
     const pwCost = spell.pwCost || 0;
 
     // Vérifier les ressources
@@ -2628,14 +2628,10 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     }
 
     if (revertSuccess) {
-      // Déduire les ressources
-      context.availablePa -= paCost;
-      context.availablePw -= pwCost;
+      // TODO: Mettre en place pour la v2 la gestion source et cible marque 
+      //context.movementHistory!.pop();
+      //console.log(`[XELOR RETOUR_SPONTANE] ✅ Movement reverted successfully`);
 
-      // Supprimer le mouvement de l'historique
-      context.movementHistory!.pop();
-
-      console.log(`[XELOR RETOUR_SPONTANE] ✅ Movement reverted successfully`);
 
       return {
         success: true,
