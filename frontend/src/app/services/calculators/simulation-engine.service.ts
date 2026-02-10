@@ -59,6 +59,39 @@ export interface DelayedEffect {
   };
 }
 
+/**
+ * Enregistrement d'un mouvement non-PM (pour le sort "Retour Spontané")
+ * Permet de tracker les téléportations, poussées, attirances et échanges de position
+ */
+export interface MovementRecord {
+  // Identifiant unique du mouvement
+  id: string;
+  // Type de mouvement
+  type: 'teleport' | 'push' | 'pull' | 'swap' | 'swap_mechanism';
+  // ID de l'entité ou du mécanisme déplacé
+  targetId: string;
+  // Type de cible ('entity' ou 'mechanism')
+  targetType: 'entity' | 'mechanism';
+  // Nom de la cible (pour les logs)
+  targetName: string;
+  // Position avant le mouvement
+  fromPosition: Position;
+  // Position après le mouvement
+  toPosition: Position;
+  // ID du sort qui a causé le mouvement (optionnel)
+  sourceSpellId?: string;
+  // Timestamp du mouvement
+  timestamp: number;
+  // Pour les swaps: informations sur l'autre entité/mécanisme impliqué
+  swapPartner?: {
+    id: string;
+    type: 'entity' | 'mechanism';
+    name: string;
+    fromPosition: Position;
+    toPosition: Position;
+  };
+}
+
 export interface SimulationContext {
   availablePa: number;
   availablePw: number;
@@ -102,6 +135,10 @@ export interface SimulationContext {
   // Distorsion possède un cooldown de 3 tours de relance
   distorsionActive?: boolean;
   distorsionCooldownRemaining?: number;
+
+  // Historique des mouvements non-PM ce tour (pour "Retour Spontané")
+  // Stocke les téléportations, poussées, attirances et échanges de position
+  movementHistory?: MovementRecord[];
 }
 
 export interface SimulationActionResult {

@@ -7,7 +7,7 @@ import { Injectable, inject } from '@angular/core';
 import { ClassSimulationStrategy, ClassValidationResult } from './class-simulation-strategy.interface';
 import { Spell } from '../../models/spell.model';
 import { Position, TimelineAction } from '../../models/timeline.model';
-import { SimulationContext, SimulationActionResult, DelayedEffect } from '../calculators/simulation-engine.service';
+import { SimulationContext, SimulationActionResult, DelayedEffect, MovementRecord } from '../calculators/simulation-engine.service';
 import { Build } from '../../models/build.model';
 import { TotalStats } from '../calculators/stats-calculator.service';
 import { Mechanism } from '../../models/board.model';
@@ -92,6 +92,13 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     actionResult: SimulationActionResult
   ): void {
     console.log(`[XELOR] Processing class-specific effects for spell: ${spell.name}`);
+
+    // 🆕 Traitement spécial pour "Retour Spontané"
+    if (this.isRetourSpontaneSpell(spell.id)) {
+      // Le sort a déjà été traité dans executeRetourSpontane
+      console.log(`[XELOR] Retour Spontané spell - no additional effects to process`);
+      return;
+    }
 
     // Si le sort est un mécanisme, activer l'aura correspondante
     const mechanismType = getSpellMechanismType(spell.id);
@@ -298,6 +305,25 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
               to: destinationPosition,
               paGained: 1
             };
+
+            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+            this.recordMovement(
+              context,
+              'swap',
+              targetEntity.id,
+              'entity',
+              targetEntity.name,
+              targetPosition,
+              destinationPosition,
+              spell.id,
+              {
+                id: entityAtDestination.id,
+                type: 'entity',
+                name: entityAtDestination.name,
+                fromPosition: destinationPosition,
+                toPosition: targetPosition
+              }
+            );
           }
         } else if (mechanismAtDestination) {
           // Échange de position avec un mécanisme !
@@ -346,6 +372,25 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
               to: destinationPosition,
               paGained: 1
             };
+
+            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+            this.recordMovement(
+              context,
+              'swap_mechanism',
+              targetEntity.id,
+              'entity',
+              targetEntity.name,
+              targetPosition,
+              destinationPosition,
+              spell.id,
+              {
+                id: mechanismAtDestination.id,
+                type: 'mechanism',
+                name: mechanismAtDestination.type,
+                fromPosition: destinationPosition,
+                toPosition: targetPosition
+              }
+            );
           }
         } else {
           // Téléportation simple
@@ -370,6 +415,18 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
             from: targetPosition,
             to: destinationPosition
           };
+
+          // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+          this.recordMovement(
+            context,
+            'teleport',
+            targetEntity.id,
+            'entity',
+            targetEntity.name,
+            targetPosition,
+            destinationPosition,
+            spell.id
+          );
 
           console.log(`[XELOR TELEPORT] ✅ Teleport successful!`);
         }
@@ -423,6 +480,25 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
               to: destinationPosition,
               paGained: 1
             };
+
+            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+            this.recordMovement(
+              context,
+              'swap_mechanism',
+              targetMechanism.id,
+              'mechanism',
+              targetMechanism.type,
+              targetPosition,
+              destinationPosition,
+              spell.id,
+              {
+                id: entityAtDestination.id,
+                type: 'entity',
+                name: entityAtDestination.name,
+                fromPosition: destinationPosition,
+                toPosition: targetPosition
+              }
+            );
           }
         } else if (mechanismAtDestination) {
           // Échange mécanisme <-> mécanisme
@@ -465,6 +541,25 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
               to: destinationPosition,
               paGained: 1
             };
+
+            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+            this.recordMovement(
+              context,
+              'swap',
+              targetMechanism.id,
+              'mechanism',
+              targetMechanism.type,
+              targetPosition,
+              destinationPosition,
+              spell.id,
+              {
+                id: mechanismAtDestination.id,
+                type: 'mechanism',
+                name: mechanismAtDestination.type,
+                fromPosition: destinationPosition,
+                toPosition: targetPosition
+              }
+            );
           }
         } else {
           // Téléportation simple du mécanisme
@@ -485,6 +580,18 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
             from: targetPosition,
             to: destinationPosition
           };
+
+          // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+          this.recordMovement(
+            context,
+            'teleport',
+            targetMechanism.id,
+            'mechanism',
+            targetMechanism.type,
+            targetPosition,
+            destinationPosition,
+            spell.id
+          );
 
           console.log(`[XELOR TELEPORT] ✅ Mechanism teleport successful!`);
         }
@@ -756,14 +863,23 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
-   * Vérifie si un sort est un sort de mécanisme Xelor
+   * Vérifie si un sort est un sort de mécanisme Xelor ou un sort spécial (comme Retour Spontané)
    */
   isClassMechanismSpell(spellId: string): boolean {
-    return isSpellMechanism(spellId);
+    // Vérifier si c'est un mécanisme
+    if (isSpellMechanism(spellId)) {
+      return true;
+    }
+    // Vérifier si c'est le sort "Retour Spontané"
+    if (this.isRetourSpontaneSpell(spellId)) {
+      return true;
+    }
+    return false;
   }
 
   /**
    * Exécute un sort de mécanisme Xelor (Rouage, Cadran, Sinistro, Régulateur)
+   * ou un sort spécial comme "Retour Spontané"
    */
   executeClassMechanismSpell(
     action: TimelineAction,
@@ -773,6 +889,12 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     pwCost: number
   ): SimulationActionResult {
     console.log(`[XELOR MECHANISM] executeMechanismSpell for: ${spell.id} (${spell.name})`);
+
+    // 🆕 Traitement spécial pour "Retour Spontané"
+    if (this.isRetourSpontaneSpell(spell.id)) {
+      console.log(`[XELOR] Executing Retour Spontané spell`);
+      return this.executeRetourSpontane(spell, action, context);
+    }
 
     const mechanismType = getSpellMechanismType(spell.id);
 
@@ -1014,6 +1136,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     // 4. Décrémenter le cooldown de Distorsion
     this.decrementDistorsionCooldown(context);
+
+    // 5. Effacer l'historique des mouvements (pour "Retour Spontané")
+    this.clearMovementHistory(context);
 
     // TODO: Décrémenter les durées de buffs temporaires
     // TODO: Réinitialiser certains compteurs
@@ -1288,6 +1413,26 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     'specialized_mechanism'
   ];
 
+  /** Liste des IDs possibles pour le sort "Retour Spontané" */
+  private static readonly RETOUR_SPONTANE_SPELL_IDS = [
+    'retour_spontane',
+    'XEL_RETOUR_SPONTANE',
+    'xel_retour_spontane',
+    'retour-spontane',
+    'retourspontane',
+    'spontaneous_return'
+  ];
+
+  /**
+   * Vérifie si un spell ID correspond au sort "Retour Spontané"
+   */
+  private isRetourSpontaneSpell(spellId: string): boolean {
+    const lowerSpellId = spellId.toLowerCase();
+    return XelorSimulationStrategy.RETOUR_SPONTANE_SPELL_IDS.some(id =>
+      lowerSpellId === id.toLowerCase()
+    );
+  }
+
   /**
    * Vérifie si le passif "Maître du Cadran" est actif
    * Ce passif permet de résoudre les effets différés lors d'un tour de cadran
@@ -1454,6 +1599,25 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       // 🆕 Appliquer le passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
       this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_swap');
 
+      // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+      this.recordMovement(
+        context,
+        'swap_mechanism',
+        playerId,
+        'entity',
+        playerEntity?.name || 'Player',
+        playerPosition,
+        actualMechanismPosition,
+        undefined, // Pas de sort source spécifique
+        {
+          id: mechanismId,
+          type: 'mechanism',
+          name: mechanismType,
+          fromPosition: actualMechanismPosition,
+          toPosition: playerPosition
+        }
+      );
+
       console.log(`[XELOR MECANISME_SPECIALISE] 📍 Player now at (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
       console.log(`[XELOR MECANISME_SPECIALISE] 📍 Mechanism now at (${playerPosition.x}, ${playerPosition.y})`);
     } else {
@@ -1533,6 +1697,25 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
       // Appliquer le passif "Cours du temps"
       this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_dial_swap');
+
+      // 🆕 Enregistrer le mouvement pour "Retour Spontané"
+      this.recordMovement(
+        context,
+        'swap_mechanism',
+        playerEntity.id,
+        'entity',
+        playerEntity.name || 'Player',
+        playerPosition,
+        dialPosition,
+        'XEL_DIAL', // Le sort cadran est la source du swap automatique
+        {
+          id: mechanismId,
+          type: 'mechanism',
+          name: 'dial',
+          fromPosition: dialPosition,
+          toPosition: playerPosition
+        }
+      );
 
       console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 📍 Player now at dial center: (${dialPosition.x}, ${dialPosition.y})`);
       console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 📍 Dial now at hour 6 position: (${playerPosition.x}, ${playerPosition.y})`);
@@ -2279,5 +2462,389 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     }
 
     return null;
+  }
+
+  // ============ MOUVEMENT TRACKING (pour Retour Spontané) ============
+
+  /**
+   * Initialise l'historique des mouvements si nécessaire
+   */
+  private initMovementHistory(context: SimulationContext): void {
+    if (!context.movementHistory) {
+      context.movementHistory = [];
+    }
+  }
+
+  /**
+   * Enregistre un mouvement (téléportation, poussée, attirance, échange)
+   * Utilisé pour le sort "Retour Spontané"
+   *
+   * @param context Contexte de simulation
+   * @param type Type de mouvement
+   * @param targetId ID de l'entité/mécanisme déplacé
+   * @param targetType Type de cible
+   * @param targetName Nom de la cible
+   * @param fromPosition Position avant le mouvement
+   * @param toPosition Position après le mouvement
+   * @param sourceSpellId ID du sort source (optionnel)
+   * @param swapPartner Informations sur le partenaire de swap (optionnel)
+   */
+  public recordMovement(
+    context: SimulationContext,
+    type: 'teleport' | 'push' | 'pull' | 'swap' | 'swap_mechanism',
+    targetId: string,
+    targetType: 'entity' | 'mechanism',
+    targetName: string,
+    fromPosition: Position,
+    toPosition: Position,
+    sourceSpellId?: string,
+    swapPartner?: {
+      id: string;
+      type: 'entity' | 'mechanism';
+      name: string;
+      fromPosition: Position;
+      toPosition: Position;
+    }
+  ): void {
+    this.initMovementHistory(context);
+
+    const movement: MovementRecord = {
+      id: `movement_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      type,
+      targetId,
+      targetType,
+      targetName,
+      fromPosition: { ...fromPosition },
+      toPosition: { ...toPosition },
+      sourceSpellId,
+      timestamp: Date.now(),
+      swapPartner: swapPartner ? {
+        ...swapPartner,
+        fromPosition: { ...swapPartner.fromPosition },
+        toPosition: { ...swapPartner.toPosition }
+      } : undefined
+    };
+
+    context.movementHistory!.push(movement);
+    console.log(`[XELOR MOVEMENT] 📝 Recorded ${type} movement: ${targetName} (${fromPosition.x}, ${fromPosition.y}) → (${toPosition.x}, ${toPosition.y})`);
+
+    if (swapPartner) {
+      console.log(`[XELOR MOVEMENT]    Swap partner: ${swapPartner.name} (${swapPartner.fromPosition.x}, ${swapPartner.fromPosition.y}) → (${swapPartner.toPosition.x}, ${swapPartner.toPosition.y})`);
+    }
+  }
+
+  /**
+   * Récupère le dernier mouvement enregistré
+   */
+  public getLastMovement(context: SimulationContext): MovementRecord | null {
+    if (!context.movementHistory || context.movementHistory.length === 0) {
+      return null;
+    }
+    return context.movementHistory[context.movementHistory.length - 1];
+  }
+
+  /**
+   * Efface l'historique des mouvements (appelé en fin de tour)
+   */
+  public clearMovementHistory(context: SimulationContext): void {
+    if (context.movementHistory) {
+      const count = context.movementHistory.length;
+      context.movementHistory = [];
+      console.log(`[XELOR MOVEMENT] 🗑️ Cleared ${count} movement record(s)`);
+    }
+  }
+
+  // ============ RETOUR SPONTANÉ ============
+
+  /**
+   * Exécute le sort "Retour Spontané"
+   * Annule le dernier mouvement non-PM ayant eu lieu pendant le tour du Xélor
+   *
+   * @param spell Le sort Retour Spontané
+   * @param action L'action de timeline
+   * @param context Le contexte de simulation
+   * @returns Le résultat de l'action
+   */
+  public executeRetourSpontane(
+    spell: Spell,
+    action: TimelineAction,
+    context: SimulationContext
+  ): SimulationActionResult {
+    console.log(`[XELOR RETOUR_SPONTANE] 🔄 Executing Retour Spontané`);
+
+    const lastMovement = this.getLastMovement(context);
+
+    if (!lastMovement) {
+      console.log(`[XELOR RETOUR_SPONTANE] ❌ No movement to revert`);
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost: 0,
+        pwCost: 0,
+        mpCost: 0,
+        message: 'Retour Spontané: Aucun mouvement à annuler ce tour'
+      };
+    }
+
+    console.log(`[XELOR RETOUR_SPONTANE] 📋 Last movement: ${lastMovement.type} - ${lastMovement.targetName}`);
+    console.log(`[XELOR RETOUR_SPONTANE]    From: (${lastMovement.toPosition.x}, ${lastMovement.toPosition.y}) → To: (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`);
+
+    // Calculer le coût du sort
+    const paCost = spell.paCost || 2;
+    const pwCost = spell.pwCost || 0;
+
+    // Vérifier les ressources
+    if (context.availablePa < paCost) {
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost: 0,
+        pwCost: 0,
+        mpCost: 0,
+        message: `Retour Spontané: PA insuffisants (${context.availablePa}/${paCost})`
+      };
+    }
+
+    // Annuler le mouvement selon son type
+    let revertSuccess = false;
+    let revertMessage = '';
+
+    if (lastMovement.type === 'swap' || lastMovement.type === 'swap_mechanism') {
+      revertSuccess = this.revertSwapMovement(lastMovement, context);
+      revertMessage = revertSuccess
+        ? `Échange annulé: ${lastMovement.targetName} et ${lastMovement.swapPartner?.name} retournent à leurs positions`
+        : `Échec de l'annulation de l'échange`;
+    } else {
+      revertSuccess = this.revertSimpleMovement(lastMovement, context);
+      revertMessage = revertSuccess
+        ? `${lastMovement.targetName} retourne à sa position précédente (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`
+        : `Échec de l'annulation du mouvement`;
+    }
+
+    if (revertSuccess) {
+      // Déduire les ressources
+      context.availablePa -= paCost;
+      context.availablePw -= pwCost;
+
+      // Supprimer le mouvement de l'historique
+      context.movementHistory!.pop();
+
+      console.log(`[XELOR RETOUR_SPONTANE] ✅ Movement reverted successfully`);
+
+      return {
+        success: true,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost,
+        pwCost,
+        mpCost: 0,
+        message: `Retour Spontané: ${revertMessage}`,
+        details: {
+          revertedMovement: lastMovement,
+          targetReturned: lastMovement.targetName,
+          fromPosition: lastMovement.toPosition,
+          toPosition: lastMovement.fromPosition
+        }
+      };
+    } else {
+      console.log(`[XELOR RETOUR_SPONTANE] ❌ Failed to revert movement`);
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost: 0,
+        pwCost: 0,
+        mpCost: 0,
+        message: `Retour Spontané: ${revertMessage}`
+      };
+    }
+  }
+
+  /**
+   * Annule un mouvement simple (téléportation, poussée, attirance)
+   */
+  private revertSimpleMovement(movement: MovementRecord, context: SimulationContext): boolean {
+    console.log(`[XELOR RETOUR_SPONTANE] 🔄 Reverting simple ${movement.type} movement`);
+
+    if (movement.targetType === 'entity') {
+      // Trouver l'entité
+      const entity = this.boardService.getEntity(movement.targetId);
+      if (!entity) {
+        console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Entity ${movement.targetId} not found`);
+        return false;
+      }
+
+      // Vérifier que l'entité est bien à la position "toPosition"
+      if (entity.position.x !== movement.toPosition.x || entity.position.y !== movement.toPosition.y) {
+        console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Entity position mismatch: expected (${movement.toPosition.x}, ${movement.toPosition.y}), found (${entity.position.x}, ${entity.position.y})`);
+        // On continue quand même, l'entité a peut-être bougé entre temps
+      }
+
+      // Remettre l'entité à sa position d'origine
+      this.boardService.updateEntityPosition(movement.targetId, movement.fromPosition);
+
+      // Mettre à jour le contexte si c'est le joueur
+      if (entity.type === 'player') {
+        context.playerPosition = { ...movement.fromPosition };
+        context.currentPosition = { ...movement.fromPosition };
+      }
+
+      // Mettre à jour context.entities
+      this.updateEntityPositionInContext(context, movement.targetId, movement.fromPosition);
+
+      console.log(`[XELOR RETOUR_SPONTANE] ✅ Entity ${entity.name} returned to (${movement.fromPosition.x}, ${movement.fromPosition.y})`);
+      return true;
+
+    } else if (movement.targetType === 'mechanism') {
+      // Trouver le mécanisme
+      const mechanism = this.boardService.getMechanism(movement.targetId);
+      if (!mechanism) {
+        console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Mechanism ${movement.targetId} not found`);
+        return false;
+      }
+
+      // Remettre le mécanisme à sa position d'origine
+      this.boardService.updateMechanismPosition(movement.targetId, movement.fromPosition);
+
+      // Si c'est un cadran, mettre à jour les heures
+      if (mechanism.type === 'dial') {
+        this.updateDialHoursAfterSwap(movement.targetId, context);
+      }
+
+      console.log(`[XELOR RETOUR_SPONTANE] ✅ Mechanism ${mechanism.type} returned to (${movement.fromPosition.x}, ${movement.fromPosition.y})`);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Annule un échange de position (swap)
+   */
+  private revertSwapMovement(movement: MovementRecord, context: SimulationContext): boolean {
+    console.log(`[XELOR RETOUR_SPONTANE] 🔄 Reverting swap movement`);
+
+    if (!movement.swapPartner) {
+      console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Swap movement has no partner info`);
+      return false;
+    }
+
+    const partner = movement.swapPartner;
+
+    // Cas 1: Swap entre deux entités
+    if (movement.targetType === 'entity' && partner.type === 'entity') {
+      const entity1 = this.boardService.getEntity(movement.targetId);
+      const entity2 = this.boardService.getEntity(partner.id);
+
+      if (!entity1 || !entity2) {
+        console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ One or both entities not found`);
+        return false;
+      }
+
+      // Ré-échanger les positions
+      this.boardService.swapEntityPositions(movement.targetId, partner.id);
+
+      // Mettre à jour le contexte si l'un est le joueur
+      if (entity1.type === 'player') {
+        context.playerPosition = { ...movement.fromPosition };
+        context.currentPosition = { ...movement.fromPosition };
+      }
+      if (entity2.type === 'player') {
+        context.playerPosition = { ...partner.fromPosition };
+        context.currentPosition = { ...partner.fromPosition };
+      }
+
+      // Mettre à jour context.entities
+      this.updateEntityPositionInContext(context, movement.targetId, movement.fromPosition);
+      this.updateEntityPositionInContext(context, partner.id, partner.fromPosition);
+
+      console.log(`[XELOR RETOUR_SPONTANE] ✅ Swap reverted: ${entity1.name} ↔ ${entity2.name}`);
+      return true;
+    }
+
+    // Cas 2: Swap entre entité et mécanisme
+    if ((movement.targetType === 'entity' && partner.type === 'mechanism') ||
+        (movement.targetType === 'mechanism' && partner.type === 'entity')) {
+
+      const entityId = movement.targetType === 'entity' ? movement.targetId : partner.id;
+      const mechanismId = movement.targetType === 'mechanism' ? movement.targetId : partner.id;
+
+      const entity = this.boardService.getEntity(entityId);
+      const mechanism = this.boardService.getMechanism(mechanismId);
+
+      if (!entity || !mechanism) {
+        console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Entity or mechanism not found`);
+        return false;
+      }
+
+      // Ré-échanger les positions
+      this.boardService.swapEntityWithMechanism(entityId, mechanismId);
+
+      // Si c'est un cadran, mettre à jour les heures
+      if (mechanism.type === 'dial') {
+        this.updateDialHoursAfterSwap(mechanismId, context);
+      }
+
+      // Déterminer les positions d'origine
+      const entityOriginalPos = movement.targetType === 'entity' ? movement.fromPosition : partner.fromPosition;
+
+      // Mettre à jour le contexte si c'est le joueur
+      if (entity.type === 'player') {
+        context.playerPosition = { ...entityOriginalPos };
+        context.currentPosition = { ...entityOriginalPos };
+      }
+
+      // Mettre à jour context.entities
+      this.updateEntityPositionInContext(context, entityId, entityOriginalPos);
+
+      console.log(`[XELOR RETOUR_SPONTANE] ✅ Entity/Mechanism swap reverted: ${entity.name} ↔ ${mechanism.type}`);
+      return true;
+    }
+
+    // Cas 3: Swap entre deux mécanismes
+    if (movement.targetType === 'mechanism' && partner.type === 'mechanism') {
+      const mechanism1 = this.boardService.getMechanism(movement.targetId);
+      const mechanism2 = this.boardService.getMechanism(partner.id);
+
+      if (!mechanism1 || !mechanism2) {
+        console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ One or both mechanisms not found`);
+        return false;
+      }
+
+      // Ré-échanger les positions
+      this.boardService.swapMechanismPositions(movement.targetId, partner.id);
+
+      // Mettre à jour les heures des cadrans si nécessaire
+      if (mechanism1.type === 'dial') {
+        this.updateDialHoursAfterSwap(movement.targetId, context);
+      }
+      if (mechanism2.type === 'dial') {
+        this.updateDialHoursAfterSwap(partner.id, context);
+      }
+
+      console.log(`[XELOR RETOUR_SPONTANE] ✅ Mechanism swap reverted: ${mechanism1.type} ↔ ${mechanism2.type}`);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Vérifie si le sort "Retour Spontané" peut être lancé
+   * (il faut qu'il y ait un mouvement à annuler)
+   */
+  public canCastRetourSpontane(context: SimulationContext): boolean {
+    const lastMovement = this.getLastMovement(context);
+    return lastMovement !== null;
   }
 }
