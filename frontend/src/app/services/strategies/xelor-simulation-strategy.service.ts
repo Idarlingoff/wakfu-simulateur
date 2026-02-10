@@ -271,6 +271,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap bonus)`);
 
+            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
+            this.applyCoursduTempsOnTransposition(context, 'entity_entity_swap');
+
             // Mettre à jour le contexte avec les nouvelles positions
             this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
             this.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
@@ -315,6 +318,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
             );
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap with mechanism bonus)`);
+
+            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
+            this.applyCoursduTempsOnTransposition(context, 'entity_mechanism_swap');
 
             // Mettre à jour le contexte avec la nouvelle position de l'entité
             this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
@@ -385,6 +391,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
 
+            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
+            this.applyCoursduTempsOnTransposition(context, 'mechanism_entity_swap');
+
             // Mettre à jour le contexte avec la nouvelle position de l'entité
             this.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
 
@@ -424,6 +433,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
             );
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
+
+            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
+            this.applyCoursduTempsOnTransposition(context, 'mechanism_mechanism_swap');
 
             // Ajouter les détails de l'échange au résultat
             if (!actionResult.details) actionResult.details = {};
@@ -880,6 +892,10 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     context.dialId = undefined;
     context.delayedEffects = []; // Effets différés pour Maître du Cadran
 
+    // Initialiser l'état Distorsion (inactif par défaut, pas de cooldown)
+    context.distorsionActive = false;
+    context.distorsionCooldownRemaining = 0;
+
     // Charger les mécanismes existants et leurs charges
     const mechanisms = this.boardService.mechanisms();
     mechanisms.forEach(mechanism => {
@@ -937,6 +953,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     // 3. Appliquer le bonus PW du Régulateur en fin de tour
     this.applyRegulatorPwBonus(context);
+
+    // 4. Décrémenter le cooldown de Distorsion
+    this.decrementDistorsionCooldown(context);
 
     // TODO: Décrémenter les durées de buffs temporaires
     // TODO: Réinitialiser certains compteurs
@@ -1191,6 +1210,16 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     'connaissancedupasse'
   ];
 
+  /** Liste des IDs possibles pour le passif Cours du temps */
+  private static readonly COURS_DU_TEMPS_IDS = [
+    'cours_du_temps',
+    'XEL_COURS_DU_TEMPS',
+    'XEL_COURS_TEMPS',
+    'cours-du-temps',
+    'coursdutemps',
+    'flow_of_time'
+  ];
+
   /**
    * Vérifie si le passif "Maître du Cadran" est actif
    * Ce passif permet de résoudre les effets différés lors d'un tour de cadran
@@ -1220,6 +1249,100 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     return XelorSimulationStrategy.CONNAISSANCE_PASSE_IDS.some(id =>
       passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
     );
+  }
+
+  /**
+   * Vérifie si le passif "Cours du temps" est actif
+   * Ce passif :
+   * - À chaque transposition causée par le Xélor :
+   *   - Régénère 1 PA si Distorsion est actif
+   *   - Autrement, régénère 1 PW
+   */
+  private hasCoursDuTempsPassive(context: SimulationContext): boolean {
+    const passiveIds = context.activePassiveIds || [];
+    return XelorSimulationStrategy.COURS_DU_TEMPS_IDS.some(id =>
+      passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
+    );
+  }
+
+  /**
+   * Active l'état Distorsion
+   * Distorsion a un cooldown de 3 tours de relance
+   */
+  public activateDistorsion(context: SimulationContext): void {
+    context.distorsionActive = true;
+    context.distorsionCooldownRemaining = 0;
+    console.log(`[XELOR DISTORSION] ✅ Distorsion activée`);
+  }
+
+  /**
+   * Désactive l'état Distorsion (début du cooldown)
+   * Le cooldown de 3 tours commence
+   */
+  public deactivateDistorsion(context: SimulationContext): void {
+    context.distorsionActive = false;
+    context.distorsionCooldownRemaining = 3;
+    console.log(`[XELOR DISTORSION] ⏰ Distorsion désactivée - cooldown: ${context.distorsionCooldownRemaining} tours`);
+  }
+
+  /**
+   * Vérifie si Distorsion est actuellement active
+   */
+  public isDistorsionActive(context: SimulationContext): boolean {
+    return context.distorsionActive === true;
+  }
+
+  /**
+   * Décrémente le cooldown de Distorsion en fin de tour
+   * Appelé par cleanupTurn
+   */
+  private decrementDistorsionCooldown(context: SimulationContext): void {
+    if (context.distorsionCooldownRemaining && context.distorsionCooldownRemaining > 0) {
+      context.distorsionCooldownRemaining--;
+      console.log(`[XELOR DISTORSION] ⏰ Cooldown: ${context.distorsionCooldownRemaining + 1} → ${context.distorsionCooldownRemaining} tours restants`);
+
+      if (context.distorsionCooldownRemaining === 0) {
+        console.log(`[XELOR DISTORSION] ✅ Distorsion disponible à nouveau`);
+      }
+    }
+  }
+
+  /**
+   * Traite l'effet du passif "Cours du temps" lors d'une transposition
+   * - Si Distorsion est actif : +1 PA
+   * - Sinon : +1 PW
+   *
+   * @param context Le contexte de simulation
+   * @param transpositionType Type de transposition effectuée (pour le logging)
+   */
+  public applyCoursduTempsOnTransposition(context: SimulationContext, transpositionType: string = 'standard'): void {
+    if (!this.hasCoursDuTempsPassive(context)) {
+      return;
+    }
+
+    const isDistorsionActive = this.isDistorsionActive(context);
+
+    if (isDistorsionActive) {
+      // Distorsion active : +1 PA
+      this.regenerationService.regeneratePA(
+        context,
+        1,
+        'COURS_DU_TEMPS',
+        'Cours du temps: +1 PA (Distorsion actif)',
+        { trigger: 'ON_TRANSPOSITION', transpositionType, distorsionActive: true }
+      );
+      console.log(`[XELOR COURS_DU_TEMPS] ⚡ +1 PA (Distorsion actif) - Transposition: ${transpositionType}`);
+    } else {
+      // Distorsion inactif : +1 PW
+      this.regenerationService.regeneratePW(
+        context,
+        1,
+        'COURS_DU_TEMPS',
+        'Cours du temps: +1 PW (Distorsion inactif)',
+        { trigger: 'ON_TRANSPOSITION', transpositionType, distorsionActive: false }
+      );
+      console.log(`[XELOR COURS_DU_TEMPS] 💧 +1 PW (Distorsion inactif) - Transposition: ${transpositionType}`);
+    }
   }
 
   /**

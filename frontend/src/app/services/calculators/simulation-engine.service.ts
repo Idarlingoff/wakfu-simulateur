@@ -97,6 +97,11 @@ export interface SimulationContext {
   // Compteur de mécanismes posés ce tour (type -> nombre de poses)
   // Utilisé pour les restrictions comme "1 cadran par tour max"
   mechanismsPlacedThisTurn?: Map<string, number>;
+
+  // État Distorsion (actif/inactif et cooldown restant en tours)
+  // Distorsion possède un cooldown de 3 tours de relance
+  distorsionActive?: boolean;
+  distorsionCooldownRemaining?: number;
 }
 
 export interface SimulationActionResult {
