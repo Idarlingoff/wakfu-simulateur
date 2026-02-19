@@ -1195,6 +1195,11 @@ export class BoardComponent {
     // Sauvegarder l'état après l'application
     this.boardService.pushState();
 
+    // Si on vient d'exécuter le dernier step, afficher le récapitulatif de fin
+    if (this.currentStepIndex() >= timeline.steps.length) {
+      this.logFinalSimulationSummaryFromCache(timeline.steps.length);
+    }
+
     // Afficher les résultats
     const stepResult = this.simulationService.getStepResult(realStepIndex);
     if (stepResult) {
@@ -1241,6 +1246,67 @@ export class BoardComponent {
     }
 
     console.log('🔵 [onNextStep] FIN');
+    console.log('');
+  }
+
+  /**
+   * Affiche un récapitulatif final basé sur le cache de simulation
+   * Utilisé pour le mode étape par étape lorsqu'on atteint le dernier step
+   */
+  private logFinalSimulationSummaryFromCache(totalSteps: number): void {
+    let totalDamage = 0;
+    let totalPaUsed = 0;
+    let totalWpUsed = 0;
+    let totalMpUsed = 0;
+    let stepsExecuted = 0;
+
+    for (let stepIndex = 0; stepIndex < totalSteps; stepIndex++) {
+      const stepResult = this.simulationService.getStepResult(stepIndex);
+      if (!stepResult?.success) {
+        continue;
+      }
+
+      stepsExecuted++;
+      const actionResults = stepResult.actions.filter((a: any) => a.success);
+      totalDamage += actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0);
+      totalPaUsed += actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
+      totalWpUsed += actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
+      totalMpUsed += actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🎉 SIMULATION ÉTAPE PAR ÉTAPE TERMINÉE');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📊 Résultats finaux:');
+    console.log(`  ✅ Steps exécutés: ${stepsExecuted}/${totalSteps}`);
+    console.log(`  💥 Dégâts totaux: ${totalDamage}`);
+    console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
+    console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
+    console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
+
+    const regenSummary = this.regenerationService.getRegenerationSummary();
+    if (regenSummary.totalPaRegenerated > 0 || regenSummary.totalPwRegenerated > 0) {
+      console.log('');
+      console.log('💫 RÉGÉNÉRATION TOTALE (service centralisé):');
+      console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
+      console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
+      console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
+      console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
+
+      if (regenSummary.bySource.size > 0) {
+        console.log('');
+        console.log('💫 Détail par source:');
+        regenSummary.bySource.forEach((stats, source) => {
+          const parts = [];
+          if (stats.pa > 0) parts.push(`+${stats.pa} PA`);
+          if (stats.pw > 0) parts.push(`+${stats.pw} PW`);
+          console.log(`  💫   • ${source}: ${parts.join(', ')}`);
+        });
+      }
+    }
+
+    console.log('═══════════════════════════════════════════════════════');
     console.log('');
   }
 
@@ -1370,10 +1436,11 @@ export class BoardComponent {
       const newIndex = this.currentStepIndex();
       this.boardService.restoreStateAtIndex(newIndex);
 
-      // Invalider le cache de simulation pour forcer une ré-exécution propre
-      this.simulationService.clearSimulation();
+      // Tronquer le cache de simulation pour conserver uniquement les steps encore valides
+      // et permettre une reprise correcte avec "Étape suivante"
+      this.simulationService.trimSimulationCacheToStep(newIndex);
 
-      console.log(`⏮️ Retour à l'étape ${newIndex} - Cache de simulation invalidé`);
+      console.log(`⏮️ Retour à l'étape ${newIndex} - Cache de simulation tronqué`);
     }
   }
 

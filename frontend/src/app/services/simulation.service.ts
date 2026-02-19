@@ -105,6 +105,53 @@ export class SimulationService {
   }
 
   /**
+   * Tronque le cache de simulation pour revenir à un index donné
+   * stepIndex représente le prochain step à exécuter (0 = aucun step exécuté)
+   */
+  trimSimulationCacheToStep(stepIndex: number): void {
+    if (!this.simulationResultsCache) {
+      return;
+    }
+
+    const boundedStepIndex = Math.max(0, stepIndex);
+    const trimmedSteps = this.simulationResultsCache.steps.slice(0, boundedStepIndex);
+    const contextAfterTrim = boundedStepIndex > 0
+      ? trimmedSteps[trimmedSteps.length - 1].contextAfter
+      : this.simulationResultsCache.initialContext;
+
+    const totalDamage = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.damage || 0), 0),
+      0
+    );
+    const totalPaUsed = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.paCost || 0), 0),
+      0
+    );
+    const totalPwUsed = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.pwCost || 0), 0),
+      0
+    );
+    const totalMpUsed = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.mpCost || 0), 0),
+      0
+    );
+
+    this.simulationResultsCache = {
+      ...this.simulationResultsCache,
+      steps: trimmedSteps,
+      finalContext: contextAfterTrim,
+      totalDamage,
+      totalPaUsed,
+      totalPwUsed,
+      totalMpUsed,
+      success: trimmedSteps.every(step => step.success),
+      errors: []
+    };
+
+    console.log(`🧹 [SimulationService] Cache tronqué à ${boundedStepIndex} step(s)`);
+  }
+
+  /**
    * 🆕 Exécute la simulation COMPLÈTE une seule fois et stocke les résultats
    * Utilisé au début pour calculer tous les steps
    */
