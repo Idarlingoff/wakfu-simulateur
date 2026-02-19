@@ -152,7 +152,7 @@ export class XelorPassivesService {
       activeId => activeId.toLowerCase() === XelorPassivesService.MECANISME_SPECIALISE.toLowerCase()
     );
 
-    console.log(`[XELOR XEL_MECANISME_SPECIALISE]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
+    console.log(`[XELOR XEL_MECANISMES_SPECIALISES]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
     return found;
   }
 

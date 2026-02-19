@@ -212,6 +212,8 @@ export class SimulationEngineService {
    * Exécute une simulation complète
    */
   async runSimulation(build: Build, timeline: Timeline): Promise<SimulationResult> {
+    console.log('CALLED runSimulation');
+
     // Réinitialiser l'historique de régénération pour cette nouvelle simulation
     this.regenerationService.clearHistory();
 

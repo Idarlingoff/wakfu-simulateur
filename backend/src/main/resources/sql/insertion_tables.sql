@@ -395,7 +395,7 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
 ) VALUES (
              'XEL_DEVOUEMENT', 'XEL', 'Dévouement', 'NONE', 'NEUTRAL',
-             0, 4, 1, 3, TRUE, TRUE,
+             0, 4, 0, 3, TRUE, TRUE,
              0, 99, 99, 'NONE', 'STEP'
          );
 
@@ -1227,7 +1227,7 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
-             0, 0, 1, 1, FALSE, FALSE,
+             0, 0, 0, 1, FALSE, FALSE,
              0, 1, 1, 'NONE', 'STEP'
          );
 
@@ -1384,3 +1384,12 @@ VALUES
     ('XEL_REMANENCE','ON_PASSIVE_EQUIPPED',2,'INCREASE_MECHANISM_LIMIT','SELF',
      '{"kind":"ROUAGE","delta":1}');
 
+INSERT INTO passive (id, class_id, name, description) VALUES
+    ('XEL_MECANISMES_SPECIALISES','XEL','Mécanisme spécialisé',
+     'À l''invocation d''un Rouage, Sinistro, Cadran ou Régulateur : échange immédiatement de position avec (6 cases max).');
+
+-- À l'invocation de l'un des mécanismes → swap immédiat si ≤ 6 cases
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
+VALUES
+    ('XEL_MECANISMES_SPECIALISES','ON_SUMMON_MECHANISM',0,'IMMEDIATE_SWAP_WITH_SUMMON','SELF',
+     '{"kinds":["ROUAGE","SINISTRO","DIAL","REGULATOR"],"maxRange":6}');
