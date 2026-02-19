@@ -9,6 +9,7 @@ import {getSpellMechanismType} from '../../../utils/mechanism-utils';
 @Injectable({ providedIn: 'root' })
 export class XelorCastValidatorService {
 
+  private static readonly RETOUR_SPONTANE = 'XEL_RETOUR_SPONTANE';
   private readonly boardService = inject(BoardService);
 
   /**
@@ -73,5 +74,13 @@ export class XelorCastValidatorService {
    */
   public isDistorsionActive(context: SimulationContext): boolean {
     return context.distorsionActive === true;
+  }
+
+  /**
+   * Vérifie si un spell ID correspond au sort "Retour Spontané"
+   */
+  public isRetourSpontaneSpell(spellId: string): boolean {
+    const lowerSpellId = spellId.toLowerCase();
+    return lowerSpellId === XelorCastValidatorService.RETOUR_SPONTANE.toLowerCase();
   }
 }

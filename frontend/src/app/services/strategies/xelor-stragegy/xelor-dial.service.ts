@@ -5,7 +5,6 @@ import {BoardService} from '../../board.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorMechanismsService} from './xelor-mechanisms.service';
 import {XelorDelayedEffectsService} from './xelor-delayed-effects.service';
-import {XelorExecuteEffectService} from './xelor-execute-effect.service';
 
 @Injectable({ providedIn: 'root' })
 export class XelorDialService {
@@ -14,6 +13,98 @@ private readonly boardService = inject(BoardService);
 private readonly xelorPassiveService = inject(XelorPassivesService);
 private readonly xelorMechanismsService = inject(XelorMechanismsService);
 private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
+
+
+  /**
+   * Crée les 12 heures autour d'un cadran, orientées selon la direction du lancer
+   */
+  public createDialHours(dialId: string, centerPosition: Position, playerPosition: Position): void {
+    console.log(`[XELOR DIAL] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
+    console.log(`[XELOR DIAL] Player position: (${playerPosition.x}, ${playerPosition.y})`);
+
+    // Calculer la direction du lancer
+    const dx = centerPosition.x - playerPosition.x;
+    const dy = centerPosition.y - playerPosition.y;
+
+    console.log(`[XELOR DIAL] Direction vector: (${dx}, ${dy})`);
+
+    // Déterminer la rotation à appliquer
+    let rotation = 0;
+    let directionName = '';
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) {
+        rotation = 1;
+        directionName = 'DROITE (Est)';
+      } else {
+        rotation = 3;
+        directionName = 'GAUCHE (Ouest)';
+      }
+    } else {
+      if (dy > 0) {
+        rotation = 2;
+        directionName = 'BAS (Sud)';
+      } else {
+        rotation = 0;
+        directionName = 'HAUT (Nord)';
+      }
+    }
+
+    console.log(`[XELOR DIAL] Direction: ${directionName}, Rotation: ${rotation * 90}°`);
+
+    // Positions de base des heures (12h vers le HAUT/NORD par défaut)
+    const baseHourPositions = [
+      { hour: 12, offsetX: 0, offsetY: -3 },
+      { hour: 1, offsetX: +1, offsetY: -2 },
+      { hour: 2, offsetX: +2, offsetY: -1 },
+      { hour: 3, offsetX: +3, offsetY: 0 },
+      { hour: 4, offsetX: +2, offsetY: +1 },
+      { hour: 5, offsetX: +1, offsetY: +2 },
+      { hour: 6, offsetX: 0, offsetY: +3 },
+      { hour: 7, offsetX: -1, offsetY: +2 },
+      { hour: 8, offsetX: -2, offsetY: +1 },
+      { hour: 9, offsetX: -3, offsetY: 0 },
+      { hour: 10, offsetX: -2, offsetY: -1 },
+      { hour: 11, offsetX: -1, offsetY: -2 }
+    ];
+
+    let hoursCreated = 0;
+
+    baseHourPositions.forEach(({ hour, offsetX, offsetY }) => {
+      let rotatedX = offsetX;
+      let rotatedY = offsetY;
+
+      // Rotation par quarts de tour (sens horaire)
+      for (let i = 0; i < rotation; i++) {
+        const tempX = rotatedX;
+        rotatedX = -rotatedY;
+        rotatedY = tempX;
+      }
+
+      const hourPosition: Position = {
+        x: centerPosition.x + rotatedX,
+        y: centerPosition.y + rotatedY
+      };
+
+      // Vérifier que la position est dans les limites du plateau (13x13)
+      if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
+        const dialHour = {
+          id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          dialId: dialId,
+          hour: hour,
+          position: hourPosition
+        };
+
+        this.boardService.addDialHour(dialHour);
+        hoursCreated++;
+        console.log(`Hour ${hour} at (${hourPosition.x}, ${hourPosition.y})`);
+      } else {
+        console.warn(` Hour ${hour} skipped - out of bounds: (${hourPosition.x}, ${hourPosition.y})`);
+      }
+    });
+
+    console.log(`[XELOR DIAL] Created ${hoursCreated}/12 hours (oriented ${directionName})`);
+  }
 
   /**
    * Met à jour les heures du cadran après un swap de position
@@ -232,5 +323,55 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
 
     // hoursAdvanced === 0, pas de changement
     return false;
+  }
+
+  /**
+   * Modifie directement l'heure du cadran (utilisé par les sorts comme Désynchronisation, Distorsion)
+   * Cette méthode peut faire avancer ou reculer l'heure de plusieurs positions
+   *
+   * @param context Le contexte de simulation
+   * @param hours Nombre d'heures à avancer (positif) ou reculer (négatif)
+   */
+  public setDialHourOffset(context: SimulationContext, hours: number): void {
+    if (!context.dialId || context.currentDialHour === undefined) {
+      console.warn(`[XELOR] Cannot set dial hour offset: no active dial`);
+      return;
+    }
+
+    this.advanceDialHour(context, hours);
+  }
+
+  /**
+   * Définit l'heure du cadran à une heure spécifique (1-12)
+   * Déclenche un tour de cadran si nécessaire
+   *
+   * @param context Le contexte de simulation
+   * @param targetHour L'heure cible (1-12)
+   */
+  public setDialHourDirect(context: SimulationContext, targetHour: number): void {
+    if (!context.dialId || context.currentDialHour === undefined) {
+      console.warn(`[XELOR] Cannot set dial hour: no active dial`);
+      return;
+    }
+
+    if (targetHour < 1 || targetHour > 12) {
+      console.error(`[XELOR] Invalid target hour: ${targetHour} (must be 1-12)`);
+      return;
+    }
+
+    const previousHour = context.currentDialHour;
+
+    // Calculer le nombre d'heures à avancer pour atteindre l'heure cible
+    let hoursToAdvance: number;
+    if (targetHour >= previousHour) {
+      hoursToAdvance = targetHour - previousHour;
+    } else {
+      // On doit passer par 12→1 pour atteindre la cible
+      hoursToAdvance = (12 - previousHour) + targetHour;
+    }
+
+    console.log(`[XELOR] Setting dial hour from ${previousHour} to ${targetHour} (${hoursToAdvance > 0 ? '+' : ''}${hoursToAdvance}h)`);
+
+    this.advanceDialHour(context, hoursToAdvance);
   }
 }

@@ -89,25 +89,21 @@ export class MovementValidatorService {
       }
     };
   }
-  advanceDialHour(dialId: string, wpCost: number, context: SimulationContext): boolean {
-    if (context.availablePw < wpCost) {
-      console.warn(`WP insuffisants pour avancer le cadran (besoin: ${wpCost}, disponible: ${context.availablePw})`);
-      return false;
-    }
-    console.log(`Avancement du cadran ${dialId} de ${wpCost} heure(s)`);
-    return true;
-  }
+
   private isPositionOnDialHour(position: Position): boolean {
     const dialHours = this.boardService.dialHours();
     return dialHours.some(hour => hour.position.x === position.x && hour.position.y === position.y);
   }
+
   private getDialHourAtPosition(position: Position) {
     const dialHours = this.boardService.dialHours();
     return dialHours.find(hour => hour.position.x === position.x && hour.position.y === position.y);
   }
+
   private calculateDistance(pos1: Position, pos2: Position): number {
     return Math.abs(pos1.x - pos2.x) + Math.abs(pos1.y - pos2.y);
   }
+
   isPathClear(from: Position, to: Position, context: SimulationContext): boolean {
     return true;
   }

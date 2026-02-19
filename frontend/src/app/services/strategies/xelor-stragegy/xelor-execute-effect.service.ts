@@ -1,7 +1,10 @@
 import {inject, Injectable} from '@angular/core';
-import {DelayedEffect, SimulationContext} from '../../calculators/simulation-engine.service';
+import {DelayedEffect, SimulationContext, SimulationActionResult} from '../../calculators/simulation-engine.service';
 import {ResourceRegenerationService} from '../../processors/resource-regeneration.service';
 import {BoardService} from '../../board.service';
+import {Spell} from '../../../models/spell.model';
+import {TimelineAction} from '../../../models/timeline.model';
+import {XelorMovementService} from './xelor-movement.service';
 
 
 @Injectable({ providedIn: 'root' })
@@ -9,6 +12,7 @@ export class XelorExecuteEffectService {
 
   private readonly boardService = inject(BoardService);
   private readonly regenerationService = inject(ResourceRegenerationService);
+  private readonly xelorMovementService = inject(XelorMovementService);
 
   /**
    * Exécute un effet selon son type (correspond à effect_type dans la table spell_effect)
@@ -239,5 +243,112 @@ export class XelorExecuteEffectService {
 
     // Par défaut, utiliser SPELL_EFFECT
     return 'SPELL_EFFECT';
+  }
+
+  /**
+   * Exécute le sort "Retour Spontané"
+   * Annule le dernier mouvement non-PM ayant eu lieu pendant le tour du Xélor
+   *
+   * @param spell Le sort Retour Spontané
+   * @param action L'action de timeline
+   * @param context Le contexte de simulation
+   * @returns Le résultat de l'action
+   */
+  public executeRetourSpontane(
+    spell: Spell,
+    action: TimelineAction,
+    context: SimulationContext
+  ): SimulationActionResult {
+    console.log(`[XELOR RETOUR_SPONTANE] 🔄 Executing Retour Spontané`);
+
+    const lastMovement = this.xelorMovementService.getLastMovement(context);
+
+    if (!lastMovement) {
+      console.log(`[XELOR RETOUR_SPONTANE] ❌ No movement to revert`);
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost: 0,
+        pwCost: 0,
+        mpCost: 0,
+        message: 'Retour Spontané: Aucun mouvement à annuler ce tour'
+      };
+    }
+
+    console.log(`[XELOR RETOUR_SPONTANE] 📋 Last movement: ${lastMovement.type} - ${lastMovement.targetName}`);
+    console.log(`[XELOR RETOUR_SPONTANE]    From: (${lastMovement.toPosition.x}, ${lastMovement.toPosition.y}) → To: (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`);
+
+    // Calculer le coût du sort
+    const paCost = spell.paCost || 3;
+    const pwCost = spell.pwCost || 0;
+
+    // Vérifier les ressources
+    if (context.availablePa < paCost) {
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost: 0,
+        pwCost: 0,
+        mpCost: 0,
+        message: `Retour Spontané: PA insuffisants (${context.availablePa}/${paCost})`
+      };
+    }
+
+    // Annuler le mouvement selon son type
+    let revertSuccess = false;
+    let revertMessage = '';
+
+    if (lastMovement.type === 'swap' || lastMovement.type === 'swap_mechanism') {
+      revertSuccess = this.xelorMovementService.revertSwapMovement(lastMovement, context);
+      revertMessage = revertSuccess
+        ? `Échange annulé: ${lastMovement.targetName} et ${lastMovement.swapPartner?.name} retournent à leurs positions`
+        : `Échec de l'annulation de l'échange`;
+    } else {
+      revertSuccess = this.xelorMovementService.revertSimpleMovement(lastMovement, context);
+      revertMessage = revertSuccess
+        ? `${lastMovement.targetName} retourne à sa position précédente (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`
+        : `Échec de l'annulation du mouvement`;
+    }
+
+    if (revertSuccess) {
+      // TODO: Mettre en place pour la v2 la gestion source et cible marque
+
+      return {
+        success: true,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost,
+        pwCost,
+        mpCost: 0,
+        message: `Retour Spontané: ${revertMessage}`,
+        details: {
+          revertedMovement: lastMovement,
+          targetReturned: lastMovement.targetName,
+          fromPosition: lastMovement.toPosition,
+          toPosition: lastMovement.fromPosition
+        }
+      };
+    } else {
+      console.log(`[XELOR RETOUR_SPONTANE] ❌ Failed to revert movement`);
+      return {
+        success: false,
+        actionId: action.id || '',
+        actionType: 'CastSpell',
+        spellId: spell.id,
+        spellName: spell.name,
+        paCost: 0,
+        pwCost: 0,
+        mpCost: 0,
+        message: `Retour Spontané: ${revertMessage}`
+      };
+    }
   }
 }
