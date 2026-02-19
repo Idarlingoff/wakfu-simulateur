@@ -14,6 +14,11 @@ import { Mechanism } from '../../models/board.model';
 import { BoardService } from '../board.service';
 import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
 import { isSpellMechanism, getSpellMechanismType, getMechanismImagePath } from '../../utils/mechanism-utils';
+import {XelorDialService} from './xelor-stragegy/xelor-dial.service';
+import {XelorCastValidatorService} from './xelor-stragegy/xelor-cast-validator.service';
+import {XelorPassivesService} from './xelor-stragegy/xelor-passives.service';
+import {XelorDelayedEffectsService} from './xelor-stragegy/xelor-delayed-effects.service';
+import {XelorTeleportService} from './xelor-stragegy/xelor-teleport.service';
 
 @Injectable({
   providedIn: 'root'
@@ -24,6 +29,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
   private readonly boardService = inject(BoardService);
   private readonly regenerationService = inject(ResourceRegenerationService);
+  private readonly dial = inject(XelorDialService);
+  private readonly castValidator = inject(XelorCastValidatorService);
+  private readonly passive = inject(XelorPassivesService);
+  private readonly delayed = inject(XelorDelayedEffectsService);
+  private readonly teleport = inject(XelorTeleportService);
 
   /**
    * Vérifie les conditions de lancement spécifiques au Xelor
@@ -34,52 +44,12 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     targetPosition: Position,
     context: SimulationContext
   ): ClassValidationResult {
-    const mechanismType = getSpellMechanismType(spell.id);
-
-    // Validation: 1 cadran par tour maximum
-    if (mechanismType === 'dial') {
-      const dialsPlacedThisTurn = context.mechanismsPlacedThisTurn?.get('dial') || 0;
-      if (dialsPlacedThisTurn >= 1) {
-        console.log(`[XELOR] ❌ Cadran déjà posé ce tour (${dialsPlacedThisTurn}/1)`);
-        return {
-          canCast: false,
-          reason: 'Un seul Cadran peut être posé par tour'
-        };
-      }
-    }
-
-    // Validation spécifique pour le Régulateur
-    if (mechanismType === 'regulateur') {
-      // Le régulateur ne peut être posé QUE sur les cases heures du cadran
-      const isOnDialHour = this.boardService.isPositionOnDialHour(targetPosition);
-
-      if (!isOnDialHour) {
-        console.log(`[XELOR] ❌ Régulateur cannot be placed: target position (${targetPosition.x}, ${targetPosition.y}) is not on a dial hour`);
-        return {
-          canCast: false,
-          reason: 'Le Régulateur ne peut être posé que sur les heures du cadran'
-        };
-      }
-
-      // Vérifier qu'il y a un cadran actif
-      const dials = this.boardService.getMechanismsByType('dial');
-      if (dials.length === 0) {
-        console.log(`[XELOR] ❌ Régulateur cannot be placed: no active dial on board`);
-        return {
-          canCast: false,
-          reason: 'Le Régulateur nécessite un Cadran actif sur le plateau'
-        };
-      }
-
-      console.log(`[XELOR] ✅ Régulateur can be placed on dial hour at (${targetPosition.x}, ${targetPosition.y})`);
-    }
-
-    // TODO: Ajouter d'autres validations spécifiques
-    // - Certains sorts ont des conditions basées sur les heures du cadran
-
-    return {
-      canCast: true
-    };
+    return this.castValidator.validateClassSpecificCasting(
+      spell,
+      casterPosition,
+      targetPosition,
+      context
+    );
   }
 
   /**
@@ -92,13 +62,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     actionResult: SimulationActionResult
   ): void {
     console.log(`[XELOR] Processing class-specific effects for spell: ${spell.name}`);
-
-    // 🆕 Traitement spécial pour "Retour Spontané"
-    if (this.isRetourSpontaneSpell(spell.id)) {
-      // Le sort a déjà été traité dans executeRetourSpontane
-      console.log(`[XELOR] Retour Spontané spell - no additional effects to process`);
-      return;
-    }
 
     // Si le sort est un mécanisme, activer l'aura correspondante
     const mechanismType = getSpellMechanismType(spell.id);
@@ -116,14 +79,14 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     // 🆕 Traiter les effets TELEPORT (Pointe-heure, etc.)
     if (actionResult.success) {
-      this.processTeleportEffects(spell, action, context, actionResult);
+      this.teleport.processTeleportEffects(spell, action, context, actionResult);
     }
 
     // Avancer l'heure du cadran selon le PW dépensé (1h par PW)
     // Cela s'applique à TOUS les sorts qui coûtent du PW
     console.log(`[XELOR] 🔍 Checking PW advancement: pwCost=${spell.pwCost}, success=${actionResult.success}, dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
     if (spell.pwCost > 0 && actionResult.success && context.dialId) {
-      this.advanceDialHourByPwCost(spell.pwCost, context);
+      this.dial.advanceDialHourByPwCost(spell.pwCost, context);
     } else if (spell.pwCost > 0 && actionResult.success && !context.dialId) {
       console.log(`[XELOR] ⚠️ Cannot advance dial hour: no dialId in context (spell: ${spell.name})`);
     }
@@ -147,550 +110,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     // 🆕 Enregistrer les effets différés du sort (ON_END_TURN, ON_TARGET_TURN_START, etc.)
     // Ces effets seront résolus immédiatement lors d'un tour de cadran si le passif "Maître du Cadran" est actif
     if (actionResult.success) {
-      this.registerSpellDelayedEffects(spell, action, context);
-    }
-  }
-
-  /**
-   * Traite les effets TELEPORT d'un sort (Pointe-heure, etc.)
-   * - Téléporte la cible X cases plus loin (en fonction de la position du lanceur)
-   * - Si la case est occupée -> échange de position
-   * - Regagne 1 PA si un échange a lieu
-   */
-  private processTeleportEffects(
-    spell: Spell,
-    action: TimelineAction,
-    context: SimulationContext,
-    actionResult: SimulationActionResult
-  ): void {
-    // Récupérer la variante appropriée
-    const variant = spell.variants.find(v => v.kind === 'NORMAL');
-    if (!variant) return;
-
-    // Chercher les effets TELEPORT
-    const teleportEffects = variant.effects.filter(e => e.effect === 'TELEPORT');
-    if (teleportEffects.length === 0) return;
-
-    for (const effect of teleportEffects) {
-      // Extraire les paramètres du teleport
-      const cells = effect.extendedData?.cells || 2;
-      const direction = effect.extendedData?.direction || 'BACK';
-
-      console.log(`[XELOR TELEPORT] 🌀 Processing TELEPORT effect: ${cells} cells, direction: ${direction}`);
-
-      // Position du lanceur (joueur)
-      const playerEntity = this.boardService.player();
-      const casterPosition = playerEntity?.position || context.playerPosition;
-      if (!casterPosition) {
-        console.warn(`[XELOR TELEPORT] ⚠️ No caster position found`);
-        continue;
-      }
-
-      // Position de la cible
-      const targetPosition = action.targetPosition;
-      if (!targetPosition) {
-        console.warn(`[XELOR TELEPORT] ⚠️ No target position found`);
-        continue;
-      }
-
-      // Trouver l'entité cible à la position
-      const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
-
-      // Si pas d'entité, vérifier s'il y a un mécanisme à la position cible
-      const targetMechanism = !targetEntity ? this.boardService.getMechanismAtPosition(targetPosition) : null;
-
-      if (!targetEntity && !targetMechanism) {
-        console.warn(`[XELOR TELEPORT] ⚠️ No entity or mechanism found at target position (${targetPosition.x}, ${targetPosition.y})`);
-        continue;
-      }
-
-      if (targetEntity) {
-        console.log(`[XELOR TELEPORT] 🎯 Target entity: ${targetEntity.name} at (${targetPosition.x}, ${targetPosition.y})`);
-      } else if (targetMechanism) {
-        console.log(`[XELOR TELEPORT] 🎯 Target mechanism: ${targetMechanism.type} (${targetMechanism.id}) at (${targetPosition.x}, ${targetPosition.y})`);
-      }
-
-      // Calculer la direction de téléportation (du lanceur vers la cible)
-      const dx = targetPosition.x - casterPosition.x;
-      const dy = targetPosition.y - casterPosition.y;
-
-      // Normaliser la direction
-      let dirX = 0, dirY = 0;
-      if (Math.abs(dx) > Math.abs(dy)) {
-        dirX = dx > 0 ? 1 : -1;
-      } else if (Math.abs(dy) > Math.abs(dx)) {
-        dirY = dy > 0 ? 1 : -1;
-      } else {
-        // Diagonale : on priorise X par convention
-        dirX = dx !== 0 ? (dx > 0 ? 1 : -1) : 0;
-        dirY = dy !== 0 ? (dy > 0 ? 1 : -1) : 0;
-      }
-
-      // Direction BACK signifie "pousser la cible loin du lanceur"
-      // Direction FRONT signifie "tirer la cible vers le lanceur"
-      const pushMultiplier = direction === 'BACK' ? 1 : -1;
-
-      // Calculer la position de destination
-      const destinationPosition: Position = {
-        x: targetPosition.x + (dirX * cells * pushMultiplier),
-        y: targetPosition.y + (dirY * cells * pushMultiplier)
-      };
-
-      console.log(`[XELOR TELEPORT] 📍 Destination calculated: (${destinationPosition.x}, ${destinationPosition.y})`);
-
-      // Vérifier les limites du plateau
-      const state = this.boardService.state();
-      if (destinationPosition.x < 0 || destinationPosition.x >= state.cols ||
-          destinationPosition.y < 0 || destinationPosition.y >= state.rows) {
-        console.warn(`[XELOR TELEPORT] ⚠️ Destination out of bounds: (${destinationPosition.x}, ${destinationPosition.y})`);
-        continue;
-      }
-
-      // Vérifier si la position de destination est occupée par une ENTITÉ
-      const entityAtDestination = this.boardService.getEntityAtPosition(destinationPosition);
-
-      // Vérifier si la position de destination est occupée par un MÉCANISME
-      const mechanismAtDestination = this.boardService.getMechanismAtPosition(destinationPosition);
-
-      console.log(`[XELOR TELEPORT] 🔍 Checking destination (${destinationPosition.x}, ${destinationPosition.y}):`);
-      console.log(`[XELOR TELEPORT]    - Entity: ${entityAtDestination?.name || 'none'}`);
-      console.log(`[XELOR TELEPORT]    - Mechanism: ${mechanismAtDestination?.type || 'none'}`);
-
-      // === CAS 1: La cible est une ENTITÉ ===
-      if (targetEntity) {
-        if (entityAtDestination) {
-          // Échange de position avec une autre entité !
-          console.log(`[XELOR TELEPORT] 🔄 Position occupied by entity ${entityAtDestination.name} - SWAP!`);
-
-          const swapSuccess = this.boardService.swapEntityPositions(targetEntity.id, entityAtDestination.id);
-
-          if (swapSuccess) {
-            console.log(`[XELOR TELEPORT] ✅ Swap successful!`);
-
-            // Regain de 1 PA pour le lanceur
-            this.regenerationService.regeneratePA(
-              context,
-              1,
-              'POINTE_HEURE',
-              'Pointe-heure: +1 PA (échange de position)',
-              { spellId: spell.id, trigger: 'ON_SWAP' }
-            );
-
-            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap bonus)`);
-
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
-            this.applyCoursduTempsOnTransposition(context, 'entity_entity_swap');
-
-            // Mettre à jour le contexte avec les nouvelles positions
-            this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
-            this.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
-
-            // Mettre à jour playerPosition/currentPosition si nécessaire
-            if (targetEntity.type === 'player') {
-              context.playerPosition = destinationPosition;
-              context.currentPosition = destinationPosition;
-            }
-            if (entityAtDestination.type === 'player') {
-              context.playerPosition = targetPosition;
-              context.currentPosition = targetPosition;
-            }
-
-            // Ajouter les détails de l'échange au résultat
-            if (!actionResult.details) actionResult.details = {};
-            actionResult.details.teleport = {
-              type: 'swap',
-              targetEntity: targetEntity.name,
-              swappedWith: entityAtDestination.name,
-              from: targetPosition,
-              to: destinationPosition,
-              paGained: 1
-            };
-
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
-            this.recordMovement(
-              context,
-              'swap',
-              targetEntity.id,
-              'entity',
-              targetEntity.name,
-              targetPosition,
-              destinationPosition,
-              spell.id,
-              {
-                id: entityAtDestination.id,
-                type: 'entity',
-                name: entityAtDestination.name,
-                fromPosition: destinationPosition,
-                toPosition: targetPosition
-              }
-            );
-          }
-        } else if (mechanismAtDestination) {
-          // Échange de position avec un mécanisme !
-          console.log(`[XELOR TELEPORT] 🔄 Position occupied by mechanism ${mechanismAtDestination.type} (${mechanismAtDestination.id}) - SWAP!`);
-
-          const swapSuccess = this.boardService.swapEntityWithMechanism(targetEntity.id, mechanismAtDestination.id);
-
-          if (swapSuccess) {
-            console.log(`[XELOR TELEPORT] ✅ Entity/Mechanism swap successful!`);
-
-            // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
-            if (mechanismAtDestination.type === 'dial') {
-              this.updateDialHoursAfterSwap(mechanismAtDestination.id, context);
-            }
-
-            // Regain de 1 PA pour le lanceur
-            this.regenerationService.regeneratePA(
-              context,
-              1,
-              'POINTE_HEURE',
-              'Pointe-heure: +1 PA (échange de position avec mécanisme)',
-              { spellId: spell.id, trigger: 'ON_SWAP_MECHANISM' }
-            );
-
-            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap with mechanism bonus)`);
-
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
-            this.applyCoursduTempsOnTransposition(context, 'entity_mechanism_swap');
-
-            // Mettre à jour le contexte avec la nouvelle position de l'entité
-            this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
-
-            // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est échangé
-            if (targetEntity.type === 'player') {
-              context.playerPosition = destinationPosition;
-              context.currentPosition = destinationPosition;
-            }
-
-            // Ajouter les détails de l'échange au résultat
-            if (!actionResult.details) actionResult.details = {};
-            actionResult.details.teleport = {
-              type: 'swap_mechanism',
-              targetEntity: targetEntity.name,
-              swappedWith: `${mechanismAtDestination.type} (${mechanismAtDestination.id})`,
-              from: targetPosition,
-              to: destinationPosition,
-              paGained: 1
-            };
-
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
-            this.recordMovement(
-              context,
-              'swap_mechanism',
-              targetEntity.id,
-              'entity',
-              targetEntity.name,
-              targetPosition,
-              destinationPosition,
-              spell.id,
-              {
-                id: mechanismAtDestination.id,
-                type: 'mechanism',
-                name: mechanismAtDestination.type,
-                fromPosition: destinationPosition,
-                toPosition: targetPosition
-              }
-            );
-          }
-        } else {
-          // Téléportation simple
-          console.log(`[XELOR TELEPORT] 🌀 Simple teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
-
-          this.boardService.updateEntityPosition(targetEntity.id, destinationPosition);
-
-          // Mettre à jour le contexte avec la nouvelle position de l'entité
-          this.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
-
-          // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est téléporté
-          if (targetEntity.type === 'player') {
-            context.playerPosition = destinationPosition;
-            context.currentPosition = destinationPosition;
-          }
-
-          // Ajouter les détails au résultat
-          if (!actionResult.details) actionResult.details = {};
-          actionResult.details.teleport = {
-            type: 'simple',
-            targetEntity: targetEntity.name,
-            from: targetPosition,
-            to: destinationPosition
-          };
-
-          // 🆕 Enregistrer le mouvement pour "Retour Spontané"
-          this.recordMovement(
-            context,
-            'teleport',
-            targetEntity.id,
-            'entity',
-            targetEntity.name,
-            targetPosition,
-            destinationPosition,
-            spell.id
-          );
-
-          console.log(`[XELOR TELEPORT] ✅ Teleport successful!`);
-        }
-      }
-      // === CAS 2: La cible est un MÉCANISME ===
-      else if (targetMechanism) {
-        if (entityAtDestination) {
-          // Échange mécanisme <-> entité
-          console.log(`[XELOR TELEPORT] 🔄 Mechanism target, destination occupied by entity ${entityAtDestination.name} - SWAP!`);
-
-          const swapSuccess = this.boardService.swapEntityWithMechanism(entityAtDestination.id, targetMechanism.id);
-
-          if (swapSuccess) {
-            console.log(`[XELOR TELEPORT] ✅ Mechanism/Entity swap successful!`);
-
-            // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
-            if (targetMechanism.type === 'dial') {
-              this.updateDialHoursAfterSwap(targetMechanism.id, context);
-            }
-
-            // Regain de 1 PA pour le lanceur
-            this.regenerationService.regeneratePA(
-              context,
-              1,
-              'POINTE_HEURE',
-              'Pointe-heure: +1 PA (échange mécanisme avec entité)',
-              { spellId: spell.id, trigger: 'ON_SWAP_MECHANISM' }
-            );
-
-            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
-
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
-            this.applyCoursduTempsOnTransposition(context, 'mechanism_entity_swap');
-
-            // Mettre à jour le contexte avec la nouvelle position de l'entité
-            this.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
-
-            // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est échangé
-            if (entityAtDestination.type === 'player') {
-              context.playerPosition = targetPosition;
-              context.currentPosition = targetPosition;
-            }
-
-            // Ajouter les détails de l'échange au résultat
-            if (!actionResult.details) actionResult.details = {};
-            actionResult.details.teleport = {
-              type: 'swap_mechanism',
-              targetMechanism: `${targetMechanism.type} (${targetMechanism.id})`,
-              swappedWith: entityAtDestination.name,
-              from: targetPosition,
-              to: destinationPosition,
-              paGained: 1
-            };
-
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
-            this.recordMovement(
-              context,
-              'swap_mechanism',
-              targetMechanism.id,
-              'mechanism',
-              targetMechanism.type,
-              targetPosition,
-              destinationPosition,
-              spell.id,
-              {
-                id: entityAtDestination.id,
-                type: 'entity',
-                name: entityAtDestination.name,
-                fromPosition: destinationPosition,
-                toPosition: targetPosition
-              }
-            );
-          }
-        } else if (mechanismAtDestination) {
-          // Échange mécanisme <-> mécanisme
-          console.log(`[XELOR TELEPORT] 🔄 Mechanism target, destination occupied by mechanism ${mechanismAtDestination.type} - SWAP!`);
-
-          const swapSuccess = this.boardService.swapMechanismPositions(targetMechanism.id, mechanismAtDestination.id);
-
-          if (swapSuccess) {
-            console.log(`[XELOR TELEPORT] ✅ Mechanism/Mechanism swap successful!`);
-
-            // 🆕 Si l'un des mécanismes est un cadran, mettre à jour les heures
-            if (targetMechanism.type === 'dial') {
-              this.updateDialHoursAfterSwap(targetMechanism.id, context);
-            }
-            if (mechanismAtDestination.type === 'dial') {
-              this.updateDialHoursAfterSwap(mechanismAtDestination.id, context);
-            }
-
-            // Regain de 1 PA pour le lanceur
-            this.regenerationService.regeneratePA(
-              context,
-              1,
-              'POINTE_HEURE',
-              'Pointe-heure: +1 PA (échange de mécanismes)',
-              { spellId: spell.id, trigger: 'ON_SWAP_MECHANISM' }
-            );
-
-            console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
-
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
-            this.applyCoursduTempsOnTransposition(context, 'mechanism_mechanism_swap');
-
-            // Ajouter les détails de l'échange au résultat
-            if (!actionResult.details) actionResult.details = {};
-            actionResult.details.teleport = {
-              type: 'swap_mechanisms',
-              targetMechanism: `${targetMechanism.type} (${targetMechanism.id})`,
-              swappedWith: `${mechanismAtDestination.type} (${mechanismAtDestination.id})`,
-              from: targetPosition,
-              to: destinationPosition,
-              paGained: 1
-            };
-
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
-            this.recordMovement(
-              context,
-              'swap',
-              targetMechanism.id,
-              'mechanism',
-              targetMechanism.type,
-              targetPosition,
-              destinationPosition,
-              spell.id,
-              {
-                id: mechanismAtDestination.id,
-                type: 'mechanism',
-                name: mechanismAtDestination.type,
-                fromPosition: destinationPosition,
-                toPosition: targetPosition
-              }
-            );
-          }
-        } else {
-          // Téléportation simple du mécanisme
-          console.log(`[XELOR TELEPORT] 🌀 Simple mechanism teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
-
-          this.boardService.updateMechanismPosition(targetMechanism.id, destinationPosition);
-
-          // 🆕 Si le mécanisme est un cadran, mettre à jour les heures après la téléportation
-          if (targetMechanism.type === 'dial') {
-            this.updateDialHoursAfterSwap(targetMechanism.id, context);
-          }
-
-          // Ajouter les détails au résultat
-          if (!actionResult.details) actionResult.details = {};
-          actionResult.details.teleport = {
-            type: 'simple_mechanism',
-            targetMechanism: `${targetMechanism.type} (${targetMechanism.id})`,
-            from: targetPosition,
-            to: destinationPosition
-          };
-
-          // 🆕 Enregistrer le mouvement pour "Retour Spontané"
-          this.recordMovement(
-            context,
-            'teleport',
-            targetMechanism.id,
-            'mechanism',
-            targetMechanism.type,
-            targetPosition,
-            destinationPosition,
-            spell.id
-          );
-
-          console.log(`[XELOR TELEPORT] ✅ Mechanism teleport successful!`);
-        }
-      }
-    }
-  }
-
-  /**
-   * Enregistre les effets différés d'un sort
-   * Les effets avec phase ON_END_TURN, ON_TARGET_TURN_START, ON_TARGET_TURN_END
-   * sont enregistrés comme effets différés pour être résolus plus tard
-   * (ou immédiatement lors d'un tour de cadran avec le passif "Maître du Cadran")
-   */
-  private registerSpellDelayedEffects(
-    spell: Spell,
-    action: TimelineAction,
-    context: SimulationContext
-  ): void {
-    // Phases considérées comme "différées"
-    const delayedPhases = ['ON_END_TURN', 'ON_TARGET_TURN_START', 'ON_TARGET_TURN_END'];
-
-    // Utiliser la variante NORMAL par défaut (TODO: gérer les crits)
-    const variant = spell.variants.find(v => v.kind === 'NORMAL');
-    if (!variant) {
-      console.log(`[XELOR DELAYED] ⚠️ No NORMAL variant found for spell ${spell.name}`);
-      return;
-    }
-
-    // Filtrer les effets différés
-    const delayedEffects = variant.effects.filter(effect =>
-      effect.phase && delayedPhases.includes(effect.phase)
-    );
-
-    if (delayedEffects.length === 0) {
-      console.log(`[XELOR DELAYED] ℹ️ No delayed effects for spell ${spell.name}`);
-      return;
-    }
-
-    console.log(`[XELOR DELAYED] 📦 Found ${delayedEffects.length} delayed effect(s) for spell ${spell.name}`);
-
-    // Position du lanceur et de la cible
-    const playerEntity = this.boardService.player();
-    const casterPosition = playerEntity?.position || context.playerPosition || { x: 0, y: 0 };
-    const targetPosition = action.targetPosition || casterPosition;
-
-    // Enregistrer chaque effet différé
-    for (const effect of delayedEffects) {
-      // Extraire le montant - peut être dans extendedData.amount, minValue ou maxValue
-      const amount = effect.extendedData?.amount || effect.minValue || effect.maxValue || 0;
-
-      const delayedEffect: DelayedEffect = {
-        id: `delayed_${spell.id}_${effect.id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        spellId: spell.id,
-        spellName: spell.name,
-        originalPhase: effect.phase as any,
-        effectType: effect.effect,
-        targetScope: effect.targetScope,
-        targetPosition: targetPosition,
-        casterPosition: casterPosition,
-        params: {
-          amount: amount,
-          element: effect.element,
-          duration: effect.extendedData?.duration || effect.duration,
-          durationType: effect.durationType,
-          extendedData: effect.extendedData,
-          minValue: effect.minValue,
-          maxValue: effect.maxValue
-        },
-        registeredOnTurn: context.turn || 1
-      };
-
-      console.log(`[XELOR DELAYED] 📝 Creating delayed effect with amount: ${amount} (from extendedData: ${effect.extendedData?.amount}, minValue: ${effect.minValue}, maxValue: ${effect.maxValue})`);
-      this.registerDelayedEffect(delayedEffect, context);
-    }
-  }
-
-  /**
-   * Avance l'heure du cadran selon le coût en PW d'un sort
-   * L'heure courante avance de 1 par PW dépensé
-   */
-  private advanceDialHourByPwCost(pwCost: number, context: SimulationContext): void {
-    if (!context.dialId || context.currentDialHour === undefined) {
-      console.log(`[XELOR] ⚠️ advanceDialHourByPwCost skipped: dialId=${context.dialId}, currentDialHour=${context.currentDialHour}`);
-      return;
-    }
-
-    console.log(`[XELOR] ⏰ Advancing dial hour by ${pwCost} (PW cost)`);
-    console.log(`[XELOR] ⏰ BoardService state: activeDialId=${this.boardService.activeDialId()}, currentDialHour=${this.boardService.currentDialHour()}`);
-
-    // Avancer via le BoardService pour mettre à jour le signal
-    const result = this.boardService.advanceCurrentDialHour(pwCost);
-
-    // Mettre à jour le contexte
-    context.currentDialHour = result.newHour;
-
-    // Traiter le wrap si nécessaire
-    if (result.wrapped) {
-      console.log(`[XELOR] 🔄 Hour wrap detected! Triggering ON_HOUR_WRAPPED effects`);
-      this.processHourWrap(context);
+      this.delayed.registerSpellDelayedEffects(spell, action, context);
     }
   }
 
@@ -1128,7 +548,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     // 2. Avancer l'heure du cadran (si présent)
     if (context.dialId && context.currentDialHour !== undefined) {
-      this.advanceDialHour(context);
+      this.dial.advanceDialHour(context);
     }
 
     // 3. Appliquer le bonus PW du Régulateur en fin de tour
@@ -1213,39 +633,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
-   * Avance l'heure du cadran et déclenche les effets associés
-   */
-  private advanceDialHour(context: SimulationContext, hoursToAdvance: number = 1): void {
-    if (context.currentDialHour === undefined) return;
-
-    const previousHour = context.currentDialHour;
-    // Calculer la nouvelle heure (en restant dans 1-12)
-    context.currentDialHour = ((context.currentDialHour - 1 + hoursToAdvance) % 12) + 1;
-
-    console.log(`[XELOR] Dial hour advanced: ${previousHour} → ${context.currentDialHour} (${hoursToAdvance > 0 ? '+' : ''}${hoursToAdvance}h)`);
-
-    // Détection du tour de cadran (hour wrap)
-    // Un tour de cadran se produit si l'heure actuelle est "inférieure" à l'heure précédente
-    // (en considérant le cycle 1-12), ce qui signifie qu'on a "bouclé"
-    const hasWrapped = this.hasDialHourWrapped(previousHour, context.currentDialHour, hoursToAdvance);
-
-    if (hasWrapped) {
-      console.log(`[XELOR] 🔄 Hour wrap detected! (${previousHour} → ${context.currentDialHour}) - Triggering ON_HOUR_WRAPPED effects`);
-      this.processHourWrap(context);
-    }
-
-    // Vérifier si le joueur est sur la nouvelle heure courante (Ponctualité)
-    const playerEntity = this.boardService.player();
-    if (playerEntity && context.dialId) {
-      const playerHour = this.boardService.getDialHourAtPosition(playerEntity.position, context.dialId);
-      if (playerHour === context.currentDialHour) {
-        console.log(`[XELOR] ⭐ Ponctualité! Player is on current hour (${context.currentDialHour})`);
-        // TODO: Appliquer le buff Ponctualité (+50% DI)
-      }
-    }
-  }
-
-  /**
    * Modifie directement l'heure du cadran (utilisé par les sorts comme Désynchronisation, Distorsion)
    * Cette méthode peut faire avancer ou reculer l'heure de plusieurs positions
    *
@@ -1258,7 +645,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       return;
     }
 
-    this.advanceDialHour(context, hours);
+    this.dial.advanceDialHour(context, hours);
   }
 
   /**
@@ -1292,7 +679,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     console.log(`[XELOR] Setting dial hour from ${previousHour} to ${targetHour} (${hoursToAdvance > 0 ? '+' : ''}${hoursToAdvance}h)`);
 
-    this.advanceDialHour(context, hoursToAdvance);
+    this.dial.advanceDialHour(context, hoursToAdvance);
   }
 
   /**
@@ -1329,60 +716,8 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    * Un tour de cadran se produit lorsque l'heure courante fait un tour complet (passe par 12→1)
    */
   public override processHourWrap(context: SimulationContext): void {
-    console.log('[XELOR] 🔄 Processing hour wrap effects (dial completed a full rotation)');
-
-    // Vérifier si c'est le premier tour de cadran après la pose
-    const isFirstLoop = !context.dialFirstLoopCompleted;
-
-    if (isFirstLoop) {
-      console.log('[XELOR] 🔄 First hour wrap since dial placement - marking first loop as completed');
-      context.dialFirstLoopCompleted = true;
-    }
-
-    // Les Rouages infligent des dégâts supplémentaires (status_effect avec tick_phase = ON_HOUR_WRAPPED)
-    if (context.activeAuras?.has('ROUAGE_AURA')) {
-      this.applyRouageDamage(context);
-    }
-
-    // Les Sinistros soignent à nouveau (status_effect avec tick_phase = ON_HOUR_WRAPPED)
-    if (context.activeAuras?.has('SINISTRO_AURA')) {
-      this.applySinistroHealing(context);
-    }
-
-    // Passif "Connaissance du passé" (XEL_CONNAISSANCE_PASSE):
-    // Quand l'heure courante fait un tour complet du cadran, régénère 2 PA et 2 PW
-    // IMPORTANT: Ne se déclenche PAS au premier passage de 12 à 1 après la pose du cadran
-    if (this.hasConnaissancePassePassive(context)) {
-      if (isFirstLoop) {
-        console.log('[XELOR CONNAISSANCE_PASSE] ⏳ First loop after dial placement - Connaissance du passé does NOT trigger');
-      } else {
-        this.applyConnaissancePasseRegeneration(context);
-      }
-    }
-
-    // Passif "Maître du Cadran" (XEL_MAITRE_CADRAN):
-    // Quand l'heure courante fait un tour complet du cadran,
-    // les effets délayés (ON_END_TURN, ON_TARGET_TURN_START, etc.) se résolvent immédiatement
-    if (this.hasMaitreDuCadranPassive(context)) {
-      this.resolveDelayedEffects(context);
-    }
+    this.dial.processHourWrap(context);
   }
-
-  // ============================================
-  // PASSIF "MAÎTRE DU CADRAN" - RESOLVE_DELAYED_EFFECTS
-  // Correspond à: passive_effect.effect_type = 'RESOLVE_DELAYED_EFFECTS'
-  // avec trigger = 'ON_HOUR_WRAPPED'
-  // ============================================
-
-  /** Liste des IDs possibles pour le passif Maître du Cadran */
-  private static readonly MAITRE_DU_CADRAN_IDS = [
-    'maitre_du_cadran',
-    'XEL_MAITRE_CADRAN',      // ID correct dans la base de données
-    'XEL_MAITRE_DU_CADRAN',   // Variante possible
-    'master_of_dial',
-    'maitre-du-cadran',
-    'maitreducadran'
-  ];
 
   /** Liste des IDs possibles pour le passif Connaissance du passé */
   private static readonly CONNAISSANCE_PASSE_IDS = [
@@ -1391,16 +726,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     'connaissance_du_passe',
     'connaissance-du-passe',
     'connaissancedupasse'
-  ];
-
-  /** Liste des IDs possibles pour le passif Cours du temps */
-  private static readonly COURS_DU_TEMPS_IDS = [
-    'cours_du_temps',
-    'XEL_COURS_DU_TEMPS',
-    'XEL_COURS_TEMPS',
-    'cours-du-temps',
-    'coursdutemps',
-    'flow_of_time'
   ];
 
   /** Liste des IDs possibles pour le passif Mécanisme spécialisé */
@@ -1434,24 +759,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
-   * Vérifie si le passif "Maître du Cadran" est actif
-   * Ce passif permet de résoudre les effets différés lors d'un tour de cadran
-   */
-  private hasMaitreDuCadranPassive(context: SimulationContext): boolean {
-    const passiveIds = context.activePassiveIds || [];
-    console.log(`[XELOR MAITRE_CADRAN] 🔍 Checking for Maître du Cadran passive...`);
-    console.log(`[XELOR MAITRE_CADRAN]    Active passive IDs in context: [${passiveIds.join(', ')}]`);
-    console.log(`[XELOR MAITRE_CADRAN]    Looking for any of: [${XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.join(', ')}]`);
-
-    const found = XelorSimulationStrategy.MAITRE_DU_CADRAN_IDS.some(id =>
-      passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
-    );
-
-    console.log(`[XELOR MAITRE_CADRAN]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
-    return found;
-  }
-
-  /**
    * Vérifie si le passif "Connaissance du passé" est actif
    * Ce passif :
    * - Régénère 2 PA et 2 PW à chaque tour de cadran
@@ -1460,20 +767,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   private hasConnaissancePassePassive(context: SimulationContext): boolean {
     const passiveIds = context.activePassiveIds || [];
     return XelorSimulationStrategy.CONNAISSANCE_PASSE_IDS.some(id =>
-      passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
-    );
-  }
-
-  /**
-   * Vérifie si le passif "Cours du temps" est actif
-   * Ce passif :
-   * - À chaque transposition causée par le Xélor :
-   *   - Régénère 1 PA si Distorsion est actif
-   *   - Autrement, régénère 1 PW
-   */
-  private hasCoursDuTempsPassive(context: SimulationContext): boolean {
-    const passiveIds = context.activePassiveIds || [];
-    return XelorSimulationStrategy.COURS_DU_TEMPS_IDS.some(id =>
       passiveIds.some(activeId => activeId.toLowerCase() === id.toLowerCase())
     );
   }
@@ -1597,7 +890,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       }
 
       // 🆕 Appliquer le passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
-      this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_swap');
+      this.passive.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_swap');
 
       // 🆕 Enregistrer le mouvement pour "Retour Spontané"
       this.recordMovement(
@@ -1696,7 +989,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       }
 
       // Appliquer le passif "Cours du temps"
-      this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_dial_swap');
+      this.passive.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_dial_swap');
 
       // 🆕 Enregistrer le mouvement pour "Retour Spontané"
       this.recordMovement(
@@ -1748,13 +1041,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
-   * Vérifie si Distorsion est actuellement active
-   */
-  public isDistorsionActive(context: SimulationContext): boolean {
-    return context.distorsionActive === true;
-  }
-
-  /**
    * Décrémente le cooldown de Distorsion en fin de tour
    * Appelé par cleanupTurn
    */
@@ -1767,87 +1053,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
         console.log(`[XELOR DISTORSION] ✅ Distorsion disponible à nouveau`);
       }
     }
-  }
-
-  /**
-   * Traite l'effet du passif "Cours du temps" lors d'une transposition
-   * - Si Distorsion est actif : +1 PA
-   * - Sinon : +1 PW
-   *
-   * @param context Le contexte de simulation
-   * @param transpositionType Type de transposition effectuée (pour le logging)
-   */
-  public applyCoursduTempsOnTransposition(context: SimulationContext, transpositionType: string = 'standard'): void {
-    if (!this.hasCoursDuTempsPassive(context)) {
-      return;
-    }
-
-    const isDistorsionActive = this.isDistorsionActive(context);
-
-    if (isDistorsionActive) {
-      // Distorsion active : +1 PA
-      this.regenerationService.regeneratePA(
-        context,
-        1,
-        'COURS_DU_TEMPS',
-        'Cours du temps: +1 PA (Distorsion actif)',
-        { trigger: 'ON_TRANSPOSITION', transpositionType, distorsionActive: true }
-      );
-      console.log(`[XELOR COURS_DU_TEMPS] ⚡ +1 PA (Distorsion actif) - Transposition: ${transpositionType}`);
-    } else {
-      // Distorsion inactif : +1 PW
-      this.regenerationService.regeneratePW(
-        context,
-        1,
-        'COURS_DU_TEMPS',
-        'Cours du temps: +1 PW (Distorsion inactif)',
-        { trigger: 'ON_TRANSPOSITION', transpositionType, distorsionActive: false }
-      );
-      console.log(`[XELOR COURS_DU_TEMPS] 💧 +1 PW (Distorsion inactif) - Transposition: ${transpositionType}`);
-    }
-  }
-
-  /**
-   * Enregistre un effet différé qui sera résolu lors du prochain tour de cadran
-   *
-   * Les effets différés sont des effets de sort avec une phase comme:
-   * - ON_END_TURN (fin de tour du lanceur)
-   * - ON_TARGET_TURN_START (début de tour de la cible)
-   * - ON_TARGET_TURN_END (fin de tour de la cible)
-   *
-   * Avec le passif Maître du Cadran, ces effets se résolvent AUSSI sur ON_HOUR_WRAPPED
-   *
-   * @param effect L'effet différé à enregistrer (correspond à un spell_effect avec phase différée)
-   * @param context Le contexte de simulation
-   * @returns true si l'effet a été enregistré, false sinon
-   */
-  public registerDelayedEffect(effect: DelayedEffect, context: SimulationContext): boolean {
-    // On enregistre l'effet même si le passif n'est pas actif
-    // (il sera simplement résolu à son moment normal, pas sur hour wrap)
-    if (!context.delayedEffects) {
-      context.delayedEffects = [];
-    }
-
-    // Générer un ID unique si non fourni
-    if (!effect.id) {
-      effect.id = `delayed_${effect.spellId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    }
-
-    // Enregistrer le tour si non fourni
-    if (!effect.registeredOnTurn) {
-      effect.registeredOnTurn = context.turn || 1;
-    }
-
-    context.delayedEffects.push(effect);
-
-    const willResolveOnHourWrap = this.hasMaitreDuCadranPassive(context);
-    console.log(`[XELOR DELAYED] ✅ Registered delayed effect: ${effect.spellName}`);
-    console.log(`[XELOR DELAYED]    Effect type: ${effect.effectType}, Phase: ${effect.originalPhase}`);
-    console.log(`[XELOR DELAYED]    Target scope: ${effect.targetScope}`);
-    console.log(`[XELOR DELAYED]    Will resolve on hour wrap: ${willResolveOnHourWrap ? 'YES (Maître du Cadran active)' : 'NO'}`);
-    console.log(`[XELOR DELAYED] 📋 Total delayed effects: ${context.delayedEffects.length}`);
-
-    return true;
   }
 
   /**
@@ -2163,13 +1368,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     const count = context.delayedEffects?.length || 0;
     context.delayedEffects = [];
     console.log(`[XELOR MAITRE_CADRAN] 🗑️ Cleared ${count} delayed effect(s)`);
-  }
-
-  /**
-   * Vérifie si le passif Maître du Cadran est actif (méthode publique)
-   */
-  public isMaitreDuCadranActive(context: SimulationContext): boolean {
-    return this.hasMaitreDuCadranPassive(context);
   }
 
   /**
@@ -2628,7 +1826,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     }
 
     if (revertSuccess) {
-      // TODO: Mettre en place pour la v2 la gestion source et cible marque 
+      // TODO: Mettre en place pour la v2 la gestion source et cible marque
       //context.movementHistory!.pop();
       //console.log(`[XELOR RETOUR_SPONTANE] ✅ Movement reverted successfully`);
 

@@ -222,17 +222,17 @@ export class SpellCastingValidatorService {
   }
 
   /**
-   * Calcule la distance entre deux positions (distance de Chebyshev / distance "en échiquier")
-   * C'est la distance utilisée dans Wakfu (max des différences absolues sur x et y)
+   * Calcule la distance entre deux positions (distance de manahttan)
+   * C'est la distance utilisée dans Wakfu (l'addition des différences absolues sur x et y)
    * Exemples:
    * - (0,0) -> (3,0) = 3
-   * - (0,0) -> (3,3) = 3 (pas 6 comme avec Manhattan)
-   * - (0,0) -> (2,4) = 4
+   * - (0,0) -> (3,3) = 6
+   * - (0,0) -> (2,4) = 6
    */
   private calculateDistance(pos1: Position, pos2: Position): number {
     const dx = Math.abs(pos1.x - pos2.x);
     const dy = Math.abs(pos1.y - pos2.y);
-    return Math.max(dx, dy);
+    return dx + dy;
   }
 
   /**
