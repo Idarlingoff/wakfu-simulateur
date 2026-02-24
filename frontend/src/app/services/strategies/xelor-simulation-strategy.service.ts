@@ -86,12 +86,14 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       this.teleport.processTeleportEffects(spell, action, context, actionResult);
     }
 
-    // Avancer l'heure du cadran selon le PW dépensé (1h par PW)
-    // Cela s'applique à TOUS les sorts qui coûtent du PW
-    console.log(`[XELOR] 🔍 Checking PW advancement: pwCost=${spell.pwCost}, success=${actionResult.success}, dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
-    if (spell.pwCost > 0 && actionResult.success && context.dialId) {
-      this.dial.advanceDialHourByPwCost(spell.pwCost, context);
-    } else if (spell.pwCost > 0 && actionResult.success && !context.dialId) {
+    // Avancer l'heure du cadran (1h par PW dépensé)
+    // Cas spécial: Vol du Temps doit avancer l'heure même si son PW statique est à 0
+    const dialHourAdvance = this.getDialHourAdvanceForSpell(spell);
+    console.log(`[XELOR] 🔍 Checking dial hour advancement: advance=${dialHourAdvance}, success=${actionResult.success}, dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
+
+    if (dialHourAdvance > 0 && actionResult.success && context.dialId) {
+      this.dial.advanceDialHourByPwCost(dialHourAdvance, context);
+    } else if (dialHourAdvance > 0 && actionResult.success && !context.dialId) {
       console.log(`[XELOR] ⚠️ Cannot advance dial hour: no dialId in context (spell: ${spell.name})`);
     }
 
@@ -151,6 +153,26 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    */
   private addHorlogeChargesFromPwSpent(pwCost: number, context: SimulationContext): void {
     //TODO: Mettre en place pour l'horloge
+  }
+
+  /**
+   * Retourne le nombre d'heures à avancer sur le cadran pour un sort.
+   *
+   * Règle générale: 1h par PW dépensé.
+   * Cas spécial Vol du Temps: le sort doit avancer l'heure même avec un coût PW statique à 0.
+   */
+  private getDialHourAdvanceForSpell(spell: Spell): number {
+    const staticPwCost = spell.pwCost || 0;
+
+    if (staticPwCost > 0) {
+      return staticPwCost;
+    }
+
+    if (spell.id === 'XEL_VDT' || spell.id === 'vol_du_temps') {
+      return 1;
+    }
+
+    return 0;
   }
 
   /**

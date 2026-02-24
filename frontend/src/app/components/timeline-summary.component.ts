@@ -8,6 +8,7 @@ import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { DataCacheService } from '../services/data-cache.service';
+import { SimulationService } from '../services/simulation.service';
 import { Spell } from '../models/spell.model';
 
 interface ResourceSummary {
@@ -424,6 +425,7 @@ export class TimelineSummaryComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
   dataCacheService = inject(DataCacheService);
+  simulationService = inject(SimulationService);
 
   // Cache local des sorts pour récupérer les coûts
   private spellsCache = signal<Map<string, Spell>>(new Map());
@@ -561,12 +563,30 @@ export class TimelineSummaryComponent {
     let apUsed = 0;
     let mpUsed = 0;
     let wpUsed = 0;
-    let apRegenerated = 0;
-    let wpRegenerated = 0;
     const gearExplosionsMap = new Map<number, number>();
+    let apRemaining = build.stats.ap;
+    let mpRemaining = build.stats.mp;
+    let wpRemaining = build.stats.wp;
 
     // Parcourir les étapes exécutées
     for (let i = 0; i < currentIndex && i < timeline.steps.length; i++) {
+      const stepResult = this.simulationService.getStepResult(i);
+
+      // ✅ Source de vérité prioritaire: résultats du moteur de simulation
+      if (stepResult) {
+        const successfulActions = stepResult.actions.filter((action: any) => action.success);
+
+        apUsed += successfulActions.reduce((sum: number, action: any) => sum + (action.paCost || 0), 0);
+        wpUsed += successfulActions.reduce((sum: number, action: any) => sum + (action.pwCost || 0), 0);
+        mpUsed += successfulActions.reduce((sum: number, action: any) => sum + (action.mpCost || 0), 0);
+
+        apRemaining = stepResult.contextAfter?.availablePa ?? apRemaining;
+        wpRemaining = stepResult.contextAfter?.availablePw ?? wpRemaining;
+        mpRemaining = stepResult.contextAfter?.availableMp ?? mpRemaining;
+        continue;
+      }
+
+      // Fallback: approximation si le cache de simulation n'est pas disponible
       const step = timeline.steps[i];
       step.actions.forEach(action => {
         if (action.type === 'CastSpell') {
@@ -579,21 +599,19 @@ export class TimelineSummaryComponent {
           if (action.details?.['gearExplosion']) {
             const level = action.details['gearLevel'] || 1;
             gearExplosionsMap.set(level, (gearExplosionsMap.get(level) || 0) + 1);
-            // Les explosions de rouage régénèrent 1 PW par niveau
-            wpRegenerated += level;
           }
         } else if (action.type === 'Move') {
           mpUsed += action.details?.['mpCost'] || 1;
         }
       });
 
-      // Régénération en début de tour (tous les X étapes)
-      // Pour simplifier, on régénère 1 AP tous les 2 tours
-      if ((i + 1) % 2 === 0) {
-        apRegenerated += 1;
-      }
+      apRemaining = Math.max(0, build.stats.ap - apUsed);
+      mpRemaining = Math.max(0, build.stats.mp - mpUsed);
+      wpRemaining = Math.max(0, build.stats.wp - wpUsed);
     }
 
+    const apRegenerated = Math.max(0, apUsed - (build.stats.ap - apRemaining));
+    const wpRegenerated = Math.max(0, wpUsed - (build.stats.wp - wpRemaining));
     const gearExplosions = Array.from(gearExplosionsMap.entries())
       .map(([level, count]) => ({ level, count }))
       .sort((a, b) => a.level - b.level);
@@ -604,9 +622,9 @@ export class TimelineSummaryComponent {
       wpUsed,
       apRegenerated,
       wpRegenerated,
-      apRemaining: Math.max(0, build.stats.ap - apUsed + apRegenerated),
-      mpRemaining: Math.max(0, build.stats.mp - mpUsed),
-      wpRemaining: Math.max(0, build.stats.wp - wpUsed + wpRegenerated),
+      apRemaining: Math.max(0, apRemaining),
+      mpRemaining: Math.max(0, mpRemaining),
+      wpRemaining: Math.max(0, wpRemaining),
       gearExplosions
     };
   });
