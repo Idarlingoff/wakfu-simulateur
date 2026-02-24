@@ -19,6 +19,7 @@ import { ClassStrategyFactory } from '../strategies/class-strategy-factory.servi
 import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy.interface';
 import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
 import { firstValueFrom } from 'rxjs';
+import {buildSpellReferencesWithInnates, canonicalizeInnateSpellId} from '../../utils/innate-spells.utils';
 
 /**
  * Phases d'exécution des effets de sorts
@@ -461,15 +462,15 @@ export class SimulationEngineService {
     });
     console.log('═══════════════════════════════════════════════════════');
 
-    // Trouver la référence du sort dans le build
-    const spellRef = build.spellBar?.spells?.find(s => s && s.spellId === action.spellId);
+    // Trouver la référence du sort dans le build (inclut les sorts innés)
+    const spellRef = buildSpellReferencesWithInnates(build).find(s => s.spellId === action.spellId);
 
     if (!spellRef) {
       return {
         success: false,
         actionId: action.id || '',
         actionType: 'CastSpell',
-        spellId: action.spellId,
+        spellId: canonicalizeInnateSpellId(action.spellId),
         spellName: 'Unknown',
         paCost: 0,
         pwCost: 0,

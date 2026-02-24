@@ -2,6 +2,7 @@ import { Injectable, signal } from '@angular/core';
 import { Spell } from '../models/spell.model';
 import { Passive } from '../models/passive.model';
 import { WakfuApiService } from './wakfu-api.service';
+import { canonicalizeInnateSpellId } from '../utils/innate-spells.utils';
 
 interface CacheEntry<T> {
   data: T;
@@ -9,7 +10,7 @@ interface CacheEntry<T> {
 }
 
 /**
- * Service de cache pour les données de référence (sorts, passifs)
+ * Service de cache pour les données de référence (sorts, passis)
  * Évite de recharger les données à chaque fois depuis l'API
  */
 @Injectable({
@@ -82,9 +83,11 @@ export class DataCacheService {
    * @param spellId ID du sort
    */
   async getSpellById(spellId: string): Promise<Spell | undefined> {
+    const canonicalSpellId = canonicalizeInnateSpellId(spellId);
+
     // D'abord chercher dans tous les caches
     for (const entry of this.spellsCache.values()) {
-      const spell = entry.data.find(s => s.id === spellId);
+      const spell = entry.data.find(s => s.id === canonicalSpellId || s.id === spellId);
       if (spell) {
         return spell;
       }
@@ -93,7 +96,7 @@ export class DataCacheService {
     // Si pas trouvé, charger depuis l'API
     try {
       return await new Promise<Spell>((resolve, reject) => {
-        this.wakfuApi.getSpellById(spellId).subscribe({
+        this.wakfuApi.getSpellById(canonicalSpellId).subscribe({
           next: (data) => resolve(data),
           error: (err) => reject(err)
         });
@@ -259,4 +262,3 @@ export class DataCacheService {
     };
   }
 }
-

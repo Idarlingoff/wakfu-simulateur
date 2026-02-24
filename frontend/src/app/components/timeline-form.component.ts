@@ -12,6 +12,7 @@ import { BoardService } from '../services/board.service';
 import { DataCacheService } from '../services/data-cache.service';
 import { Timeline, TimelineStep } from '../models/timeline.model';
 import { Spell } from '../models/spell.model';
+import {buildSpellReferencesWithInnates, canonicalizeInnateSpellId} from '../utils/innate-spells.utils';
 
 interface FormStep {
   id: string;
@@ -524,7 +525,7 @@ export class TimelineFormComponent {
       return {
         id: step.id,
         actionType: (action?.type || 'CastSpell') as any,
-        spellId: action?.spellId || '',
+        spellId: canonicalizeInnateSpellId(action?.spellId || ''),
         entityId: action?.entityId || '', // Extraire l'entityId
         targetX: action?.targetPosition?.x || 0,
         targetY: action?.targetPosition?.y || 0,
@@ -600,7 +601,7 @@ export class TimelineFormComponent {
     }
 
     console.log('Build found:', build.name, '- Spell bar:', build.spellBar);
-    const spellReferences = build.spellBar.spells.filter(s => s !== null);
+    const spellReferences = buildSpellReferencesWithInnates(build);
     console.log('Spell references found:', spellReferences.length);
 
     const enrichedSpellsPromises = spellReferences.map(async (ref) => {
@@ -649,7 +650,7 @@ export class TimelineFormComponent {
         id: `action_${idx}`,
         type: step.actionType,
         order: idx + 1,
-        spellId: step.spellId || undefined,
+        spellId: step.spellId ? canonicalizeInnateSpellId(step.spellId) : undefined,
         entityId: step.entityId || undefined, // Ajouter l'entité à déplacer
         targetPosition: { x: step.targetX, y: step.targetY },
         targetFacing: { direction: step.facing }
@@ -720,4 +721,3 @@ export class TimelineFormComponent {
     this.editingTimelineId.set(null);
   }
 }
-

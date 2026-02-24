@@ -11,6 +11,7 @@ import { Build, BuildStats, SpellReference, PassiveReference, Sublimation } from
 import { SpellSelectorComponent } from './spell-selector.component';
 import { PassiveSelectorComponent } from './passive-selector.component';
 import { SublimationSelectorComponent } from './sublimation-selector.component';
+import { removeInnateSpellsFromSelection } from '../utils/innate-spells.utils';
 
 interface FormBuild {
   name: string;
@@ -476,7 +477,7 @@ export class BuildFormComponent {
       characterLevel: build.characterLevel,
       description: build.description || '',
       stats: { ...build.stats },
-      spells: [...build.spellBar.spells],
+      spells: removeInnateSpellsFromSelection(build.classId, [...build.spellBar.spells]),
       passives: [...build.passiveBar.passives],
       sublimations: [...build.sublimationBar.sublimations]
     };
@@ -517,12 +518,13 @@ export class BuildFormComponent {
 
     if (this.editingBuildId()) {
       // Update existing build
+      const sanitizedSpells = removeInnateSpellsFromSelection(this.form.classId, this.form.spells);
       const updates: Partial<Build> = {
         name: this.form.name,
         classId: this.form.classId,
         characterLevel: this.form.characterLevel,
         description: this.form.description,
-        spellBar: { spells: this.form.spells },
+        spellBar: { spells: sanitizedSpells },
         passiveBar: { passives: this.form.passives },
         sublimationBar: { sublimations: this.form.sublimations },
         stats: this.form.stats
@@ -532,13 +534,14 @@ export class BuildFormComponent {
       alert('Build modifié avec succès!');
     } else {
       // Create new build
+      const sanitizedSpells = removeInnateSpellsFromSelection(this.form.classId, this.form.spells);
       const newBuild: Build = {
         id: `build_${Date.now()}`,
         name: this.form.name,
         classId: this.form.classId,
         characterLevel: this.form.characterLevel,
         description: this.form.description,
-        spellBar: { spells: this.form.spells },
+        spellBar: { spells: sanitizedSpells },
         passiveBar: { passives: this.form.passives },
         sublimationBar: { sublimations: this.form.sublimations },
         stats: this.form.stats,
@@ -572,4 +575,3 @@ export class BuildFormComponent {
     this.editingBuildId.set(null);
   }
 }
-
