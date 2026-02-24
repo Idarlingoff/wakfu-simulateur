@@ -202,6 +202,68 @@ export class SimulationEngineService {
   ) {}
 
   /**
+   * Clone une position pour éviter les mutations partagées entre steps
+   */
+  private clonePosition(position: Position): Position {
+    return { ...position };
+  }
+
+  /**
+   * Clone le contexte de simulation pour figer un snapshot par step
+   */
+  private cloneContext(context: SimulationContext): SimulationContext {
+    return {
+      ...context,
+      currentPosition: this.clonePosition(context.currentPosition),
+      playerPosition: this.clonePosition(context.playerPosition),
+      entities: context.entities?.map(entity => ({
+        ...entity,
+        position: this.clonePosition(entity.position)
+      })),
+      mechanisms: context.mechanisms?.map(mechanism => ({
+        ...mechanism,
+        position: this.clonePosition(mechanism.position)
+      })),
+      buffs: context.buffs ? [...context.buffs] : undefined,
+      debuffs: context.debuffs ? [...context.debuffs] : undefined,
+      activePassiveIds: context.activePassiveIds ? [...context.activePassiveIds] : undefined,
+      spellUsageThisTurn: context.spellUsageThisTurn ? new Map(context.spellUsageThisTurn) : undefined,
+      spellUsagePerTarget: context.spellUsagePerTarget
+        ? new Map(
+          Array.from(context.spellUsagePerTarget.entries()).map(([spellId, usageMap]) => [
+            spellId,
+            new Map(usageMap)
+          ])
+        )
+        : undefined,
+      mechanismCharges: context.mechanismCharges ? new Map(context.mechanismCharges) : undefined,
+      activeAuras: context.activeAuras ? new Set(context.activeAuras) : undefined,
+      delayedEffects: context.delayedEffects?.map(effect => ({
+        ...effect,
+        targetPosition: this.clonePosition(effect.targetPosition),
+        casterPosition: this.clonePosition(effect.casterPosition),
+        params: { ...effect.params },
+        contextSnapshot: effect.contextSnapshot ? { ...effect.contextSnapshot } : undefined
+      })),
+      mechanismsPlacedThisTurn: context.mechanismsPlacedThisTurn
+        ? new Map(context.mechanismsPlacedThisTurn)
+        : undefined,
+      movementHistory: context.movementHistory?.map(movement => ({
+        ...movement,
+        fromPosition: this.clonePosition(movement.fromPosition),
+        toPosition: this.clonePosition(movement.toPosition),
+        swapPartner: movement.swapPartner
+          ? {
+            ...movement.swapPartner,
+            fromPosition: this.clonePosition(movement.swapPartner.fromPosition),
+            toPosition: this.clonePosition(movement.swapPartner.toPosition)
+          }
+          : undefined
+      }))
+    };
+  }
+
+  /**
    * Définit le cache des sorts (appelé depuis l'extérieur avec les données complètes)
    */
   setSpellsCache(spells: Spell[]): void {
@@ -288,7 +350,7 @@ export class SimulationEngineService {
 
     const steps: SimulationStepResult[] = [];
     const errors: string[] = [];
-    let currentContext = { ...initialContext };
+    let currentContext = this.cloneContext(initialContext);
     let totalDamage = 0;
 
     // Exécuter chaque step de la timeline
@@ -303,7 +365,7 @@ export class SimulationEngineService {
       );
 
       steps.push(stepResult);
-      currentContext = stepResult.contextAfter;
+      currentContext = this.cloneContext(stepResult.contextAfter);
 
       // Accumuler les dégâts
       for (const action of stepResult.actions) {
@@ -341,9 +403,9 @@ export class SimulationEngineService {
       buildId: build.id || '',
       timelineId: timeline.id || '',
       buildStats,
-      initialContext,
+      initialContext: this.cloneContext(initialContext),
       steps,
-      finalContext: currentContext,
+      finalContext: this.cloneContext(currentContext),
       totalDamage,
       totalPaUsed: initialContext.availablePa - currentContext.availablePa,
       totalPwUsed: initialContext.availablePw - currentContext.availablePw,
@@ -375,7 +437,7 @@ export class SimulationEngineService {
     console.log('');
 
     const actions: SimulationActionResult[] = [];
-    let currentContext = { ...context };
+    let currentContext = this.cloneContext(context);
     let stepSuccess = true;
 
     for (const action of step.actions) {
@@ -401,7 +463,7 @@ export class SimulationEngineService {
       stepId: step.id || `step_${stepNumber}`,
       stepNumber,
       actions,
-      contextAfter: currentContext,
+      contextAfter: this.cloneContext(currentContext),
       success: stepSuccess
     };
   }
