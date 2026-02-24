@@ -30,14 +30,23 @@ export class XelorTeleportService {
     actionResult: SimulationActionResult
   ): void {
     // Récupérer la variante appropriée
-    const variant = spell.variants.find(v => v.kind === 'NORMAL');
+    const variantKind = actionResult.details?.isCritical ? 'CRIT' : 'NORMAL';
+    const variant = spell.variants.find(v => v.kind === variantKind)
+      || spell.variants.find(v => v.kind === 'NORMAL');
     if (!variant) return;
 
-    // Chercher les effets TELEPORT
-    const teleportEffects = variant.effects.filter(e => e.effect === 'TELEPORT');
+    // Chercher les effets de téléportation
+    const teleportEffects = variant.effects.filter(
+      e => e.effect === 'TELEPORT' || e.effect === 'TELEPORT_SYMMETRIC'
+    );
     if (teleportEffects.length === 0) return;
 
     for (const effect of teleportEffects) {
+      if (effect.effect === 'TELEPORT_SYMMETRIC') {
+        this.processSymmetricTeleportEffect(action, context, actionResult, effect.extendedData || {});
+        continue;
+      }
+
       // Extraire les paramètres du teleport
       const cells = effect.extendedData?.cells || 2;
       const direction = effect.extendedData?.direction || 'BACK';
@@ -462,6 +471,125 @@ export class XelorTeleportService {
           console.log(`[XELOR TELEPORT] ✅ Mechanism teleport successful!`);
         }
       }
+    }
+  }
+
+  private processSymmetricTeleportEffect(
+    action: TimelineAction,
+    context: SimulationContext,
+    actionResult: SimulationActionResult,
+    params: any
+  ): void {
+    const center = action.targetPosition;
+    if (!center) {
+      console.warn('[XELOR TELEPORT] ⚠️ TELEPORT_SYMMETRIC skipped: no center target position');
+      return;
+    }
+
+    const areaRange = Number(params?.range ?? params?.radius ?? 2);
+    const state = this.boardService.state();
+    const entitiesInArea = state.entities.filter(entity => {
+      const dx = entity.position.x - center.x;
+      const dy = entity.position.y - center.y;
+      const onCross = (dx === 0 && Math.abs(dy) <= areaRange)
+        || (dy === 0 && Math.abs(dx) <= areaRange);
+      return onCross;
+    });
+
+    if (entitiesInArea.length === 0) {
+      console.log('[XELOR TELEPORT] ℹ️ TELEPORT_SYMMETRIC: no entity in area');
+      return;
+    }
+
+    const entityByPosition = new Map<string, typeof entitiesInArea[number]>();
+    for (const entity of entitiesInArea) {
+      entityByPosition.set(`${entity.position.x},${entity.position.y}`, entity);
+    }
+
+    const processedEntityIds = new Set<string>();
+    const movements: Array<{ entityId: string; from: Position; to: Position; swappedWith?: string }> = [];
+
+    for (const entity of entitiesInArea) {
+      if (processedEntityIds.has(entity.id)) continue;
+
+      const from: Position = { ...entity.position };
+      const symmetric: Position = {
+        x: center.x * 2 - from.x,
+        y: center.y * 2 - from.y
+      };
+
+      if (
+        symmetric.x < 0 || symmetric.x >= state.cols ||
+        symmetric.y < 0 || symmetric.y >= state.rows
+      ) {
+        processedEntityIds.add(entity.id);
+        continue;
+      }
+
+      const oppositeEntity = entityByPosition.get(`${symmetric.x},${symmetric.y}`);
+      if (oppositeEntity && oppositeEntity.id !== entity.id) {
+        if (processedEntityIds.has(oppositeEntity.id)) continue;
+
+        const oppositeFrom: Position = { ...oppositeEntity.position };
+        const swapSuccess = this.boardService.swapEntityPositions(entity.id, oppositeEntity.id);
+        if (swapSuccess) {
+          this.xelorMovementService.updateEntityPositionInContext(context, entity.id, oppositeFrom);
+          this.xelorMovementService.updateEntityPositionInContext(context, oppositeEntity.id, from);
+
+          if (entity.type === 'player') {
+            context.playerPosition = oppositeFrom;
+            context.currentPosition = oppositeFrom;
+          }
+          if (oppositeEntity.type === 'player') {
+            context.playerPosition = from;
+            context.currentPosition = from;
+          }
+
+          movements.push({ entityId: entity.id, from, to: oppositeFrom, swappedWith: oppositeEntity.id });
+          movements.push({ entityId: oppositeEntity.id, from: oppositeFrom, to: from, swappedWith: entity.id });
+        }
+
+        processedEntityIds.add(entity.id);
+        processedEntityIds.add(oppositeEntity.id);
+        continue;
+      }
+
+      if (from.x === symmetric.x && from.y === symmetric.y) {
+        processedEntityIds.add(entity.id);
+        continue;
+      }
+
+      const occupiedByEntity = this.boardService.getEntityAtPosition(symmetric);
+      const occupiedByMechanism = this.boardService.getMechanismAtPosition(symmetric);
+      if (occupiedByEntity || occupiedByMechanism) {
+        processedEntityIds.add(entity.id);
+        continue;
+      }
+
+      this.boardService.updateEntityPosition(entity.id, symmetric);
+      this.xelorMovementService.updateEntityPositionInContext(context, entity.id, symmetric);
+
+      if (entity.type === 'player') {
+        context.playerPosition = symmetric;
+        context.currentPosition = symmetric;
+      }
+
+      movements.push({ entityId: entity.id, from, to: symmetric });
+      processedEntityIds.add(entity.id);
+    }
+
+    if (movements.length > 0) {
+      if (!actionResult.details) actionResult.details = {};
+      actionResult.details.teleport = {
+        type: 'symmetric_area',
+        center,
+        area: 'CROSS',
+        range: areaRange,
+        movedCount: movements.length,
+        movements
+      };
+
+      console.log(`[XELOR TELEPORT] ✅ TELEPORT_SYMMETRIC applied (${movements.length} movement(s))`);
     }
   }
 }

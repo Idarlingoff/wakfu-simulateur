@@ -610,7 +610,7 @@ DELETE FROM spell              WHERE id='XEL_PARADOXE';
 
 INSERT INTO spell VALUES (
                              'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
-                             4,0,1,3,TRUE,TRUE,
+                             4,0,1,3,TRUE,FALSE,
                              0,2,1,'NONE','STEP'
                          );
 
