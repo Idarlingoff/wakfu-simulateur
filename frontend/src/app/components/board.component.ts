@@ -3,8 +3,7 @@
  * Interactive combat map showing entities, mechanisms, and spell actions
  */
 
-import { Component, inject, computed, output, effect } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject, computed, output, effect, input } from '@angular/core';import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
@@ -98,10 +97,12 @@ interface BoardCell {
               *ngFor="let cell of boardCells()"
               class="cell"
               [ngStyle]="{ 'grid-column': cell.x + 1, 'grid-row': cell.y + 1 }"
+              [class.pending-placement]="placementMode() !== 'none'"
               [class.has-entity]="cell.hasEntity"
               [class.has-mechanism]="cell.hasMechanism"
               [class.has-action]="cell.isAction"
               [title]="'(' + cell.x + ', ' + cell.y + ')'"
+              (click)="onCellClick(cell)"
             >
             <!-- Coordinates -->
             <span class="coord" *ngIf="cell.x === 0 || cell.y === 0">
@@ -510,6 +511,11 @@ interface BoardCell {
     .cell:hover {
       background: #1a2236;
       box-shadow: 0 0 8px rgba(76, 201, 240, 0.3);
+    }
+
+    .cell.pending-placement:hover {
+      box-shadow: 0 0 12px rgba(123, 216, 143, 0.8);
+      border-color: var(--good);
     }
 
     .cell.has-entity {
@@ -991,6 +997,8 @@ export class BoardComponent {
   editPlayer = output<BoardEntity>();
   editEnemy = output<BoardEntity>();
   deleteEntity = output<BoardEntity>();
+  boardCellClick = output<Position>();
+  placementMode = input<'none' | 'player' | 'enemy' | 'cog'>('none');
 
   currentTimeline = computed(() => this.timelineService.currentTimeline());
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
@@ -1598,5 +1606,9 @@ export class BoardComponent {
     if (confirm(`Supprimer ${entity.type === 'player' ? 'le joueur' : "l'ennemi"} "${entity.name}" ?`)) {
       this.boardService.removeEntity(entity.id);
     }
+  }
+
+  onCellClick(cell: BoardCell): void {
+    this.boardCellClick.emit({ x: cell.x, y: cell.y });
   }
 }
