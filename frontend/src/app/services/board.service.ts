@@ -5,7 +5,8 @@
 
 import { Injectable, signal, computed } from '@angular/core';
 import { InteractiveBoardState, BoardEntity, Mechanism, DialHour } from '../models/board.model';
-import { Position, Facing } from '../models/timeline.model';
+import { Position, Facing, TimelineBoardSetup } from '../models/timeline.model';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -78,38 +79,18 @@ export class BoardService {
    * Initialize board with default state
    */
   private initializeBoard(): void {
-    const boardState: InteractiveBoardState = {
-      cols: 13,
+    this.boardState.set(this.createEmptyBoardState());
+  }
+
+  private createEmptyBoardState(): InteractiveBoardState {
+    return {      cols: 13,
       rows: 13,
-      entities: [
-        {
-          id: 'player_1',
-          type: 'player',
-          name: 'Xélor',
-          classId: 'XEL',
-          position: { x: 6, y: 10 },
-          facing: { direction: 'front' }
-        },
-        {
-          id: 'enemy_1',
-          type: 'enemy',
-          name: 'Enemy #1',
-          position: { x: 8, y: 10 },
-          facing: { direction: 'front' }
-        },
-        {
-          id: 'enemy_2',
-          type: 'enemy',
-          name: 'Enemy #2',
-          position: { x: 11, y: 9 },
-          facing: { direction: 'front' }
-        }
-      ],
+      entities: [],
       mechanisms: [],
       dialHours: [],
-      selectedEntityId: undefined
+      selectedEntityId: undefined,
+      draggedEntity: undefined
     };
-    this.boardState.set(boardState);
   }
 
   // ============ Entity Management ============
@@ -599,15 +580,7 @@ export class BoardService {
   }
 
   public resetToDefault(): void {
-    this.boardState.set({
-      cols: 13,
-      rows: 13,
-      entities: [],
-      mechanisms: [],
-      dialHours: [],
-      selectedEntityId: undefined,
-      draggedEntity: undefined
-    });
+    this.boardState.set(this.createEmptyBoardState());
   }
 
   /**
@@ -616,8 +589,56 @@ export class BoardService {
    */
   public clearBoard(): void {
     this.initializeBoard();
-    console.log('✅ Plateau effacé et réinitialisé avec les entités par défaut');
+    console.log('✅ Plateau effacé et réinitialisé');
   }
+
+
+
+  public applyTimelineSetup(setup?: TimelineBoardSetup): void {
+    this.clearHistory();
+    this.resetDialState();
+
+    if (!setup || setup.entities.length === 0) {
+      this.resetToDefault();
+      return;
+    }
+
+    this.boardState.update(state => ({
+      ...state,
+      entities: setup.entities.map(entity => ({
+        id: entity.id,
+        type: entity.type,
+        name: entity.name,
+        classId: entity.classId,
+        position: { ...entity.position },
+        facing: { ...entity.facing }
+      })),
+      mechanisms: [],
+      dialHours: [],
+      selectedEntityId: undefined,
+      draggedEntity: undefined
+    }));
+  }
+
+  public exportCurrentSetup(): TimelineBoardSetup {
+    const state = this.boardState();
+    return {
+      entities: state.entities.map(entity => ({
+        id: entity.id,
+        type: entity.type,
+        name: entity.name,
+        classId: entity.classId,
+        position: { ...entity.position },
+        facing: { ...entity.facing }
+      }))
+    };
+  }
+
+  public hasMinimumSetup(): boolean {
+    const entities = this.boardState().entities;
+    const allies = entities.filter(entity => entity.type === 'player').length;
+    const enemies = entities.filter(entity => entity.type === 'enemy').length;
+    return allies >= 1 && enemies >= 1;  }
 
   // ============ State Management (Undo/Redo) ============
 

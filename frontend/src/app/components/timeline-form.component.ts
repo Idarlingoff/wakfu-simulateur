@@ -685,6 +685,7 @@ export class TimelineFormComponent {
       const created = await this.timelineService.createTimeline(timeline);
       if (created) {
         this.timelineService.loadTimeline(created.id);
+        this.boardService.applyTimelineSetup(created.boardSetup);
         console.log('Timeline created and loaded:', created.id);
         alert('Timeline créée avec succès!');
       } else {

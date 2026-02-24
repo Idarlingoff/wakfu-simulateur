@@ -15,6 +15,7 @@ import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
 import {TimelineSummaryComponent} from './timeline-summary.component';
+import { Timeline } from '../models/timeline.model';
 
 @Component({
   selector: 'app-dashboard',
@@ -200,13 +201,16 @@ import {TimelineSummaryComponent} from './timeline-summary.component';
               📤 Export Build
             </button>
             <button (click)="onAddPlayer()" class="btn-secondary">
-              🦸 Add Player
+              🦸 Add Ally
             </button>
             <button (click)="onAddEnemy()" class="btn-secondary">
               👿 Add Enemy
             </button>
             <button (click)="onAddCog()" class="btn-secondary">
               ⚙️ Add Cog
+            </button>
+            <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">
+              💾 Save Board Setup in Timeline
             </button>
             <button (click)="onClearBoard()" class="btn-danger">
               🗑️ Clear Board
@@ -741,8 +745,30 @@ export class DashboardComponent {
     this.buildService.selectBuildA(build);
   }
 
-  onSelectTimeline(timeline: any): void {
+  onSelectTimeline(timeline: Timeline): void {
     this.timelineService.loadTimeline(timeline.id);
+    this.boardService.applyTimelineSetup(timeline.boardSetup);
+
+    if (!timeline.boardSetup || timeline.boardSetup.entities.length === 0) {
+      alert("Cette timeline n'a pas de setup sauvegardé. Placez au moins 1 allié et 1 ennemi sur le board.");
+    }
+  }
+
+  async onSaveBoardSetup(): Promise<void> {
+    const timeline = this.timelineService.currentTimeline();
+    if (!timeline) {
+      return;
+    }
+
+    const updated = await this.timelineService.updateTimeline(timeline.id, {
+      boardSetup: this.boardService.exportCurrentSetup()
+    });
+
+    if (updated) {
+      alert('✓ Setup du board sauvegardé dans la timeline !');
+    } else {
+      alert('Erreur lors de la sauvegarde du setup du board');
+    }
   }
 
   onValidateTimeline(): void {

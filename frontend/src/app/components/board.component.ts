@@ -40,7 +40,7 @@ interface BoardCell {
           <!-- Nouveau : Bouton pour lancer toute la simulation -->
           <button
             (click)="onRunFullSimulation()"
-            [disabled]="isSimulating() || currentStepIndex() > 0"
+            [disabled]="isSimulating() || currentStepIndex() > 0 || !hasMinimumBoardSetup()"
             class="btn-run-full"
             title="Exécuter toute la timeline d'un coup">
             @if (isSimulating()) {
@@ -59,7 +59,7 @@ interface BoardCell {
           <span class="step-indicator">
             {{ currentStepIndex() === 0 ? 'État initial' : 'Étape ' + currentStepIndex() }} / {{ totalSteps() - 1 }}
           </span>
-          <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1 || isSimulating()" class="btn-nav">
+          <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1 || isSimulating() || !hasMinimumBoardSetup()" class="btn-nav">
             Étape Suivante ▶
           </button>
 
@@ -67,6 +67,10 @@ interface BoardCell {
 
           <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">🔄 Réinitialiser</button>
         </div>
+      </div>
+
+      <div class="board-setup-warning" *ngIf="currentTimeline() && !hasMinimumBoardSetup()">
+        ⚠️ Placement requis: ajoutez au moins 1 allié et 1 ennemi avant de lancer la timeline.
       </div>
 
       <!-- Legend -->
@@ -378,6 +382,17 @@ interface BoardCell {
     }
 
     /* Legend */
+    .board-setup-warning {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(239, 71, 111, 0.15);
+      border: 1px solid rgba(239, 71, 111, 0.5);
+      color: #ffb4c4;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
     .legend {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));  /* Larger min-width for text to fit */
@@ -1005,6 +1020,7 @@ export class BoardComponent {
 
   // 🆕 Signal pour indiquer si une simulation est en cours
   isSimulating = computed(() => this.simulationService.isRunning());
+  hasMinimumBoardSetup = computed(() => this.boardService.hasMinimumSetup());
 
   constructor() {
     // Nettoyer l'historique quand on change de timeline
@@ -1154,6 +1170,10 @@ export class BoardComponent {
 
     if (!timeline || !build) {
       console.warn('⚠️ Timeline ou Build manquant');
+      return;
+    }
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant de simuler.');
       return;
     }
 
@@ -1413,6 +1433,11 @@ export class BoardComponent {
 
     if (!timeline || !build) {
       console.warn('⚠️ Timeline ou Build manquant');
+      return;
+    }
+
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant de simuler.');
       return;
     }
 
