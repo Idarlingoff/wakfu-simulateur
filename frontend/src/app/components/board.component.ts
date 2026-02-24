@@ -73,6 +73,10 @@ interface BoardCell {
         ⚠️ Placement requis: ajoutez au moins 1 allié et 1 ennemi avant de lancer la timeline.
       </div>
 
+      <div class="placement-help" *ngIf="placementMode() !== 'none'">
+        📍 {{ getPlacementHelpText() }}
+      </div>
+
       <!-- Legend -->
       <div class="legend">
         <div class="legend-item">
@@ -389,6 +393,17 @@ interface BoardCell {
       background: rgba(239, 71, 111, 0.15);
       border: 1px solid rgba(239, 71, 111, 0.5);
       color: #ffb4c4;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .placement-help {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(76, 201, 240, 0.12);
+      border: 1px solid rgba(76, 201, 240, 0.45);
+      color: #bdefff;
       font-size: 13px;
       font-weight: 600;
     }
@@ -1013,7 +1028,7 @@ export class BoardComponent {
   editEnemy = output<BoardEntity>();
   deleteEntity = output<BoardEntity>();
   boardCellClick = output<Position>();
-  placementMode = input<'none' | 'player' | 'enemy' | 'cog'>('none');
+  placementMode = input<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
 
   currentTimeline = computed(() => this.timelineService.currentTimeline());
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
@@ -1102,6 +1117,15 @@ export class BoardComponent {
    */
   getCurrentDialHour(): number | undefined {
     return this.boardService.currentDialHour();
+  }
+
+  getPlacementHelpText(): string {
+    const mode = this.placementMode();
+    if (mode === 'player') return 'Cliquez sur une case de la carte pour placer le joueur.';
+    if (mode === 'enemy') return "Cliquez sur une case de la carte pour placer l'ennemi.";
+    if (mode === 'player-edit') return 'Validez votre modification puis cliquez sur une case pour déplacer le joueur.';
+    if (mode === 'enemy-edit') return "Validez votre modification puis cliquez sur une case pour déplacer l'ennemi.";
+    return 'Cliquez sur une case de la carte pour placer le rouage.';
   }
 
   /**

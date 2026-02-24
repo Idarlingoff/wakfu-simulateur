@@ -260,7 +260,7 @@ export class PlayerFormComponent {
   };
 
   playerAdded = output<{ name: string; classId: string; facing: { direction: string } }>();
-  playerEdited = output<{ id: string; name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }>();
+  playerEdited = output<{ id: string; name: string; classId: string; facing: { direction: string } }>();
 
   openNew(): void {
     this.editMode.set(false);
@@ -310,7 +310,6 @@ export class PlayerFormComponent {
       console.log('[PlayerForm] Édition du joueur avec classId:', data.classId);
       this.playerEdited.emit({
         id: this.editingId()!,
-        position: this.editingPosition() || { x: 6, y: 6 },
         ...data
       });
     } else {
@@ -352,4 +351,3 @@ export class PlayerFormComponent {
     return classNames[classId] || classId;
   }
 }
-

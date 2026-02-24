@@ -234,7 +234,8 @@ export class EnemyFormComponent {
     facing: 'front'
   };
 
-  enemyAdded = output<{ name: string; facing: { direction: string } }>();  enemyEdited = output<{ id: string; name: string; position: { x: number; y: number }; facing: { direction: string } }>();
+  enemyAdded = output<{ name: string; facing: { direction: string } }>();
+  enemyEdited = output<{ id: string; name: string; facing: { direction: string } }>();
 
   openNew(): void {
     this.editMode.set(false);
@@ -273,7 +274,6 @@ export class EnemyFormComponent {
     if (this.editMode() && this.editingId()) {
       this.enemyEdited.emit({
         id: this.editingId()!,
-        position: this.editingPosition() || { x: 6, y: 6 },
         ...data
       });
     } else {

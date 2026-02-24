@@ -732,8 +732,7 @@ export class DashboardComponent {
   boardService = inject(BoardService);
 
   buildSectionExpanded = signal<boolean>(true);
-  placementMode = signal<'none' | 'player' | 'enemy' | 'cog'>('none');
-
+  placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
   /**
    * Helper: Count non-null items in array
    */
@@ -798,12 +797,9 @@ export class DashboardComponent {
     this.placementMode.set('enemy');
   }
 
-  onEnemyEdited(data: { id: string; name: string; position: { x: number; y: number }; facing: { direction: string } }): void {
-    this.boardService.updateEntity(data.id, {
-      name: data.name,
-      position: data.position,
-      facing: { direction: data.facing.direction as 'front' | 'side' | 'back' }
-    });
+  onEnemyEdited(data: { id: string; name: string; facing: { direction: string } }): void {
+    this.pendingEnemyEditData = data;
+    this.placementMode.set('enemy-edit');
   }
 
   onAddPlayer(): void {
@@ -815,13 +811,9 @@ export class DashboardComponent {
     this.placementMode.set('player');
   }
 
-  onPlayerEdited(data: { id: string; name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }): void {
-    this.boardService.updateEntity(data.id, {
-      name: data.name,
-      classId: data.classId,
-      position: data.position,
-      facing: { direction: data.facing.direction as 'front' | 'side' | 'back' }
-    });
+  onPlayerEdited(data: { id: string; name: string; classId: string; facing: { direction: string } }): void {
+    this.pendingPlayerEditData = data;
+    this.placementMode.set('player-edit');
   }
 
   onEditPlayerFromBoard(entity: any): void {
@@ -845,6 +837,8 @@ export class DashboardComponent {
 
   pendingPlayerData: { name: string; classId: string; facing: { direction: string } } | null = null;
   pendingEnemyData: { name: string; facing: { direction: string } } | null = null;
+  pendingPlayerEditData: { id: string; name: string; classId: string; facing: { direction: string } } | null = null;
+  pendingEnemyEditData: { id: string; name: string; facing: { direction: string } } | null = null;
 
   onAddCog(): void {
     this.placementMode.set('cog');
@@ -880,6 +874,29 @@ export class DashboardComponent {
       return;
     }
 
+    if (this.placementMode() === 'player-edit' && this.pendingPlayerEditData) {
+      this.boardService.updateEntity(this.pendingPlayerEditData.id, {
+        name: this.pendingPlayerEditData.name,
+        classId: this.pendingPlayerEditData.classId,
+        position,
+        facing: { direction: this.pendingPlayerEditData.facing.direction as 'front' | 'side' | 'back' }
+      });
+      this.pendingPlayerEditData = null;
+      this.placementMode.set('none');
+      return;
+    }
+
+    if (this.placementMode() === 'enemy-edit' && this.pendingEnemyEditData) {
+      this.boardService.updateEntity(this.pendingEnemyEditData.id, {
+        name: this.pendingEnemyEditData.name,
+        position,
+        facing: { direction: this.pendingEnemyEditData.facing.direction as 'front' | 'side' | 'back' }
+      });
+      this.pendingEnemyEditData = null;
+      this.placementMode.set('none');
+      return;
+    }
+
     if (this.placementMode() === 'cog') {
       this.boardService.addMechanism({
         id: `mechanism_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -895,6 +912,8 @@ export class DashboardComponent {
     const mode = this.placementMode();
     if (mode === 'player') return 'Cliquez sur une case de la map pour placer le joueur.';
     if (mode === 'enemy') return "Cliquez sur une case de la map pour placer l'ennemi.";
+    if (mode === 'player-edit') return 'Cliquez sur une case de la map pour déplacer le joueur modifié.';
+    if (mode === 'enemy-edit') return "Cliquez sur une case de la map pour déplacer l'ennemi modifié.";
     return 'Cliquez sur une case de la map pour placer le rouage.';
   }
 
@@ -902,6 +921,8 @@ export class DashboardComponent {
     this.placementMode.set('none');
     this.pendingEnemyData = null;
     this.pendingPlayerData = null;
+    this.pendingEnemyEditData = null;
+    this.pendingPlayerEditData = null;
   }
 
   onClearBoard(): void {
