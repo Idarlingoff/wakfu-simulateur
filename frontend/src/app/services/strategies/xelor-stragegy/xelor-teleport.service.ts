@@ -480,6 +480,12 @@ export class XelorTeleportService {
     actionResult: SimulationActionResult,
     params: any
   ): void {
+    const mode = params?.mode || 'AREA_CROSS';
+    if (mode === 'SINGLE_TARGET') {
+      this.processSingleTargetSymmetricTeleport(action, context, actionResult, params);
+      return;
+    }
+
     const center = action.targetPosition;
     if (!center) {
       console.warn('[XELOR TELEPORT] ⚠️ TELEPORT_SYMMETRIC skipped: no center target position');
@@ -591,5 +597,193 @@ export class XelorTeleportService {
 
       console.log(`[XELOR TELEPORT] ✅ TELEPORT_SYMMETRIC applied (${movements.length} movement(s))`);
     }
+  }
+
+  private processSingleTargetSymmetricTeleport(
+    action: TimelineAction,
+    context: SimulationContext,
+    actionResult: SimulationActionResult,
+    params: any
+  ): void {
+    const casterEntity = this.boardService.player();
+    const targetPosition = action.targetPosition;
+
+    if (!casterEntity || !targetPosition) {
+      console.warn('[XELOR TELEPORT] ⚠️ TELEPORT_SYMMETRIC (single) skipped: missing caster or target position');
+      return;
+    }
+
+    const casterPosition: Position = { ...casterEntity.position };
+    const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
+    const targetMechanism = this.boardService.getMechanismAtPosition(targetPosition);
+
+    const currentHour = context.currentDialHour ?? this.boardService.currentDialHour();
+    const reverseOnOddHour = params?.reverseOnOddHour === true;
+    const shouldReverse = reverseOnOddHour && typeof currentHour === 'number' && currentHour % 2 === 1;
+
+    const movingUnit = shouldReverse
+      ? (targetEntity ? { kind: 'entity' as const, value: targetEntity } : targetMechanism ? { kind: 'mechanism' as const, value: targetMechanism } : null)
+      : { kind: 'entity' as const, value: casterEntity };
+
+    if (!movingUnit) {
+      console.warn('[XELOR TELEPORT] ⚠️ TELEPORT_SYMMETRIC (single) skipped: no valid entity to move');
+      return;
+    }
+
+    const movingFrom: Position = { ...movingUnit.value.position };
+    const anchor = shouldReverse ? casterPosition : targetPosition;
+    const mirroredSource = shouldReverse ? targetPosition : casterPosition;
+    const destination: Position = {
+      x: anchor.x * 2 - mirroredSource.x,
+      y: anchor.y * 2 - mirroredSource.y
+    };
+
+    const state = this.boardService.state();
+    if (
+      destination.x < 0 || destination.x >= state.cols ||
+      destination.y < 0 || destination.y >= state.rows
+    ) {
+      console.warn(`[XELOR TELEPORT] ⚠️ TELEPORT_SYMMETRIC (single) destination out of bounds: (${destination.x}, ${destination.y})`);
+      return;
+    }
+
+    const occupantEntity = this.boardService.getEntityAtPosition(destination);
+    const occupantMechanism = this.boardService.getMechanismAtPosition(destination);
+
+    if (movingUnit.kind === 'entity') {
+      const movingEntity = movingUnit.value;
+
+      if (occupantEntity && occupantEntity.id !== movingEntity.id) {
+        const swapSuccess = this.boardService.swapEntityPositions(movingEntity.id, occupantEntity.id);
+        if (!swapSuccess) return;
+
+        this.xelorMovementService.updateEntityPositionInContext(context, movingEntity.id, destination);
+        this.xelorMovementService.updateEntityPositionInContext(context, occupantEntity.id, movingFrom);
+
+        if (movingEntity.type === 'player') {
+          context.playerPosition = destination;
+          context.currentPosition = destination;
+        }
+        if (occupantEntity.type === 'player') {
+          context.playerPosition = movingFrom;
+          context.currentPosition = movingFrom;
+        }
+
+        if (!actionResult.details) actionResult.details = {};
+        actionResult.details.teleport = {
+          type: 'symmetric_single_swap',
+          movedEntityId: movingEntity.id,
+          from: movingFrom,
+          to: destination,
+          swappedWith: occupantEntity.id,
+          mirroredAround: shouldReverse ? 'CASTER' : 'TARGET',
+          currentHour
+        };
+        return;
+      }
+
+      if (occupantMechanism) {
+        const swapSuccess = this.boardService.swapEntityWithMechanism(movingEntity.id, occupantMechanism.id);
+        if (!swapSuccess) return;
+
+        this.xelorMovementService.updateEntityPositionInContext(context, movingEntity.id, destination);
+        if (movingEntity.type === 'player') {
+          context.playerPosition = destination;
+          context.currentPosition = destination;
+        }
+
+        if (occupantMechanism.type === 'dial') {
+          this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id, context);
+        }
+
+        if (!actionResult.details) actionResult.details = {};
+        actionResult.details.teleport = {
+          type: 'symmetric_single_swap_mechanism',
+          movedEntityId: movingEntity.id,
+          from: movingFrom,
+          to: destination,
+          swappedWith: occupantMechanism.id,
+          mirroredAround: shouldReverse ? 'CASTER' : 'TARGET',
+          currentHour
+        };
+        return;
+      }
+
+      this.boardService.updateEntityPosition(movingEntity.id, destination);
+      this.xelorMovementService.updateEntityPositionInContext(context, movingEntity.id, destination);
+      if (movingEntity.type === 'player') {
+        context.playerPosition = destination;
+        context.currentPosition = destination;
+      }
+    } else {
+      const movingMechanism = movingUnit.value;
+
+      if (occupantEntity) {
+        const swapSuccess = this.boardService.swapEntityWithMechanism(occupantEntity.id, movingMechanism.id);
+        if (!swapSuccess) return;
+
+        this.xelorMovementService.updateEntityPositionInContext(context, occupantEntity.id, movingFrom);
+        if (occupantEntity.type === 'player') {
+          context.playerPosition = movingFrom;
+          context.currentPosition = movingFrom;
+        }
+
+        if (movingMechanism.type === 'dial') {
+          this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
+        }
+
+        if (!actionResult.details) actionResult.details = {};
+        actionResult.details.teleport = {
+          type: 'symmetric_single_swap_with_entity',
+          movedMechanismId: movingMechanism.id,
+          from: movingFrom,
+          to: destination,
+          swappedWith: occupantEntity.id,
+          mirroredAround: 'CASTER',
+          currentHour
+        };
+        return;
+      }
+
+      if (occupantMechanism && occupantMechanism.id !== movingMechanism.id) {
+        const swapSuccess = this.boardService.swapMechanismPositions(movingMechanism.id, occupantMechanism.id);
+        if (!swapSuccess) return;
+
+        if (movingMechanism.type === 'dial') {
+          this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
+        }
+        if (occupantMechanism.type === 'dial') {
+          this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id, context);
+        }
+
+        if (!actionResult.details) actionResult.details = {};
+        actionResult.details.teleport = {
+          type: 'symmetric_single_swap_mechanism_mechanism',
+          movedMechanismId: movingMechanism.id,
+          from: movingFrom,
+          to: destination,
+          swappedWith: occupantMechanism.id,
+          mirroredAround: 'CASTER',
+          currentHour
+        };
+        return;
+      }
+
+      this.boardService.updateMechanismPosition(movingMechanism.id, destination);
+      if (movingMechanism.type === 'dial') {
+        this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
+      }
+    }
+
+    if (!actionResult.details) actionResult.details = {};
+    actionResult.details.teleport = {
+      type: 'symmetric_single',
+      movedEntityId: movingUnit.kind === 'entity' ? movingUnit.value.id : undefined,
+      movedMechanismId: movingUnit.kind === 'mechanism' ? movingUnit.value.id : undefined,
+      from: movingFrom,
+      to: destination,
+      mirroredAround: shouldReverse ? 'CASTER' : 'TARGET',
+      currentHour
+    };
   }
 }

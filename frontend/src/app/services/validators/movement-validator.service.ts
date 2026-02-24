@@ -64,7 +64,16 @@ export class MovementValidatorService {
     to: Position,
     context: SimulationContext
   ): MovementValidationResult {
-    const wpCost = 1
+    const targetIsOnDialHour = this.isPositionOnDialHour(to);
+
+    // Règle Xélor cadran:
+    // - heure -> heure : coûte 1 PW
+    // - heure -> hors cadran : déplacement normal en PM
+    if (!targetIsOnDialHour) {
+      return this.validateNormalMovement(from, to, context);
+    }
+
+    const wpCost = 1;
     const dialHour = this.getDialHourAtPosition(from);
     const dialHourNumber = dialHour?.hour || 0;
     if (context.availablePw < wpCost) {
@@ -108,4 +117,3 @@ export class MovementValidatorService {
     return true;
   }
 }
-
