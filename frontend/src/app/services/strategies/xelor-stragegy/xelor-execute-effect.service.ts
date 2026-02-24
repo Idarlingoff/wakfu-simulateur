@@ -1,10 +1,11 @@
-import {inject, Injectable} from '@angular/core';
+import {inject, Injectable, Injector} from '@angular/core';
 import {DelayedEffect, SimulationContext, SimulationActionResult} from '../../calculators/simulation-engine.service';
 import {ResourceRegenerationService} from '../../processors/resource-regeneration.service';
 import {BoardService} from '../../board.service';
 import {Spell} from '../../../models/spell.model';
 import {TimelineAction} from '../../../models/timeline.model';
 import {XelorMovementService} from './xelor-movement.service';
+import {XelorDialService} from './xelor-dial.service';
 
 
 @Injectable({ providedIn: 'root' })
@@ -13,6 +14,14 @@ export class XelorExecuteEffectService {
   private readonly boardService = inject(BoardService);
   private readonly regenerationService = inject(ResourceRegenerationService);
   private readonly xelorMovementService = inject(XelorMovementService);
+  private readonly injector = inject(Injector);
+
+  private get dial(): XelorDialService {
+    return this.injector.get(XelorDialService);
+  }
+
+  private static readonly DESYNCHRO_SPELL_ID = 'XEL_DESYNCHRO';
+  private static readonly DESYNCHRO_DIAL_BONUS_USAGE_KEY = 'XEL_DESYNCHRO_DIAL_BONUS';
 
   /**
    * Exécute un effet selon son type (correspond à effect_type dans la table spell_effect)
@@ -197,10 +206,22 @@ export class XelorExecuteEffectService {
 
     console.log(`[XELOR MAITRE_CADRAN] ⏰ ADVANCE_DIAL: +${hours} hour(s)`);
 
-    if (context.currentDialHour !== undefined) {
-      const oldHour = context.currentDialHour;
-      const newHour = ((oldHour + hours - 1) % 12) + 1;
-      context.currentDialHour = newHour;
+    if (!context.dialId || context.currentDialHour === undefined) {
+      console.log('[XELOR MAITRE_CADRAN]    ℹ️ No active dial in context - ADVANCE_DIAL ignored');
+      return;
+    }
+
+    const oldHour = context.currentDialHour;
+
+    // Utiliser le service cadran existant pour bénéficier de la détection de wrap
+    // et des triggers ON_HOUR_WRAPPED (Connaissance du passé, Maître du Cadran, etc.)
+    this.dial.setDialHourOffset(context, hours);
+
+    const newHour = context.currentDialHour;
+
+    // Synchroniser aussi l'état du BoardService pour éviter un écart context/UI
+    if (newHour !== undefined) {
+      this.boardService.setCurrentDialHour(newHour, context.dialId);
       console.log(`[XELOR MAITRE_CADRAN]    ✅ Dial hour: ${oldHour} → ${newHour}`);
     }
   }
@@ -350,5 +371,81 @@ export class XelorExecuteEffectService {
         message: `Retour Spontané: ${revertMessage}`
       };
     }
+  }
+
+  /**
+   * Exécute les effets conditionnels ON_CAST d'un sort quand leurs conditions sont remplies.
+   * Cas géré ici: Désynchronisation sur cadran (centre/heure), limité à 1 fois par tour.
+   */
+  public processConditionalOnCastEffects(
+    spell: Spell,
+    action: TimelineAction,
+    context: SimulationContext
+  ): void {
+    if (spell.id !== XelorExecuteEffectService.DESYNCHRO_SPELL_ID || !action.targetPosition) {
+      return;
+    }
+
+    const targetMechanism = this.boardService.getMechanismAtPosition(action.targetPosition);
+    const isDialCenter = targetMechanism?.type === 'dial';
+    const isDialHour = this.boardService.isPositionOnDialHour(action.targetPosition, context.dialId);
+    if (!isDialCenter && !isDialHour) {
+      return;
+    }
+
+    if (!context.spellUsageThisTurn) {
+      context.spellUsageThisTurn = new Map<string, number>();
+    }
+
+    const bonusUsage = context.spellUsageThisTurn.get(XelorExecuteEffectService.DESYNCHRO_DIAL_BONUS_USAGE_KEY) || 0;
+    if (bonusUsage >= 1) {
+      console.log('[XELOR DESYNCHRO] ℹ️ Bonus cadran déjà déclenché ce tour (1/1)');
+      return;
+    }
+
+    const normalVariant = spell.variants.find(v => v.kind === 'NORMAL');
+    if (!normalVariant) {
+      return;
+    }
+
+    const conditionalEffects = normalVariant.effects
+      .filter(effect => effect.phase === 'ON_CAST')
+      .filter(effect => effect.condGroup?.conditions?.some(cond => cond.code === 'ON_DIAL_CELL'))
+      .sort((a, b) => a.ordinal - b.ordinal);
+
+    if (conditionalEffects.length === 0) {
+      return;
+    }
+
+    const casterPosition = context.playerPosition || context.currentPosition;
+
+    conditionalEffects.forEach(effect => {
+      const params = (effect.extendedData && typeof effect.extendedData === 'object')
+        ? { ...(effect.extendedData as Record<string, any>) }
+        : {};
+
+      if (effect.minValue !== undefined && params['minValue'] === undefined) {
+        params['minValue'] = effect.minValue;
+      }
+      if (effect.maxValue !== undefined && params['maxValue'] === undefined) {
+        params['maxValue'] = effect.maxValue;
+      }
+
+      this.executeEffect({
+        id: `desynchro_dial_${spell.id}_${effect.id}_${Date.now()}`,
+        spellId: spell.id,
+        spellName: spell.name,
+        originalPhase: 'ON_CAST',
+        effectType: effect.effect,
+        targetScope: effect.targetScope,
+        targetPosition: action.targetPosition!,
+        casterPosition,
+        params,
+        registeredOnTurn: context.turn || 1
+      }, context);
+    });
+
+    context.spellUsageThisTurn.set(XelorExecuteEffectService.DESYNCHRO_DIAL_BONUS_USAGE_KEY, bonusUsage + 1);
+    console.log('[XELOR DESYNCHRO] ✅ Bonus cadran appliqué (avance +6h, +2 PA)');
   }
 }

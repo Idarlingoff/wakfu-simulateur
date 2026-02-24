@@ -21,6 +21,7 @@ import {XelorDelayedEffectsService} from './xelor-stragegy/xelor-delayed-effects
 import {XelorTeleportService} from './xelor-stragegy/xelor-teleport.service';
 import {XelorMovementService} from './xelor-stragegy/xelor-movement.service';
 import {XelorMechanismsService} from './xelor-stragegy/xelor-mechanisms.service';
+import {XelorExecuteEffectService} from './xelor-stragegy/xelor-execute-effect.service';
 
 @Injectable({
   providedIn: 'root'
@@ -38,6 +39,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   private readonly teleport = inject(XelorTeleportService);
   private readonly movement = inject(XelorMovementService);
   private readonly mechanisms = inject(XelorMechanismsService);
+  private readonly executeEffect = inject(XelorExecuteEffectService);
 
   /**
    * Vérifie les conditions de lancement spécifiques au Xelor
@@ -117,6 +119,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     // Ces effets seront résolus immédiatement lors d'un tour de cadran si le passif "Maître du Cadran" est actif
     if (actionResult.success) {
       this.delayed.registerSpellDelayedEffects(spell, action, context);
+    }
+
+    // Effet spécial Désynchronisation: lancé sur le cadran, avance de 6h et rend 2 PA (1 fois/tour)
+    if (actionResult.success) {
+      this.executeEffect.processConditionalOnCastEffects(spell, action, context);
     }
   }
 
