@@ -135,8 +135,20 @@ export class ResourceRegenerationService {
   applySinistroRegeneration(context: SimulationContext): RegenerationEvent[] {
     const events: RegenerationEvent[] = [];
     const sinistros = this.boardService.getMechanismsByType('sinistro');
+    const playerPosition = context.currentPosition || context.playerPosition;
 
     sinistros.forEach(sinistro => {
+      const distanceToPlayer = Math.abs(sinistro.position.x - playerPosition.x) + Math.abs(sinistro.position.y - playerPosition.y);
+
+      // Le Sinistro ne donne des PA qu'aux entités collées (distance de Manhattan = 1)
+      if (distanceToPlayer !== 1) {
+        console.log(
+          `[REGEN] Sinistro ${sinistro.id} ignoré: joueur trop loin ` +
+          `(distance ${distanceToPlayer}, requis: 1)`
+        );
+        return;
+      }
+
       const charges = context.mechanismCharges?.get(sinistro.id) || 0;
 
       // 1 PA par 5 charges, max 15 charges = 3 PA max
@@ -151,6 +163,7 @@ export class ResourceRegenerationService {
           `Sinistro: +${paBonus} PA (${charges} charges)`,
           {
             mechanismId: sinistro.id,
+            distanceToPlayer,
             charges: charges,
             effectiveCharges: effectiveCharges,
             formula: '1 PA / 5 charges (max 15 charges)'
