@@ -43,7 +43,8 @@ export class XelorMovementService {
       name: string;
       fromPosition: Position;
       toPosition: Position;
-    }
+    },
+    sourceActionId?: string
   ): void {
     this.initMovementHistory(context);
 
@@ -56,6 +57,7 @@ export class XelorMovementService {
       fromPosition: { ...fromPosition },
       toPosition: { ...toPosition },
       sourceSpellId,
+      sourceActionId: sourceActionId || context.currentActionId,
       timestamp: Date.now(),
       swapPartner: swapPartner ? {
         ...swapPartner,

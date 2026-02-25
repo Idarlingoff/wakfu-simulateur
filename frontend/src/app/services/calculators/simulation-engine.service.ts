@@ -81,6 +81,8 @@ export interface MovementRecord {
   toPosition: Position;
   // ID du sort qui a causé le mouvement (optionnel)
   sourceSpellId?: string;
+  // ID de l'action timeline qui a causé le mouvement (optionnel)
+  sourceActionId?: string;
   // Timestamp du mouvement
   timestamp: number;
   // Pour les swaps: informations sur l'autre entité/mécanisme impliqué
@@ -105,6 +107,9 @@ export interface SimulationContext {
   buffs?: any[];
   debuffs?: any[];
   turn?: number;
+
+  // Action timeline en cours d'exécution (utile pour corréler des effets post-cast)
+  currentActionId?: string;
 
   mechanismCharges?: Map<string, number>;
   // Compteurs partagés des charges des mécanismes Xélor par type.
@@ -455,7 +460,9 @@ export class SimulationEngineService {
 
     for (const action of step.actions) {
       console.log(`▶️  Action ${action.type}...`);
+      currentContext.currentActionId = action.id;
       const actionResult = await this.executeAction(action, currentContext, build, buildStats);
+      currentContext.currentActionId = undefined;
       actions.push(actionResult);
 
       if (actionResult.success) {

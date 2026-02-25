@@ -230,15 +230,23 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       return 0;
     }
 
+    const currentActionId = context.currentActionId;
     let charges = 0;
 
     for (let i = context.movementHistory.length - 1; i >= 0; i--) {
       const movement = context.movementHistory[i];
 
-      // Les mouvements sont append-only pendant une action.
-      // Dès qu'on sort du lot du sort courant, on s'arrête.
-      if (movement.sourceSpellId !== spellId) {
-        break;
+      // Priorité au découpage strict par action timeline.
+      // Si l'action courante est connue, on ne compte que ses mouvements.
+      if (currentActionId) {
+        if (movement.sourceActionId !== currentActionId) {
+          continue;
+        }
+      } else {
+        // Fallback historique: lot contigu du même sort en fin d'historique.
+        if (movement.sourceSpellId !== spellId) {
+          break;
+        }
       }
 
       if (movement.type === 'swap' || movement.type === 'swap_mechanism') {
