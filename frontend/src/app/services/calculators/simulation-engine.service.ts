@@ -107,6 +107,9 @@ export interface SimulationContext {
   turn?: number;
 
   mechanismCharges?: Map<string, number>;
+  // Compteurs partagés des charges des mécanismes Xélor par type.
+  // Permet de générer des charges avant même la pose d'un mécanisme.
+  sharedMechanismCharges?: Map<'cog' | 'sinistro', number>;
   activeAuras?: Set<string>;
   currentDialHour?: number;
   dialId?: string;
@@ -237,6 +240,9 @@ export class SimulationEngineService {
         )
         : undefined,
       mechanismCharges: context.mechanismCharges ? new Map(context.mechanismCharges) : undefined,
+      sharedMechanismCharges: context.sharedMechanismCharges
+        ? new Map(context.sharedMechanismCharges)
+        : undefined,
       activeAuras: context.activeAuras ? new Set(context.activeAuras) : undefined,
       delayedEffects: context.delayedEffects?.map(effect => ({
         ...effect,

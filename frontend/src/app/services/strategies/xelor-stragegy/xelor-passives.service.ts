@@ -166,7 +166,8 @@ export class XelorPassivesService {
    */
   public applyMecanismeSpecialiseSwapForDial(
     mechanismId: string,
-    context: SimulationContext
+    context: SimulationContext,
+    sourceSpellId?: string
   ): boolean {
     // Vérifier si le passif est actif
     if (!this.hasMecanismeSpecialisePassive(context)) {
@@ -238,7 +239,7 @@ export class XelorPassivesService {
         playerEntity.name || 'Player',
         playerPosition,
         dialPosition,
-        'XEL_DIAL', // Le sort cadran est la source du swap automatique
+        sourceSpellId || 'XEL_DIAL', // Le sort cadran est la source du swap automatique
         {
           id: mechanismId,
           type: 'mechanism',
@@ -271,7 +272,8 @@ export class XelorPassivesService {
     mechanismType: string,
     mechanismId: string,
     _mechanismPosition: Position, // Position initiale, ignorée - on récupère la position actuelle du BoardService
-    context: SimulationContext
+    context: SimulationContext,
+    sourceSpellId?: string
   ): void {
     // Vérifier si le passif est actif
     if (!this.hasMecanismeSpecialisePassive(context)) {
@@ -375,7 +377,7 @@ export class XelorPassivesService {
         playerEntity?.name || 'Player',
         playerPosition,
         actualMechanismPosition,
-        undefined, // Pas de sort source spécifique
+        sourceSpellId, // Pas de sort source spécifique
         {
           id: mechanismId,
           type: 'mechanism',

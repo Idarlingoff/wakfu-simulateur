@@ -90,12 +90,14 @@ export class XelorMechanismsService {
     // Gérer les mécanismes existants selon les règles
     this.handleExistingMechanisms(mechanismType, context);
 
+    const sharedCharges = this.getInitialChargesForMechanismType(mechanismType, context);
+
     // Créer le mécanisme
     const mechanism: Mechanism = {
       id: `${mechanismType}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       type: mechanismType,
       position: action.targetPosition,
-      charges: 0,
+      charges: sharedCharges,
       spellId: spell.id
     };
 
@@ -103,6 +105,7 @@ export class XelorMechanismsService {
 
     // Ajouter le mécanisme au plateau via le BoardService
     this.boardService.addMechanism(mechanism);
+    context.mechanismCharges?.set(mechanism.id, sharedCharges);
 
     // Incrémenter le compteur de mécanismes posés ce tour
     if (!context.mechanismsPlacedThisTurn) {
@@ -118,7 +121,13 @@ export class XelorMechanismsService {
     // IMPORTANT: Pour le cadran, le swap doit se faire APRÈS la téléportation sur l'heure 6
     // Pour les autres mécanismes (rouage, sinistro, régulateur), le swap se fait immédiatement
     if (mechanismType !== 'dial') {
-      this.xelorPassiveService.applyMecanismeSpecialiseSwap(mechanismType, mechanism.id, action.targetPosition, context);
+      this.xelorPassiveService.applyMecanismeSpecialiseSwap(
+        mechanismType,
+        mechanism.id,
+        action.targetPosition,
+        context,
+        spell.id
+      );
     }
 
     // Si c'est un cadran, créer les 12 heures autour et téléporter le joueur sur l'heure 6
@@ -173,7 +182,11 @@ export class XelorMechanismsService {
       // 🆕 MAINTENANT appliquer le passif "Mécanisme spécialisé" pour le cadran
       // Le joueur est sur l'heure 6, on échange avec le cadran (au centre)
       // Le joueur va au centre, le cadran va à l'heure 6
-      const swapApplied = this.xelorPassiveService.applyMecanismeSpecialiseSwapForDial(mechanism.id, context);
+      const swapApplied = this.xelorPassiveService.applyMecanismeSpecialiseSwapForDial(
+        mechanism.id,
+        context,
+        spell.id
+      );
 
       // Si le swap a été appliqué, translater les heures vers la NOUVELLE position du cadran
       if (swapApplied) {
@@ -206,6 +219,17 @@ export class XelorMechanismsService {
         mechanismId: mechanism.id
       }
     };
+  }
+
+  private getInitialChargesForMechanismType(
+    mechanismType: 'cog' | 'sinistro' | 'dial' | 'regulateur',
+    context: SimulationContext
+  ): number {
+    if (mechanismType !== 'cog' && mechanismType !== 'sinistro') {
+      return 0;
+    }
+
+    return context.sharedMechanismCharges?.get(mechanismType) || 0;
   }
 
   /**

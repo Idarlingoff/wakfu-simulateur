@@ -99,10 +99,10 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       console.log(`[XELOR] ⚠️ Cannot advance dial hour: no dialId in context (spell: ${spell.name})`);
     }
 
-    // Ajouter des charges aux mécanismes selon le PW dépensé
-    // Certains sorts comme Horloge ajoutent 1 charge par PW dépensé à tous les mécanismes
-    if (spell.pwCost > 0 && actionResult.success) {
-      this.addRouageAndSinistroChargesFromPwSpent(spell.pwCost, context);
+    // Ajouter des charges aux mécanismes selon les transpositions réalisées par le Xélor.
+    // 1 charge par déplacement d'entité/mécanisme, 2 charges pour un échange (swap).
+    if (actionResult.success) {
+      this.addRouageAndSinistroChargesFromTranspositions(spell.id, context);
     }
 
     // Traiter les sorts qui téléportent sur une heure du cadran
@@ -183,22 +183,120 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
-   * Ajoute des charges aux mécanismes en fonction du transpositions faites
+   * * Ajoute des charges aux rouages/sinistros selon les transpositions du sort courant.
+   *    *
+   *    * Règles métier:
+   *    * - 1 charge par déplacement (téléportation, poussée, attirance)
+   *    * - 2 charges par échange (swap)
+   *    * - Les Rouages partagent le même compteur (max 10)
+   *    * - Les Sinistros partagent le même compteur (max 15)
    */
-  private addRouageAndSinistroChargesFromPwSpent(pwCost: number, context: SimulationContext): void {
-    const mechanisms = this.boardService.mechanisms();
-    mechanisms.forEach(mechanism => {
-      // Les mécanismes peuvent avoir une limite de charges
-      const maxCharges = this.getMechanismMaxCharges(mechanism.type);
-      const currentCharges = context.mechanismCharges?.get(mechanism.id) || 0;
+  private addRouageAndSinistroChargesFromTranspositions(spellId: string, context: SimulationContext): void {
+    if (this.isRetourSpontaneSpell(spellId)) {
+      console.log('[XELOR] Charge generation skipped for Retour Spontané');
+      return;
+    }
 
-      if (currentCharges < maxCharges) {
-        const chargesToAdd = Math.min(pwCost, maxCharges - currentCharges);
-        this.boardService.addCharges(mechanism.id, chargesToAdd);
-        context.mechanismCharges?.set(mechanism.id, currentCharges + chargesToAdd);
-        console.log(`[XELOR] Added ${chargesToAdd} charges to ${mechanism.type} from PW cost`);
+    const generatedCharges = this.getTranspositionChargesForCurrentAction(spellId, context);
+
+    if (generatedCharges <= 0) {
+      return;
+    }
+
+    this.addSharedChargesToMechanismType('cog', generatedCharges, context);
+    this.addSharedChargesToMechanismType('sinistro', generatedCharges, context);
+
+    console.log(`[XELOR] Added ${generatedCharges} shared transposition charge(s) to Rouage and Sinistro`);
+  }
+
+  /**
+   * Calcule le nombre de charges générées par le sort courant via l'historique de mouvements.
+   *
+   * On lit les derniers mouvements consécutifs associés au sort en cours.
+   */
+  private getTranspositionChargesForCurrentAction(spellId: string, context: SimulationContext): number {
+    if (!context.movementHistory || context.movementHistory.length === 0) {
+      return 0;
+    }
+
+    let charges = 0;
+
+    for (let i = context.movementHistory.length - 1; i >= 0; i--) {
+      const movement = context.movementHistory[i];
+
+      // Les mouvements sont append-only pendant une action.
+      // Dès qu'on sort du lot du sort courant, on s'arrête.
+      if (movement.sourceSpellId !== spellId) {
+        break;
       }
-    });
+
+      if (movement.type === 'swap' || movement.type === 'swap_mechanism') {
+        charges += 2;
+      } else {
+        charges += 1;
+      }
+    }
+
+    return charges;
+  }
+
+  /**
+   * Ajoute des charges à tous les mécanismes d'un type en gardant une valeur partagée.
+   */
+  private addSharedChargesToMechanismType(type: 'cog' | 'sinistro', chargesToAdd: number, context: SimulationContext): void {
+    if (chargesToAdd <= 0) {
+      return;
+    }
+
+    const mechanisms = this.boardService.getMechanismsByType(type);
+    const maxCharges = this.getMechanismMaxCharges(type);
+    const baseCharges = this.getSharedChargesForType(type, mechanisms, context);
+    const nextCharges = Math.min(maxCharges, baseCharges + chargesToAdd);
+
+    if (!context.sharedMechanismCharges) {
+      context.sharedMechanismCharges = new Map<'cog' | 'sinistro', number>();
+    }
+    context.sharedMechanismCharges.set(type, nextCharges);
+
+    if (mechanisms.length === 0) {
+      console.log(`[XELOR] ${type} shared charges updated to ${nextCharges} (no active mechanism yet)`);
+      return;
+    }
+
+    for (const mechanism of mechanisms) {
+      const currentCharges = context.mechanismCharges?.get(mechanism.id) || 0;
+      const delta = nextCharges - currentCharges;
+
+      if (delta > 0) {
+        this.boardService.addCharges(mechanism.id, delta);
+      }
+
+      context.mechanismCharges?.set(mechanism.id, nextCharges);
+    }
+  }
+
+  /**
+   * Lit la charge partagée d'un type de mécanisme.
+   * Si des mécanismes sont désynchronisés, on conserve la valeur minimale pour éviter
+   * d'augmenter artificiellement une charge déjà décrémentée (ex: explosion de rouage).
+   */
+  private getSharedChargesForType(type: 'cog' | 'sinistro', mechanisms: Mechanism[], context: SimulationContext): number {
+    const sharedCounter = context.sharedMechanismCharges?.get(type);
+    if (sharedCounter !== undefined) {
+      return sharedCounter;
+    }
+
+    if (mechanisms.length === 0) {
+      return 0;
+    }
+
+    const charges = mechanisms.map(mechanism => context.mechanismCharges?.get(mechanism.id) || 0);
+    return Math.min(...charges);
+  }
+
+  private isRetourSpontaneSpell(spellId: string): boolean {
+    const normalizedId = spellId.toLowerCase();
+    return normalizedId.includes('retour') && normalizedId.includes('spontane');
   }
 
   /**
@@ -207,8 +305,8 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   private getMechanismMaxCharges(type: string): number {
     switch (type) {
       case 'cog': return 10; // Rouage: max 10 charges
-      case 'sinistro': return 20; // Sinistro: max 20 charges (estimation)
-      case 'dial': return 12; // Cadran: 12 heures
+      case 'sinistro': return 15; // Sinistro: max 15 charges
+      case 'dial': return 0; // Cadran: 12 heures
       case 'regulateur': return 0; // Régulateur n'a pas de charges
       default: return 10;
     }
@@ -288,6 +386,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     // Initialiser les structures de données Xélor
     context.mechanismCharges = new Map<string, number>();
+    context.sharedMechanismCharges = new Map<'cog' | 'sinistro', number>();
     context.activeAuras = new Set<string>();
     context.currentDialHour = undefined;
     context.dialId = undefined;
@@ -304,6 +403,12 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       context.mechanismCharges!.set(mechanism.id, charges);
       console.log(`[XELOR] Loaded mechanism ${mechanism.type} (${mechanism.id}): ${charges} charges`);
     });
+
+    const initialRouageCharges = this.getSharedChargesForType('cog', this.boardService.getMechanismsByType('cog'), context);
+    const initialSinistroCharges = this.getSharedChargesForType('sinistro', this.boardService.getMechanismsByType('sinistro'), context);
+    context.sharedMechanismCharges!.set('cog', initialRouageCharges);
+    context.sharedMechanismCharges!.set('sinistro', initialSinistroCharges);
+    console.log(`[XELOR] Shared charges initialized - cog: ${initialRouageCharges}, sinistro: ${initialSinistroCharges}`);
 
     // Vérifier s'il y a un cadran actif
     const dials = this.boardService.getMechanismsByType('dial');
