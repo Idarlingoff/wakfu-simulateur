@@ -6,6 +6,7 @@ import {Spell} from '../../../models/spell.model';
 import {TimelineAction} from '../../../models/timeline.model';
 import {XelorMovementService} from './xelor-movement.service';
 import {XelorDialService} from './xelor-dial.service';
+import {XelorPassivesService} from './xelor-passives.service';
 
 
 @Injectable({ providedIn: 'root' })
@@ -15,6 +16,7 @@ export class XelorExecuteEffectService {
   private readonly regenerationService = inject(ResourceRegenerationService);
   private readonly xelorMovementService = inject(XelorMovementService);
   private readonly injector = inject(Injector);
+  private readonly xelorPassivesService = inject(XelorPassivesService);
 
   private get dial(): XelorDialService {
     return this.injector.get(XelorDialService);
@@ -338,7 +340,9 @@ export class XelorExecuteEffectService {
     }
 
     if (revertSuccess) {
-      // TODO: Mettre en place pour la v2 la gestion source et cible marque
+      if (lastMovement.type === 'swap' || lastMovement.type === 'swap_mechanism') {
+        this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'retour_spontane_swap');
+      }
 
       return {
         success: true,

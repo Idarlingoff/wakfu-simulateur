@@ -579,6 +579,8 @@ export class XelorTeleportService {
             }
           );
 
+          this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'symetrie_area_swap');
+
           if (entity.type === 'player') {
             context.playerPosition = oppositeFrom;
             context.currentPosition = oppositeFrom;
@@ -735,6 +737,8 @@ export class XelorTeleportService {
           }
         );
 
+        this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'symetrie_single_entity_swap');
+
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
           type: 'symmetric_single_swap',
@@ -779,6 +783,8 @@ export class XelorTeleportService {
             toPosition: movingFrom
           }
         );
+
+        this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'symetrie_single_entity_mechanism_swap');
 
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
@@ -846,6 +852,8 @@ export class XelorTeleportService {
           }
         );
 
+        this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'symetrie_single_mechanism_entity_swap');
+
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
           type: 'symmetric_single_swap_with_entity',
@@ -887,6 +895,8 @@ export class XelorTeleportService {
             toPosition: movingFrom
           }
         );
+
+        this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'symetrie_single_mechanism_swap');
 
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {

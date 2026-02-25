@@ -41,6 +41,8 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   private readonly mechanisms = inject(XelorMechanismsService);
   private readonly executeEffect = inject(XelorExecuteEffectService);
 
+  private static readonly DISTORSION_SPELL_ID = 'XEL_DISTO';
+
   /**
    * Vérifie les conditions de lancement spécifiques au Xelor
    */
@@ -68,6 +70,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     actionResult: SimulationActionResult
   ): void {
     console.log(`[XELOR] Processing class-specific effects for spell: ${spell.name}`);
+
+    // Distorsion active l'état utilisé par le passif "Cours du temps"
+    if (actionResult.success && spell.id === XelorSimulationStrategy.DISTORSION_SPELL_ID) {
+      this.activateDistorsion(context);
+    }
 
     // Si le sort est un mécanisme, activer l'aura correspondante
     const mechanismType = getSpellMechanismType(spell.id);
