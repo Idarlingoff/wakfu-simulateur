@@ -43,7 +43,7 @@ export class XelorTeleportService {
 
     for (const effect of teleportEffects) {
       if (effect.effect === 'TELEPORT_SYMMETRIC') {
-        this.processSymmetricTeleportEffect(action, context, actionResult, effect.extendedData || {});
+        this.processSymmetricTeleportEffect(action, context, actionResult, effect.extendedData || {}, spell.id);
         continue;
       }
 
@@ -478,7 +478,8 @@ export class XelorTeleportService {
     action: TimelineAction,
     context: SimulationContext,
     actionResult: SimulationActionResult,
-    params: any
+    params: any,
+    sourceSpellId: string
   ): void {
     const mode = params?.mode || 'AREA_CROSS';
     if (mode === 'SINGLE_TARGET') {
@@ -500,6 +501,24 @@ export class XelorTeleportService {
       const onCross = (dx === 0 && Math.abs(dy) <= areaRange)
         || (dy === 0 && Math.abs(dx) <= areaRange);
       return onCross;
+    });
+
+    // Ordre de traitement identique au jeu: du centre vers les extrémités.
+    // Ce tri est aussi important pour Retour Spontané qui annule le dernier échange enregistré.
+    entitiesInArea.sort((a, b) => {
+      const distanceA = Math.abs(a.position.x - center.x) + Math.abs(a.position.y - center.y);
+      const distanceB = Math.abs(b.position.x - center.x) + Math.abs(b.position.y - center.y);
+
+      if (distanceA !== distanceB) {
+        return distanceA - distanceB;
+      }
+
+      // Tie-breaker stable/déterministe pour éviter les variations d'ordre.
+      if (a.position.y !== b.position.y) {
+        return a.position.y - b.position.y;
+      }
+
+      return a.position.x - b.position.x;
     });
 
     if (entitiesInArea.length === 0) {
@@ -542,6 +561,24 @@ export class XelorTeleportService {
           this.xelorMovementService.updateEntityPositionInContext(context, entity.id, oppositeFrom);
           this.xelorMovementService.updateEntityPositionInContext(context, oppositeEntity.id, from);
 
+          this.xelorMovementService.recordMovement(
+            context,
+            'swap',
+            entity.id,
+            'entity',
+            entity.name,
+            from,
+            oppositeFrom,
+            sourceSpellId,
+            {
+              id: oppositeEntity.id,
+              type: 'entity',
+              name: oppositeEntity.name,
+              fromPosition: oppositeFrom,
+              toPosition: from
+            }
+          );
+
           if (entity.type === 'player') {
             context.playerPosition = oppositeFrom;
             context.currentPosition = oppositeFrom;
@@ -574,6 +611,17 @@ export class XelorTeleportService {
 
       this.boardService.updateEntityPosition(entity.id, symmetric);
       this.xelorMovementService.updateEntityPositionInContext(context, entity.id, symmetric);
+
+      this.xelorMovementService.recordMovement(
+        context,
+        'teleport',
+        entity.id,
+        'entity',
+        entity.name,
+        from,
+        symmetric,
+        sourceSpellId
+      );
 
       if (entity.type === 'player') {
         context.playerPosition = symmetric;
@@ -669,6 +717,24 @@ export class XelorTeleportService {
           context.currentPosition = movingFrom;
         }
 
+        this.xelorMovementService.recordMovement(
+          context,
+          'swap',
+          movingEntity.id,
+          'entity',
+          movingEntity.name,
+          movingFrom,
+          destination,
+          action.spellId,
+          {
+            id: occupantEntity.id,
+            type: 'entity',
+            name: occupantEntity.name,
+            fromPosition: destination,
+            toPosition: movingFrom
+          }
+        );
+
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
           type: 'symmetric_single_swap',
@@ -696,6 +762,24 @@ export class XelorTeleportService {
           this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id, context);
         }
 
+        this.xelorMovementService.recordMovement(
+          context,
+          'swap_mechanism',
+          movingEntity.id,
+          'entity',
+          movingEntity.name,
+          movingFrom,
+          destination,
+          action.spellId,
+          {
+            id: occupantMechanism.id,
+            type: 'mechanism',
+            name: occupantMechanism.type,
+            fromPosition: destination,
+            toPosition: movingFrom
+          }
+        );
+
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
           type: 'symmetric_single_swap_mechanism',
@@ -711,6 +795,18 @@ export class XelorTeleportService {
 
       this.boardService.updateEntityPosition(movingEntity.id, destination);
       this.xelorMovementService.updateEntityPositionInContext(context, movingEntity.id, destination);
+
+      this.xelorMovementService.recordMovement(
+        context,
+        'teleport',
+        movingEntity.id,
+        'entity',
+        movingEntity.name,
+        movingFrom,
+        destination,
+        action.spellId
+      );
+
       if (movingEntity.type === 'player') {
         context.playerPosition = destination;
         context.currentPosition = destination;
@@ -731,6 +827,24 @@ export class XelorTeleportService {
         if (movingMechanism.type === 'dial') {
           this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
         }
+
+        this.xelorMovementService.recordMovement(
+          context,
+          'swap_mechanism',
+          occupantEntity.id,
+          'entity',
+          occupantEntity.name,
+          destination,
+          movingFrom,
+          action.spellId,
+          {
+            id: movingMechanism.id,
+            type: 'mechanism',
+            name: movingMechanism.type,
+            fromPosition: movingFrom,
+            toPosition: destination
+          }
+        );
 
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
@@ -756,6 +870,24 @@ export class XelorTeleportService {
           this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id, context);
         }
 
+        this.xelorMovementService.recordMovement(
+          context,
+          'swap',
+          movingMechanism.id,
+          'mechanism',
+          movingMechanism.type,
+          movingFrom,
+          destination,
+          action.spellId,
+          {
+            id: occupantMechanism.id,
+            type: 'mechanism',
+            name: occupantMechanism.type,
+            fromPosition: destination,
+            toPosition: movingFrom
+          }
+        );
+
         if (!actionResult.details) actionResult.details = {};
         actionResult.details.teleport = {
           type: 'symmetric_single_swap_mechanism_mechanism',
@@ -773,6 +905,17 @@ export class XelorTeleportService {
       if (movingMechanism.type === 'dial') {
         this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
       }
+
+      this.xelorMovementService.recordMovement(
+        context,
+        'teleport',
+        movingMechanism.id,
+        'mechanism',
+        movingMechanism.type,
+        movingFrom,
+        destination,
+        action.spellId
+      );
     }
 
     if (!actionResult.details) actionResult.details = {};

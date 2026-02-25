@@ -627,7 +627,7 @@ SELECT v.id, 'ON_CAST', 0, 'TELEPORT_SYMMETRIC', 'AREA', '{}'
 FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='NORMAL';
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'TARGET', '{"amount":78,"element":"AIR"}'
+SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'AREA', '{"amount":78,"element":"AIR","shape":"CROSS","range":2,"includeCenter":true}'
 FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='NORMAL';
 
 -- Effets CRIT
@@ -636,7 +636,7 @@ SELECT v.id, 'ON_CAST', 0, 'TELEPORT_SYMMETRIC', 'AREA', '{}'
 FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='CRIT';
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'TARGET', '{"amount":98,"element":"AIR"}'
+SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'AREA', '{"amount":98,"element":"AIR","shape":"CROSS","range":2,"includeCenter":true}'
 FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='CRIT';
 
 -- ============================

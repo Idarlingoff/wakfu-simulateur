@@ -61,6 +61,19 @@ export class XelorCastValidatorService {
       console.log(`[XELOR] ✅ Régulateur can be placed on dial hour at (${targetPosition.x}, ${targetPosition.y})`);
     }
 
+    if (spell.id === 'XEL_PARADOXE') {
+      const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
+      const targetMechanism = this.boardService.getMechanismAtPosition(targetPosition);
+
+      if (!targetEntity && !targetMechanism) {
+        console.log(`[XELOR] ❌ Paradoxe cannot be cast on empty cell (${targetPosition.x}, ${targetPosition.y})`);
+        return {
+          canCast: false,
+          reason: 'Paradoxe doit cibler une entité ou un mécanisme'
+        };
+      }
+    }
+
     // TODO: Ajouter d'autres validations spécifiques
     // - Certains sorts ont des conditions basées sur les heures du cadran
 
