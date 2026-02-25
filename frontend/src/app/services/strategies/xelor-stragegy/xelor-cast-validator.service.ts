@@ -61,11 +61,24 @@ export class XelorCastValidatorService {
       console.log(`[XELOR] ✅ Régulateur can be placed on dial hour at (${targetPosition.x}, ${targetPosition.y})`);
     }
 
+    // Validation spécifique Paradoxe: la case ciblée doit contenir une cible (entité OU mécanisme).
     if (spell.id === 'XEL_PARADOXE') {
-      const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
-      const targetMechanism = this.boardService.getMechanismAtPosition(targetPosition);
+      // IMPORTANT: utiliser d'abord le contexte de simulation (source de vérité pour le step en cours),
+      // puis fallback sur le BoardService pour les cas UI hors simulation.
+      const targetEntityInContext = context.entities?.find(entity =>
+        entity.position.x === targetPosition.x && entity.position.y === targetPosition.y
+      );
+      const targetMechanismInContext = context.mechanisms?.find(mechanism =>
+        mechanism.position.x === targetPosition.x && mechanism.position.y === targetPosition.y
+      );
 
-      if (!targetEntity && !targetMechanism) {
+      const targetEntityOnBoard = this.boardService.getEntityAtPosition(targetPosition);
+      const targetMechanismOnBoard = this.boardService.getMechanismAtPosition(targetPosition);
+
+      const hasEntityTarget = !!targetEntityInContext || !!targetEntityOnBoard;
+      const hasMechanismTarget = !!targetMechanismInContext || !!targetMechanismOnBoard;
+
+      if (!hasEntityTarget && !hasMechanismTarget) {
         console.log(`[XELOR] ❌ Paradoxe cannot be cast on empty cell (${targetPosition.x}, ${targetPosition.y})`);
         return {
           canCast: false,

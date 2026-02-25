@@ -16,6 +16,7 @@ import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
 import {TimelineSummaryComponent} from './timeline-summary.component';
 import { Timeline } from '../models/timeline.model';
+import {SimulationService} from '../services/simulation.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -730,6 +731,7 @@ export class DashboardComponent {
   buildService = inject(BuildService);
   timelineService = inject(TimelineService);
   boardService = inject(BoardService);
+  simulationService = inject(SimulationService);
 
   buildSectionExpanded = signal<boolean>(true);
   placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
@@ -855,6 +857,7 @@ export class DashboardComponent {
         facing: { direction: this.pendingPlayerData.facing.direction as 'front' | 'side' | 'back' }
       };
       this.boardService.addEntity(newPlayer);
+      this.simulationService.clearSimulation();
       this.pendingPlayerData = null;
       this.placementMode.set('none');
       return;
@@ -869,6 +872,7 @@ export class DashboardComponent {
         facing: { direction: this.pendingEnemyData.facing.direction as 'front' | 'side' | 'back' }
       };
       this.boardService.addEntity(newEnemy);
+      this.simulationService.clearSimulation();
       this.pendingEnemyData = null;
       this.placementMode.set('none');
       return;
@@ -882,6 +886,7 @@ export class DashboardComponent {
         facing: { direction: this.pendingPlayerEditData.facing.direction as 'front' | 'side' | 'back' }
       });
       this.pendingPlayerEditData = null;
+      this.simulationService.clearSimulation();
       this.placementMode.set('none');
       return;
     }
@@ -893,6 +898,7 @@ export class DashboardComponent {
         facing: { direction: this.pendingEnemyEditData.facing.direction as 'front' | 'side' | 'back' }
       });
       this.pendingEnemyEditData = null;
+      this.simulationService.clearSimulation();
       this.placementMode.set('none');
       return;
     }
@@ -904,6 +910,7 @@ export class DashboardComponent {
         position,
         charges: 0
       });
+      this.simulationService.clearSimulation();
       this.placementMode.set('none');
     }
   }
@@ -928,6 +935,7 @@ export class DashboardComponent {
   onClearBoard(): void {
     this.boardService.clearBoard();
     this.timelineService.clearCurrentTimeline();
+    this.simulationService.clearSimulation();
     this.cancelPlacement();
     alert('✓ Plateau et timeline complètement effacés !');
   }

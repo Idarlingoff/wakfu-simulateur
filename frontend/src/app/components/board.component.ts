@@ -1037,12 +1037,25 @@ export class BoardComponent {
   isSimulating = computed(() => this.simulationService.isRunning());
   hasMinimumBoardSetup = computed(() => this.boardService.hasMinimumSetup());
 
+  private lastObservedTimelineId: string | null = null;
+
   constructor() {
-    // Nettoyer l'historique quand on change de timeline
+    // Invalider l'état de simulation à chaque changement réel de timeline
+    // pour éviter les validations effectuées avec un contexte en cache d'une autre timeline.
     effect(() => {
+      const timelineId = this.timelineService.currentTimelineId();
       const timeline = this.currentTimeline();
+
+      if (timelineId === this.lastObservedTimelineId) {
+        return;
+      }
+
+      this.lastObservedTimelineId = timelineId;
+      this.simulationService.clearSimulation();
+      this.regenerationService.clearHistory();
+
       if (timeline) {
-        console.log('🗑️ Timeline changée:', timeline.name);
+        console.log('🗑️ Timeline changée:', timeline.name, '- cache simulation/régénération réinitialisé');
       }
     });
   }
