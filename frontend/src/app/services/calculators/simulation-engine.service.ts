@@ -143,6 +143,10 @@ export interface SimulationContext {
   // Historique des mouvements non-PM ce tour (pour "Retour Spontané")
   // Stocke les téléportations, poussées, attirances et échanges de position
   movementHistory?: MovementRecord[];
+
+  // Actions déclenchées automatiquement (ex: explosions de mécanismes)
+  // Elles sont injectées dans les résultats du step pour alimenter les dégâts/reporting UI.
+  pendingTriggeredActions?: SimulationActionResult[];
 }
 
 export interface SimulationActionResult {
@@ -265,7 +269,10 @@ export class SimulationEngineService {
             toPosition: this.clonePosition(movement.swapPartner.toPosition)
           }
           : undefined
-      }))
+      })),
+      pendingTriggeredActions: context.pendingTriggeredActions
+        ? context.pendingTriggeredActions.map(action => ({ ...action }))
+        : undefined
     };
   }
 
@@ -463,6 +470,13 @@ export class SimulationEngineService {
         stepSuccess = false;
         break;
       }
+    }
+
+    const triggeredActions = currentContext.pendingTriggeredActions || [];
+    if (triggeredActions.length > 0) {
+      console.log(`⚙️ [STEP] ${triggeredActions.length} action(s) déclenchée(s) ajoutée(s) au résultat`);
+      actions.push(...triggeredActions);
+      currentContext.pendingTriggeredActions = [];
     }
 
     return {

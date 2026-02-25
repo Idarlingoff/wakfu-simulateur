@@ -26,6 +26,13 @@ export class XelorMechanismsService {
     return this.injector.get(XelorDialService);
   }
 
+  private static readonly ROUAGE_STATUS_EFFECT_CONFIG = {
+    area: 'CROSS2',
+    perChargeAmount: 20,
+    maxCharges: 10,
+    element: 'Light'
+  } as const
+
   /**
    * Exécute un sort de mécanisme Xelor (Rouage, Cadran, Sinistro, Régulateur)
    * ou un sort spécial comme "Retour Spontané"
@@ -240,14 +247,88 @@ export class XelorMechanismsService {
 
     rouages.forEach(rouage => {
       const charges = context.mechanismCharges?.get(rouage.id) || 0;
-      const damage = Math.min(charges, 10) * 20; // 20 dégâts par charge, max 10 charges
+      if (charges <= 0) {
+        console.log(`[XELOR] ⚙️ Rouage (${rouage.id}) has 0 charge - no explosion`);
+        return;
+      }
+
+      const effectiveCharges = Math.min(charges, XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.maxCharges);
+      const damage = effectiveCharges * XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.perChargeAmount;
+
+      const enemiesInArea = this.boardService.enemies().filter(enemy =>
+        this.isPositionInRouageExplosionArea(enemy.position, rouage.position)
+      );
 
       if (damage > 0) {
-        console.log(`[XELOR] ⚡ Rouage (${rouage.id}) deals ${damage} Light damage (${charges} charges)`);
-        // TODO: Appliquer les dégâts aux ennemis dans la zone (croix, range 2)
-        // Pour l'instant, on log simplement
+        console.log(
+          `[XELOR] 💥 Rouage (${rouage.id}) explodes at (${rouage.position.x}, ${rouage.position.y}) ` +
+          `for ${damage} ${XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.element} damage ` +
+          `(${effectiveCharges} charges, area=${XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.area})`
+        );
+
+        if (enemiesInArea.length > 0) {
+          console.log(
+            `[XELOR] 🎯 Rouage (${rouage.id}) affected enemies: ` +
+            enemiesInArea.map(enemy => `${enemy.name}(${enemy.position.x},${enemy.position.y})`).join(', ')
+          );
+        } else {
+          console.log(`[XELOR] 🎯 Rouage (${rouage.id}) hit no enemy in area`);
+        }
+
+        const explosionResult: SimulationActionResult = {
+          success: true,
+          actionId: `trigger_rouage_${rouage.id}_${Date.now()}`,
+          actionType: 'TriggerExplosion',
+          spellId: rouage.spellId || 'XEL_ROUAGE',
+          spellName: 'Rouage',
+          damage,
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: `Explosion Rouage (${effectiveCharges} charges): ${damage} dégâts ${XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.element}`,
+          details: {
+            mechanismId: rouage.id,
+            mechanismType: 'cog',
+            area: XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.area,
+            element: XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.element,
+            chargesUsed: effectiveCharges,
+            impactedEnemies: enemiesInArea.map(enemy => ({
+              id: enemy.id,
+              name: enemy.name,
+              position: enemy.position
+            }))
+          }
+        };
+
+        if (!context.pendingTriggeredActions) {
+          context.pendingTriggeredActions = [];
+        }
+        context.pendingTriggeredActions.push(explosionResult);
+
+        // Le rouage explose puis perd toutes ses charges
+        context.mechanismCharges?.set(rouage.id, 0);
+        this.boardService.updateMechanismCharges(rouage.id, 0);
       }
     });
+
+    // Les charges de rouage sont partagées: après explosion elles reviennent à 0
+    context.sharedMechanismCharges?.set('cog', 0);
+  }
+
+  /**
+   * Vérifie si une position est dans la zone d'explosion du Rouage.
+   * Zone supportée aujourd'hui: CROSS2 (même ligne ou même colonne, distance <= 2)
+   */
+  private isPositionInRouageExplosionArea(target: { x: number; y: number }, rouagePosition: { x: number; y: number }): boolean {
+    const deltaX = Math.abs(target.x - rouagePosition.x);
+    const deltaY = Math.abs(target.y - rouagePosition.y);
+
+    if (XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.area === 'CROSS2') {
+      return (deltaX === 0 && deltaY <= 2) || (deltaY === 0 && deltaX <= 2);
+    }
+
+    // Fallback "zone 2 autour" si d'autres aires sont ajoutées côté data
+    return deltaX + deltaY <= 2;
   }
 
   /**
