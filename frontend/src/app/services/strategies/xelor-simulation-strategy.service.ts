@@ -192,12 +192,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    *    * - Les Sinistros partagent le même compteur (max 15)
    */
   private addRouageAndSinistroChargesFromTranspositions(spellId: string, context: SimulationContext): void {
-    if (this.isRetourSpontaneSpell(spellId)) {
-      console.log('[XELOR] Charge generation skipped for Retour Spontané');
-      return;
-    }
-
-    const generatedCharges = this.getTranspositionChargesForCurrentAction(spellId, context);
+    const generatedCharges = this.isRetourSpontaneSpell(spellId)
+      ? this.getTranspositionChargesForRetourSpontane(context)
+      : this.getTranspositionChargesForCurrentAction(spellId, context);
 
     if (generatedCharges <= 0) {
       return;
@@ -207,6 +204,20 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     this.addSharedChargesToMechanismType('sinistro', generatedCharges, context);
 
     console.log(`[XELOR] Added ${generatedCharges} shared transposition charge(s) to Rouage and Sinistro`);
+  }
+
+  /**
+   * Retour Spontané annule un mouvement déjà enregistré (au lieu d'en créer un nouveau)
+   * et doit générer des charges sur la base de ce mouvement annulé.
+   */
+  private getTranspositionChargesForRetourSpontane(context: SimulationContext): number {
+    const revertedMovement = this.movement.getLastMovement(context);
+
+    if (!revertedMovement) {
+      return 0;
+    }
+
+    return (revertedMovement.type === 'swap' || revertedMovement.type === 'swap_mechanism') ? 2 : 1;
   }
 
   /**
