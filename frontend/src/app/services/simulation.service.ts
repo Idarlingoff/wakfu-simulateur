@@ -22,7 +22,7 @@ export class SimulationService {
   private readonly isSimulating = signal<boolean>(false);
   private readonly simulationError = signal<string | null>(null);
 
-  // 🆕 Stocker les résultats de simulation pour navigation step-by-step
+  // Stocker les résultats de simulation pour navigation step-by-step
   private simulationResultsCache: SimulationResult | null = null;
   private currentTimelineId: string | null = null;
   private currentBuildId: string | null = null;
@@ -61,27 +61,6 @@ export class SimulationService {
       const result = await this.simulationEngine.runSimulation(build, timeline);
       this.currentSimulation.set(result);
 
-      return result;
-    } catch (error: any) {
-      const errorMessage = error?.message || 'Simulation failed';
-      this.simulationError.set(errorMessage);
-      console.error('Simulation error:', error);
-      return null;
-    } finally {
-      this.isSimulating.set(false);
-    }
-  }
-
-  /**
-   * Run simulation with custom build and timeline objects
-   */
-  async runSimulationDirect(build: Build, timeline: Timeline): Promise<SimulationResult | null> {
-    this.isSimulating.set(true);
-    this.simulationError.set(null);
-
-    try {
-      const result = await this.simulationEngine.runSimulation(build, timeline);
-      this.currentSimulation.set(result);
       return result;
     } catch (error: any) {
       const errorMessage = error?.message || 'Simulation failed';
@@ -152,48 +131,7 @@ export class SimulationService {
   }
 
   /**
-   * 🆕 Exécute la simulation COMPLÈTE une seule fois et stocke les résultats
-   * Utilisé au début pour calculer tous les steps
-   */
-  async runFullSimulation(build: Build, timeline: Timeline): Promise<SimulationResult | null> {
-    console.log('');
-    console.log('🚀 [SIMULATION SERVICE] Exécution de la simulation COMPLÈTE');
-    console.log('📦 Build:', build.name);
-    console.log('📋 Timeline:', timeline.name);
-    console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
-
-    this.isSimulating.set(true);
-    this.simulationError.set(null);
-
-    try {
-      // Exécuter toute la simulation d'un coup
-      const result = await this.simulationEngine.runSimulation(build, timeline);
-
-      // Stocker les résultats pour navigation ultérieure
-      this.simulationResultsCache = result;
-      this.currentTimelineId = timeline.id || '';
-      this.currentBuildId = build.id || '';
-      this.currentSimulation.set(result);
-
-      console.log('✅ Simulation complète terminée:', {
-        success: result.success,
-        totalDamage: result.totalDamage,
-        stepsExecuted: result.steps.length
-      });
-
-      return result;
-    } catch (error: any) {
-      const errorMessage = error?.message || 'Simulation failed';
-      this.simulationError.set(errorMessage);
-      console.error('❌ Erreur simulation:', error);
-      return null;
-    } finally {
-      this.isSimulating.set(false);
-    }
-  }
-
-  /**
-   * 🆕 Obtient le résultat d'un step spécifique depuis le cache
+   * Obtient le résultat d'un step spécifique depuis le cache
    */
   getStepResult(stepIndex: number): any | null {
     if (!this.simulationResultsCache) {
@@ -208,18 +146,8 @@ export class SimulationService {
   }
 
   /**
-   * 🆕 Vérifie si la simulation est encore valide pour ce build/timeline
-   */
-  isSimulationValid(buildId: string, timelineId: string): boolean {
-    return this.simulationResultsCache !== null
-      && this.currentBuildId === buildId
-      && this.currentTimelineId === timelineId;
-  }
-
-  /**
    * Execute a single step of the timeline
    * Valide et exécute un step spécifique en tenant compte de tous les steps précédents
-   * Vérifie : ligne de vue, distance, AP/WP/MP disponibles
    * Retourne true si le step réussit, false sinon
    */
   async executeStep(build: Build, timeline: Timeline, stepIndex: number): Promise<boolean> {

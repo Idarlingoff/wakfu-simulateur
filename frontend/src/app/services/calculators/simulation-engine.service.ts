@@ -196,7 +196,6 @@ export interface SimulationResult {
 })
 export class SimulationEngineService {
 
-  // Cache pour les sorts complets (sera rempli par un service externe)
   private readonly spellsCache = new Map<string, Spell>();
   private readonly boardService: BoardService = inject(BoardService);
   private readonly spellCastingValidator: SpellCastingValidatorService = inject(SpellCastingValidatorService);
