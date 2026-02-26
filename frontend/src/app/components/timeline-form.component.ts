@@ -12,6 +12,7 @@ import { BoardService } from '../services/board.service';
 import { DataCacheService } from '../services/data-cache.service';
 import { Timeline, TimelineStep } from '../models/timeline.model';
 import { Spell } from '../models/spell.model';
+import {buildSpellReferencesWithInnates, canonicalizeInnateSpellId} from '../utils/innate-spells.utils';
 
 interface FormStep {
   id: string;
@@ -82,7 +83,31 @@ interface FormStep {
                 <div *ngFor="let step of steps; let i = index" class="step-card">
                   <div class="step-header">
                     <span class="step-number">Étape {{ i + 1 }}</span>
-                    <button type="button" (click)="onRemoveStep(i)" class="btn-remove">✕</button>
+                    <div class="step-actions">
+                      <button
+                        type="button"
+                        (click)="onMoveStepUp(i)"
+                        class="btn-move"
+                        [disabled]="i === 0"
+                        title="Monter l'étape">
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        (click)="onMoveStepDown(i)"
+                        class="btn-move"
+                        [disabled]="i === steps.length - 1"
+                        title="Descendre l'étape">
+                        ▼
+                      </button>
+                      <button
+                        type="button"
+                        (click)="onRemoveStep(i)"
+                        class="btn-remove"
+                        title="Supprimer l'étape">
+                        ✕
+                      </button>
+                    </div>
                   </div>
 
                   <div class="step-form">
@@ -323,6 +348,34 @@ interface FormStep {
       font-size: 13px;
     }
 
+    .step-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .btn-move {
+      background: transparent;
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-move:hover:not(:disabled) {
+      background: var(--accent);
+      color: #0b1220;
+      border-color: var(--accent);
+    }
+
+    .btn-move:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
     .btn-remove {
       background: transparent;
       border: 1px solid var(--stroke);
@@ -472,7 +525,7 @@ export class TimelineFormComponent {
       return {
         id: step.id,
         actionType: (action?.type || 'CastSpell') as any,
-        spellId: action?.spellId || '',
+        spellId: canonicalizeInnateSpellId(action?.spellId || ''),
         entityId: action?.entityId || '', // Extraire l'entityId
         targetX: action?.targetPosition?.x || 0,
         targetY: action?.targetPosition?.y || 0,
@@ -508,6 +561,34 @@ export class TimelineFormComponent {
   }
 
   /**
+   * Move step up (swap with previous step)
+   */
+  onMoveStepUp(index: number): void {
+    if (index <= 0) return;
+    // Créer un nouveau tableau avec des copies des objets pour forcer la détection de changement
+    const newSteps = this.steps.map(step => ({ ...step }));
+    // Swap les éléments
+    const temp = newSteps[index];
+    newSteps[index] = newSteps[index - 1];
+    newSteps[index - 1] = temp;
+    this.steps = newSteps;
+  }
+
+  /**
+   * Move step down (swap with next step)
+   */
+  onMoveStepDown(index: number): void {
+    if (index >= this.steps.length - 1) return;
+    // Créer un nouveau tableau avec des copies des objets pour forcer la détection de changement
+    const newSteps = this.steps.map(step => ({ ...step }));
+    // Swap les éléments
+    const temp = newSteps[index];
+    newSteps[index] = newSteps[index + 1];
+    newSteps[index + 1] = temp;
+    this.steps = newSteps;
+  }
+
+  /**
    * Load enriched spells with full data from cache
    */
   private async loadEnrichedSpells(buildId: string): Promise<void> {
@@ -520,7 +601,7 @@ export class TimelineFormComponent {
     }
 
     console.log('Build found:', build.name, '- Spell bar:', build.spellBar);
-    const spellReferences = build.spellBar.spells.filter(s => s !== null);
+    const spellReferences = buildSpellReferencesWithInnates(build);
     console.log('Spell references found:', spellReferences.length);
 
     const enrichedSpellsPromises = spellReferences.map(async (ref) => {
@@ -569,7 +650,7 @@ export class TimelineFormComponent {
         id: `action_${idx}`,
         type: step.actionType,
         order: idx + 1,
-        spellId: step.spellId || undefined,
+        spellId: step.spellId ? canonicalizeInnateSpellId(step.spellId) : undefined,
         entityId: step.entityId || undefined, // Ajouter l'entité à déplacer
         targetPosition: { x: step.targetX, y: step.targetY },
         targetFacing: { direction: step.facing }
@@ -605,6 +686,7 @@ export class TimelineFormComponent {
       const created = await this.timelineService.createTimeline(timeline);
       if (created) {
         this.timelineService.loadTimeline(created.id);
+        this.boardService.applyTimelineSetup(created.boardSetup);
         console.log('Timeline created and loaded:', created.id);
         alert('Timeline créée avec succès!');
       } else {
@@ -639,4 +721,3 @@ export class TimelineFormComponent {
     this.editingTimelineId.set(null);
   }
 }
-

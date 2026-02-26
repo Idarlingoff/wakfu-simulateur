@@ -2,6 +2,12 @@
 --  RETOUR SPONTANE
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_RETOUR_SPONTANE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_RETOUR_SPONTANE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_RETOUR_SPONTANE';
+DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
+
 INSERT INTO spell VALUES (
                              'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
                              3,0,1,3,TRUE,TRUE,

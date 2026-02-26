@@ -1,3 +1,11 @@
+-- =========================================
+-- RÉMANENCE
+-- =========================================
+
+-- nettoyage si déjà présent
+DELETE FROM passive_effect WHERE passive_id = 'XEL_REMANENCE';
+DELETE FROM passive WHERE id = 'XEL_REMANENCE';
+
 INSERT INTO passive (id, class_id, name, description) VALUES
     ('XEL_REMANENCE','XEL','Rémanence',
      'Les invocations ne bloquent plus la ligne de vue. +1 Sinistro max et +1 Rouage max.');

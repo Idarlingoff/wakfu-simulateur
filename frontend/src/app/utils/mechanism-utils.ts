@@ -19,11 +19,7 @@ export function getSpellMechanismType(spellId: string): 'cog' | 'sinistro' | 'di
 
   // Cadran - dial (ATTENTION: le sort pourrait avoir différents noms)
   if (spellIdLower.includes('cadran') ||
-      spellIdLower.includes('dial') ||  // ✅ Corrigé: includes au lieu de ===
-      spellIdLower.includes('clock') ||
-      spellIdLower.includes('horloge') ||
-      spellIdLower.includes('frappes') || // "Frappes de l'heure" pose un cadran
-      spellIdLower.includes('heure')) {
+      spellIdLower.includes('dial')) {
     console.log('  ✅ Détecté comme CADRAN (dial)');
     return 'dial';
   }
@@ -73,12 +69,12 @@ export function getMechanismDisplayName(type: string): string {
 /**
  * Get mechanism image path
  */
-export function getMechanismImagePath(type: string, charges?: number): string {
+export function getMechanismImagePath(type: string, _charges?: number): string {
   switch (type) {
     case 'cog':
     case 'gear':
-      // Utilise le rouage bleu si le mécanisme a des charges
-      return charges && charges > 0 ? 'resources/rouage-bleu.png' : 'resources/rouage.png';
+      // Utilise toujours rouage.png - le CSS gère la teinte bleue quand il y a des charges
+      return 'resources/rouage.png';
     case 'dial':
       return 'resources/dial/dial-center.png';
     case 'sinistro':
@@ -112,7 +108,7 @@ export function calculateDialHourPositions(centerX: number, centerY: number): Ar
 
   // Positions des heures comme sur une horloge (sens horaire à partir de 12h)
   // Basé sur les positions exactes de Wakfu
-  const hourPositions = [
+  return [
     { hour: 12, x: centerX, y: centerY - radius },      // 12h : (0, -3) Nord
     { hour: 1, x: centerX + 1, y: centerY - 2 },        // 1h : (+1, -2)
     { hour: 2, x: centerX + 2, y: centerY - 1 },        // 2h : (+2, -1)
@@ -126,8 +122,6 @@ export function calculateDialHourPositions(centerX: number, centerY: number): Ar
     { hour: 10, x: centerX - 2, y: centerY - 1 },       // 10h : (-2, -1)
     { hour: 11, x: centerX - 1, y: centerY - 2 },       // 11h : (-1, -2)
   ];
-
-  return hourPositions;
 }
 
 /**

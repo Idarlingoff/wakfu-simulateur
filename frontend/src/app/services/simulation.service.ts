@@ -22,6 +22,11 @@ export class SimulationService {
   private readonly isSimulating = signal<boolean>(false);
   private readonly simulationError = signal<string | null>(null);
 
+  // 🆕 Stocker les résultats de simulation pour navigation step-by-step
+  private simulationResultsCache: SimulationResult | null = null;
+  private currentTimelineId: string | null = null;
+  private currentBuildId: string | null = null;
+
   public simulation = computed(() => this.currentSimulation());
   public isRunning = computed(() => this.isSimulating());
   public error = computed(() => this.simulationError());
@@ -53,7 +58,7 @@ export class SimulationService {
         throw new Error(`Timeline not found: ${timelineId}`);
       }
 
-      const result = this.simulationEngine.runSimulation(build, timeline);
+      const result = await this.simulationEngine.runSimulation(build, timeline);
       this.currentSimulation.set(result);
 
       return result;
@@ -70,12 +75,12 @@ export class SimulationService {
   /**
    * Run simulation with custom build and timeline objects
    */
-  runSimulationDirect(build: Build, timeline: Timeline): SimulationResult | null {
+  async runSimulationDirect(build: Build, timeline: Timeline): Promise<SimulationResult | null> {
     this.isSimulating.set(true);
     this.simulationError.set(null);
 
     try {
-      const result = this.simulationEngine.runSimulation(build, timeline);
+      const result = await this.simulationEngine.runSimulation(build, timeline);
       this.currentSimulation.set(result);
       return result;
     } catch (error: any) {
@@ -94,11 +99,128 @@ export class SimulationService {
   clearSimulation(): void {
     this.currentSimulation.set(null);
     this.simulationError.set(null);
+    this.simulationResultsCache = null;
+    this.currentTimelineId = null;
+    this.currentBuildId = null;
+  }
+
+  /**
+   * Tronque le cache de simulation pour revenir à un index donné
+   * stepIndex représente le prochain step à exécuter (0 = aucun step exécuté)
+   */
+  trimSimulationCacheToStep(stepIndex: number): void {
+    if (!this.simulationResultsCache) {
+      return;
+    }
+
+    const boundedStepIndex = Math.max(0, stepIndex);
+    const trimmedSteps = this.simulationResultsCache.steps.slice(0, boundedStepIndex);
+    const contextAfterTrim = boundedStepIndex > 0
+      ? trimmedSteps[trimmedSteps.length - 1].contextAfter
+      : this.simulationResultsCache.initialContext;
+
+    const totalDamage = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.damage || 0), 0),
+      0
+    );
+    const totalPaUsed = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.paCost || 0), 0),
+      0
+    );
+    const totalPwUsed = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.pwCost || 0), 0),
+      0
+    );
+    const totalMpUsed = trimmedSteps.reduce(
+      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.mpCost || 0), 0),
+      0
+    );
+
+    this.simulationResultsCache = {
+      ...this.simulationResultsCache,
+      steps: trimmedSteps,
+      finalContext: contextAfterTrim,
+      totalDamage,
+      totalPaUsed,
+      totalPwUsed,
+      totalMpUsed,
+      success: trimmedSteps.every(step => step.success),
+      errors: []
+    };
+
+    console.log(`🧹 [SimulationService] Cache tronqué à ${boundedStepIndex} step(s)`);
+  }
+
+  /**
+   * 🆕 Exécute la simulation COMPLÈTE une seule fois et stocke les résultats
+   * Utilisé au début pour calculer tous les steps
+   */
+  async runFullSimulation(build: Build, timeline: Timeline): Promise<SimulationResult | null> {
+    console.log('');
+    console.log('🚀 [SIMULATION SERVICE] Exécution de la simulation COMPLÈTE');
+    console.log('📦 Build:', build.name);
+    console.log('📋 Timeline:', timeline.name);
+    console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
+
+    this.isSimulating.set(true);
+    this.simulationError.set(null);
+
+    try {
+      // Exécuter toute la simulation d'un coup
+      const result = await this.simulationEngine.runSimulation(build, timeline);
+
+      // Stocker les résultats pour navigation ultérieure
+      this.simulationResultsCache = result;
+      this.currentTimelineId = timeline.id || '';
+      this.currentBuildId = build.id || '';
+      this.currentSimulation.set(result);
+
+      console.log('✅ Simulation complète terminée:', {
+        success: result.success,
+        totalDamage: result.totalDamage,
+        stepsExecuted: result.steps.length
+      });
+
+      return result;
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Simulation failed';
+      this.simulationError.set(errorMessage);
+      console.error('❌ Erreur simulation:', error);
+      return null;
+    } finally {
+      this.isSimulating.set(false);
+    }
+  }
+
+  /**
+   * 🆕 Obtient le résultat d'un step spécifique depuis le cache
+   */
+  getStepResult(stepIndex: number): any | null {
+    if (!this.simulationResultsCache) {
+      return null;
+    }
+
+    if (stepIndex < 0 || stepIndex >= this.simulationResultsCache.steps.length) {
+      return null;
+    }
+
+    return this.simulationResultsCache.steps[stepIndex];
+  }
+
+  /**
+   * 🆕 Vérifie si la simulation est encore valide pour ce build/timeline
+   */
+  isSimulationValid(buildId: string, timelineId: string): boolean {
+    return this.simulationResultsCache !== null
+      && this.currentBuildId === buildId
+      && this.currentTimelineId === timelineId;
   }
 
   /**
    * Execute a single step of the timeline
-   * Useful for step-by-step execution
+   * Valide et exécute un step spécifique en tenant compte de tous les steps précédents
+   * Vérifie : ligne de vue, distance, AP/WP/MP disponibles
+   * Retourne true si le step réussit, false sinon
    */
   async executeStep(build: Build, timeline: Timeline, stepIndex: number): Promise<boolean> {
     if (stepIndex < 0 || stepIndex >= timeline.steps.length) {
@@ -106,36 +228,113 @@ export class SimulationService {
       return false;
     }
 
-    try {
-      const step = timeline.steps[stepIndex];
-      console.log(`Exécution de l'étape ${stepIndex + 1}:`, step.description || step.id);
+    console.log('');
+    console.log('🎯 [executeStep] Exécution et validation du step', stepIndex + 1);
 
-      // Traiter chaque action de l'étape
+    try {
+      // Vérifier si le cache est valide pour cette timeline/build
+      const cacheIsValid = this.simulationResultsCache !== null &&
+                           this.currentTimelineId === (timeline.id || '') &&
+                           this.currentBuildId === (build.id || '');
+
+      // Vérifier si le cache contient déjà ce step
+      const cacheHasThisStep = cacheIsValid && this.simulationResultsCache!.steps.length > stepIndex;
+
+      // Vérifier si le cache contient les steps précédents (pour exécution incrémentale)
+      const cacheHasPreviousSteps = cacheIsValid && this.simulationResultsCache!.steps.length === stepIndex;
+
+      if (cacheHasThisStep) {
+        // Le cache contient déjà ce step, utiliser directement
+        console.log('📦 [executeStep] Utilisation des résultats en cache');
+      } else if (cacheHasPreviousSteps) {
+        // Le cache contient les steps précédents mais pas celui-ci
+        // Exécuter SEULEMENT ce step en utilisant le contexte du step précédent
+        console.log(`🔄 [executeStep] Exécution incrémentale du step ${stepIndex + 1} uniquement`);
+
+        const step = timeline.steps[stepIndex];
+        const previousContext = this.simulationResultsCache!.finalContext;
+
+        // Exécuter uniquement ce step
+        const stepResult = await this.simulationEngine.executeSingleStep(
+          step,
+          previousContext,
+          build,
+          stepIndex + 1
+        );
+
+        // Ajouter le résultat au cache existant
+        this.simulationResultsCache!.steps.push(stepResult);
+        this.simulationResultsCache!.finalContext = stepResult.contextAfter;
+
+        // Mettre à jour les totaux
+        for (const action of stepResult.actions) {
+          if (action.damage) {
+            this.simulationResultsCache!.totalDamage += action.damage;
+          }
+          this.simulationResultsCache!.totalPaUsed += action.paCost;
+          this.simulationResultsCache!.totalPwUsed += action.pwCost;
+          this.simulationResultsCache!.totalMpUsed += action.mpCost;
+        }
+
+        if (!stepResult.success) {
+          this.simulationResultsCache!.success = false;
+          this.simulationResultsCache!.errors.push(
+            `Step ${stepIndex + 1} failed: ${stepResult.actions.find(a => !a.success)?.message}`
+          );
+        }
+
+        console.log(`✅ Cache étendu avec le step ${stepIndex + 1}`);
+      } else {
+        // Pas de cache valide, exécuter la simulation depuis le début jusqu'à ce step
+        console.log(`🔄 Exécution de la simulation depuis le début jusqu'au step ${stepIndex + 1}`);
+
+        // Créer une timeline partielle avec tous les steps jusqu'à celui-ci inclus
+        const partialTimeline: Timeline = {
+          ...timeline,
+          steps: timeline.steps.slice(0, stepIndex + 1)
+        };
+
+        // Exécuter la simulation partielle
+        const result = await this.simulationEngine.runSimulation(build, partialTimeline);
+
+        // Mettre à jour le cache avec les résultats
+        this.simulationResultsCache = result;
+        this.currentTimelineId = timeline.id || '';
+        this.currentBuildId = build.id || '';
+
+        console.log(`✅ Cache initialisé avec ${result.steps.length} steps`);
+      }
+
+      // Récupérer le résultat du step demandé depuis le cache
+      const stepResult = this.simulationResultsCache!.steps[stepIndex];
+
+      if (!stepResult || !stepResult.success) {
+        const failedAction = stepResult?.actions.find((a: any) => !a.success);
+        console.error('❌ [executeStep] Step échoué:', failedAction?.message || 'Erreur inconnue');
+        return false;
+      }
+
+      console.log('✅ [executeStep] Step validé avec succès');
+
+      // Traiter les actions pour créer les mécanismes visuels
+      const step = timeline.steps[stepIndex];
       for (const action of step.actions) {
         await this.processAction(action, build, stepIndex);
       }
 
-      // Exécuter la simulation pour cette étape
-      const result = this.simulationEngine.runSimulation(build, {
-        ...timeline,
-        steps: [step] // Exécuter seulement cette étape
-      });
-
-      if (result.success) {
-        console.log('Étape exécutée avec succès');
-        return true;
-      } else {
-        console.error('Échec de l\'exécution de l\'étape:', result.errors);
-        return false;
-      }
+      return true;
     } catch (error) {
-      console.error('Erreur lors de l\'exécution de l\'étape:', error);
+      console.error('💥 [executeStep] Erreur lors de l\'exécution du step:', error);
       return false;
     }
   }
 
   /**
    * Process a single action (create mechanisms, move entities, etc.)
+   * NOTE: Cette méthode est appelée APRÈS que SimulationEngineService a exécuté l'action.
+   * Pour les mécanismes de classe (cadran, rouage, sinistro, régulateur du Xelor),
+   * la stratégie de classe (XelorSimulationStrategy) gère déjà la création et le placement.
+   * Cette méthode ne doit donc PAS recréer ces mécanismes ni leurs heures.
    */
   private async processAction(action: TimelineAction, build: Build, stepIndex: number): Promise<void> {
     if (action.type === 'CastSpell' && action.spellId) {
@@ -145,6 +344,24 @@ export class SimulationService {
       console.log(`🎯 Type de mécanisme détecté: ${mechanismType || 'aucun'}`);
 
       if (mechanismType && action.targetPosition) {
+        // 🆕 Vérifier si un mécanisme de ce type existe déjà sur le plateau
+        // La stratégie de classe (XelorSimulationStrategy) a déjà créé le mécanisme
+        // lors de l'exécution de la simulation. On ne doit pas en créer un doublon.
+        const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
+
+        if (existingMechanisms.length > 0) {
+          console.log(`ℹ️ Mécanisme ${mechanismType} déjà créé par la stratégie de classe - pas de doublon`);
+
+          // 🆕 Pour les cadrans, vérifier aussi que les heures existent déjà
+          if (mechanismType === 'dial') {
+            const dialHours = this.boardService.dialHours();
+            if (dialHours.length > 0) {
+              console.log(`ℹ️ Heures du cadran déjà créées (${dialHours.length} heures) - pas de doublon`);
+            }
+          }
+          return;
+        }
+
         console.log(`✅ Création d'un mécanisme ${mechanismType} à la position (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
         // Créer le mécanisme

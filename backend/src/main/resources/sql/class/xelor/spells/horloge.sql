@@ -2,6 +2,15 @@
 --  HORLOGE
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_HORLOGE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_HORLOGE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_HORLOGE';
+DELETE FROM spell              WHERE id='XEL_HORLOGE';
+
+DELETE FROM status_effect      WHERE status_id IN ('HORLOGE_BANK','HORLOGE_MARK');
+DELETE FROM status_def         WHERE id IN ('HORLOGE_BANK','HORLOGE_MARK');
+
 INSERT INTO spell VALUES (
                              'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
                              5,0,1,3,TRUE,TRUE,

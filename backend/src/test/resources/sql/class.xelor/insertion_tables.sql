@@ -1,6 +1,7 @@
 -- =========================================
 -- XÉLOR
 -- =========================================
+DELETE FROM class_ref WHERE id = 'XEL';
 INSERT INTO class_ref(id, name) VALUES
     ('XEL','Xélor');
 
@@ -151,7 +152,8 @@ INSERT INTO effect_condition_group (op) VALUES ('AND');
 
 -- Condition: le lanceur possède le passif XEL_CONNAISSANCE_PASSE
 INSERT INTO effect_condition (group_id, cond_type, params_json)
-VALUES ((SELECT MAX(id) FROM effect_condition_group), 'HAS_PASSIVE', '{ "passiveId":"XEL_CONNAISSANCE_PASSE" }');
+SELECT MAX(id), 'HAS_PASSIVE', '{ "passiveId":"XEL_CONNAISSANCE_PASSE" }'
+FROM effect_condition_group;
 
 -- Effet: coût supplémentaire en PW (+2)
 INSERT INTO spell_effect
@@ -287,6 +289,13 @@ WHERE v.spell_id='XEL_CLM' AND v.kind='NORMAL';
 --  DESYNCHRO
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_DESYNCHRO');
+DELETE FROM effect_condition   WHERE group_id IN (SELECT cond_group_id FROM spell_effect WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_DESYNCHRO') AND cond_group_id IS NOT NULL);
+DELETE FROM spell_variant      WHERE spell_id='XEL_DESYNCHRO';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_DESYNCHRO';
+DELETE FROM spell              WHERE id='XEL_DESYNCHRO';
+
 INSERT INTO spell  VALUES (
                               'XEL_DESYNCHRO', 'XEL', 'Désynchronisation', 'WATER', 'ELEMENTAL',
                               4, 0, 3, 6, TRUE, TRUE,
@@ -299,7 +308,8 @@ VALUES ('XEL_DESYNCHRO', 185, 78);
 INSERT INTO EFFECT_CONDITION_GROUP (OP) values ( 'AND' );
 
 INSERT INTO effect_condition (group_id, cond_type, params_json)
-VALUES (2, 'ON_DIAL_CELL', '{}');
+SELECT MAX(id), 'ON_DIAL_CELL', '{}'
+FROM effect_condition_group;
 
 INSERT INTO spell_variant (spell_id, kind) VALUES
                                                ('XEL_DESYNCHRO', 'NORMAL'),
@@ -397,10 +407,11 @@ VALUES ('XEL_DEVOUEMENT', 185, 0);
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DEVOUEMENT', 'NORMAL');
 
--- Effets — Donne 3PA à la cible pour 1 tour
+-- Effets — Donne 3PA à la cible au début de son prochain tour
+-- Avec le passif "Maître du Cadran", cet effet se résout immédiatement lors d'un tour de cadran
 INSERT INTO spell_effect
 (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
-SELECT v.id, 'ON_CAST', 0, 'ADD_AP', 'TARGET',
+SELECT v.id, 'ON_TARGET_TURN_START', 0, 'ADD_AP', 'TARGET',
        '{"amount":3,"duration":1}', NULL
 FROM spell_variant v
 WHERE v.spell_id='XEL_DEVOUEMENT' AND v.kind='NORMAL';
@@ -477,7 +488,7 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
-             0, 4, 1, 1, FALSE, FALSE,
+             0, 4, 0, 1, FALSE, FALSE,
              0, 99, 99, 'NONE', 'STEP'
          );
 
@@ -524,6 +535,15 @@ WHERE v.spell_id='XEL_DISTO' AND v.kind='NORMAL';
 -- ============================
 --  HORLOGE
 -- ============================
+
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_HORLOGE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_HORLOGE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_HORLOGE';
+DELETE FROM spell              WHERE id='XEL_HORLOGE';
+
+DELETE FROM status_effect      WHERE status_id IN ('HORLOGE_BANK','HORLOGE_MARK');
+DELETE FROM status_def         WHERE id IN ('HORLOGE_BANK','HORLOGE_MARK');
 
 INSERT INTO spell VALUES (
                              'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
@@ -582,6 +602,12 @@ WHERE v.spell_id='XEL_HORLOGE' AND v.kind='CRIT';
 --  PARADOXE
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_PARADOXE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_PARADOXE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_PARADOXE';
+DELETE FROM spell              WHERE id='XEL_PARADOXE';
+
 INSERT INTO spell VALUES (
                              'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
                              4,0,1,3,TRUE,TRUE,
@@ -595,15 +621,33 @@ INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_PARADOXE','NORMAL'),
        ('XEL_PARADOXE','CRIT');
 
-INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json) VALUES
-                                                                                                      (5,'ON_CAST',0,'TELEPORT_SYMMETRIC','AREA','{}'),
-                                                                                                      (5,'ON_CAST',1,'DEAL_DAMAGE','TARGET','{"amount":78,"element":"AIR"}'),
-                                                                                                      (6,'ON_CAST',0,'TELEPORT_SYMMETRIC','AREA','{}'),
-                                                                                                      (6,'ON_CAST',1,'DEAL_DAMAGE','TARGET','{"amount":98,"element":"AIR"}');
+-- Effets NORMAL
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'TELEPORT_SYMMETRIC', 'AREA', '{}'
+FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'TARGET', '{"amount":78,"element":"AIR"}'
+FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='NORMAL';
+
+-- Effets CRIT
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'TELEPORT_SYMMETRIC', 'AREA', '{}'
+FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='CRIT';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'TARGET', '{"amount":98,"element":"AIR"}'
+FROM spell_variant v WHERE v.spell_id='XEL_PARADOXE' AND v.kind='CRIT';
 
 -- ============================
 --  POINTE-HEURE
 -- ============================
+
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_POINTE_HEURE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_POINTE_HEURE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_POINTE_HEURE';
+DELETE FROM spell              WHERE id='XEL_POINTE_HEURE';
 
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
@@ -624,15 +668,37 @@ VALUES
     ('XEL_POINTE_HEURE', 'NORMAL'),
     ('XEL_POINTE_HEURE', 'CRIT');
 
-INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-VALUES
-    (1, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":46, "element":"AIR"}'),
-    (1, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}');
+-- Effets variant NORMAL : dégâts 46 AIR + TP 2 cases en arrière
 
-INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-VALUES
-    (2, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":57, "element":"AIR"}'),
-    (2, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}');
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET',
+       '{"amount":46, "element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET',
+       '{"cells":2, "direction":"BACK"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
+
+-- Effets variant CRIT : dégâts 57 AIR + TP 2 cases en arrière
+
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET',
+       '{"amount":57, "element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
+
+INSERT INTO spell_effect
+(variant_id, phase, order_index, effect_type, target_scope, params_json)
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET',
+       '{"cells":2, "direction":"BACK"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
 
 -- =========================================
 -- RALENTISSEMENT
@@ -790,6 +856,12 @@ WHERE v.spell_id='XEL_REGULATEUR' AND v.kind='NORMAL';
 --  RETOUR SPONTANE
 -- ============================
 
+-- nettoyage si déjà présent
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_RETOUR_SPONTANE');
+DELETE FROM spell_variant      WHERE spell_id='XEL_RETOUR_SPONTANE';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_RETOUR_SPONTANE';
+DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
+
 INSERT INTO spell VALUES (
                              'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
                              3,0,1,3,TRUE,TRUE,
@@ -805,15 +877,30 @@ VALUES ('XEL_RETOUR_SPONTANE','NORMAL'),
 
 INSERT INTO effect_condition_group(op) VALUES ('AND');
 
+-- Condition: le lanceur possède le passif XEL_CONNAISSANCE_PASSE
 INSERT INTO effect_condition (group_id, cond_type, params_json)
-VALUES (1, 'LAST_MOVE_EXISTS', '{}');
+SELECT MAX(id), 'LAST_MOVE_EXISTS', '{}'
+FROM effect_condition_group;
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
-VALUES
-    (3, 'ON_CAST',0,'DEAL_DAMAGE','TARGET',null, '{"amount":75,"element":"AIR"}'),
-    (3, 'ON_CAST',1,'REWIND_LAST_MOVE','TARGET',1, '{}'),
-    (4, 'ON_CAST',0,'DEAL_DAMAGE','TARGET',null, '{"amount":94,"element":"AIR"}'),
-    (4, 'ON_CAST',1,'REWIND_LAST_MOVE','TARGET',1, '{}');
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', null, '{"amount":75,"element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
+SELECT v.id, 'ON_CAST', 1, 'REWIND_LAST_MOVE', 'TARGET', 1,'{}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='NORMAL';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
+SELECT v.id, 'ON_CAST',0,'DEAL_DAMAGE','TARGET',null, '{"amount":94,"element":"AIR"}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='CRIT';
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, cond_group_id, params_json)
+SELECT v.id, 'ON_CAST',1,'REWIND_LAST_MOVE','TARGET',1, '{}'
+FROM spell_variant v
+WHERE v.spell_id='XEL_RETOUR_SPONTANE' AND v.kind='CRIT';
 
 
 -- ============================
@@ -1192,6 +1279,14 @@ SELECT v.id, 'ON_CAST', 4, 'SET_STATUS_FLAG', 'SELF',
 FROM spell_variant v
 WHERE v.spell_id='XEL_VDT' AND v.kind='NORMAL';
 
+-- =========================================
+-- PASSIFS XÉLOR
+-- =========================================
+
+-- nettoyage des passifs
+DELETE FROM passive_effect WHERE passive_id IN ('XEL_CONNAISSANCE_PASSE', 'XEL_COURS_TEMPS', 'XEL_MAITRE_CADRAN', 'XEL_REMANENCE', 'XEL_MECANISME_SPECIALISE');
+DELETE FROM passive WHERE id IN ('XEL_CONNAISSANCE_PASSE', 'XEL_COURS_TEMPS', 'XEL_MAITRE_CADRAN', 'XEL_REMANENCE', 'XEL_MECANISME_SPECIALISE');
+
 INSERT INTO passive (id, class_id, name, description) VALUES
     ('XEL_CONNAISSANCE_PASSE','XEL','Connaissance du passé',
      'À chaque tour de cadran : +2 PW. Gagnera +2 PA en début de tour. '
@@ -1219,8 +1314,6 @@ VALUES
     ('XEL_CONNAISSANCE_PASSE','ON_PASSIVE_EQUIPPED',2,'ADD_SPELL_COOLDOWN_DELTA','SELF',
      '{"spellId":"XEL_CADRAN","delta":1}');
 
--- On remplace proprement les règles existantes
-DELETE FROM passive_effect WHERE passive_id = 'XEL_COURS_TEMPS';
 
 INSERT INTO passive (id, class_id, name, description) VALUES
     ('XEL_COURS_TEMPS','XEL','Cours du temps',
@@ -1290,3 +1383,28 @@ INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, targe
 VALUES
     ('XEL_REMANENCE','ON_PASSIVE_EQUIPPED',2,'INCREASE_MECHANISM_LIMIT','SELF',
      '{"kind":"ROUAGE","delta":1}');
+
+INSERT INTO passive (id, class_id, name, description) VALUES
+    ('XEL_MECANISMES_SPECIALISES','XEL','Mécanismes spécialisés',
+     'En invoquant un Rouage, Sinistro, Cadran ou Régulateur : échange immédiatement de position avec (6 cases max).');
+
+-- Groupe de conditions : l’entité invoquée doit être dans la liste autorisée
+INSERT INTO effect_condition_group (op) VALUES ('AND');
+
+-- Condition : invoqué ∈ {ROUAGE, SINISTRO, CADRAN, REGULATEUR}
+-- (adapter les ids si ton jeu utilise d’autres identifiants)
+INSERT INTO effect_condition (group_id, cond_type, params_json)
+SELECT MAX(id), 'SUMMONED_IN', '{"summonIds":["XEL_ROUAGE","XEL_SINISTRO","XEL_CADRAN","XEL_REGULATEUR"]}'
+FROM effect_condition_group;
+
+-- Effet : échange de position immédiat (portée max 6)
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json, cond_group_id)
+VALUES (
+           'XEL_MECANISMES_SPECIALISES',
+           'ON_SUMMON',
+           0,
+           'SWAP_POSITIONS',
+           'SUMMONED',
+           '{"maxRange":6,"immediate":true}',
+           (SELECT MAX(id) FROM effect_condition_group)
+       );

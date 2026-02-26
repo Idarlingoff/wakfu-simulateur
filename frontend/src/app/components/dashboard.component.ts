@@ -15,6 +15,8 @@ import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
 import {TimelineSummaryComponent} from './timeline-summary.component';
+import { Timeline } from '../models/timeline.model';
+import {SimulationService} from '../services/simulation.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -175,6 +177,8 @@ import {TimelineSummaryComponent} from './timeline-summary.component';
             <app-board
               (editPlayer)="onEditPlayerFromBoard($event)"
               (editEnemy)="onEditEnemyFromBoard($event)"
+              [placementMode]="placementMode()"
+              (boardCellClick)="onBoardCellClick($event)"
             ></app-board>
           </section>
 
@@ -198,10 +202,16 @@ import {TimelineSummaryComponent} from './timeline-summary.component';
               📤 Export Build
             </button>
             <button (click)="onAddPlayer()" class="btn-secondary">
-              🦸 Add Player
+              🦸 Add Ally
             </button>
             <button (click)="onAddEnemy()" class="btn-secondary">
               👿 Add Enemy
+            </button>
+            <button (click)="onAddCog()" class="btn-secondary">
+              ⚙️ Add Cog
+            </button>
+            <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">
+              💾 Save Board Setup in Timeline
             </button>
             <button (click)="onClearBoard()" class="btn-danger">
               🗑️ Clear Board
@@ -663,6 +673,27 @@ import {TimelineSummaryComponent} from './timeline-summary.component';
       font-size: 12px;
     }
 
+    .placement-hint {
+      margin-top: 12px;
+      background: rgba(123, 216, 143, 0.12);
+      border: 1px solid rgba(123, 216, 143, 0.5);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn-cancel-placement {
+      background: transparent;
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      padding: 6px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
     .stats {
       background: var(--panel-2);
       padding: 12px;
@@ -700,10 +731,10 @@ export class DashboardComponent {
   buildService = inject(BuildService);
   timelineService = inject(TimelineService);
   boardService = inject(BoardService);
+  simulationService = inject(SimulationService);
 
   buildSectionExpanded = signal<boolean>(true);
-
-
+  placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
   /**
    * Helper: Count non-null items in array
    */
@@ -715,8 +746,30 @@ export class DashboardComponent {
     this.buildService.selectBuildA(build);
   }
 
-  onSelectTimeline(timeline: any): void {
+  onSelectTimeline(timeline: Timeline): void {
     this.timelineService.loadTimeline(timeline.id);
+    this.boardService.applyTimelineSetup(timeline.boardSetup);
+
+    if (!timeline.boardSetup || timeline.boardSetup.entities.length === 0) {
+      alert("Cette timeline n'a pas de setup sauvegardé. Placez au moins 1 allié et 1 ennemi sur le board.");
+    }
+  }
+
+  async onSaveBoardSetup(): Promise<void> {
+    const timeline = this.timelineService.currentTimeline();
+    if (!timeline) {
+      return;
+    }
+
+    const updated = await this.timelineService.updateTimeline(timeline.id, {
+      boardSetup: this.boardService.exportCurrentSetup()
+    });
+
+    if (updated) {
+      alert('✓ Setup du board sauvegardé dans la timeline !');
+    } else {
+      alert('Erreur lors de la sauvegarde du setup du board');
+    }
   }
 
   onValidateTimeline(): void {
@@ -741,48 +794,28 @@ export class DashboardComponent {
     this.enemyForm.openNew();
   }
 
-  onEnemyAdded(enemyData: { name: string; position: { x: number; y: number }; facing: { direction: string } }): void {
-    const newEnemy = {
-      id: `enemy_${Date.now()}`,
-      type: 'enemy' as const,
-      name: enemyData.name,
-      position: enemyData.position,
-      facing: { direction: enemyData.facing.direction as 'front' | 'side' | 'back' }
-    };
-    this.boardService.addEntity(newEnemy);
+  onEnemyAdded(enemyData: { name: string; facing: { direction: string } }): void {
+    this.pendingEnemyData = enemyData;
+    this.placementMode.set('enemy');
   }
 
-  onEnemyEdited(data: { id: string; name: string; position: { x: number; y: number }; facing: { direction: string } }): void {
-    this.boardService.updateEntity(data.id, {
-      name: data.name,
-      position: data.position,
-      facing: { direction: data.facing.direction as 'front' | 'side' | 'back' }
-    });
+  onEnemyEdited(data: { id: string; name: string; facing: { direction: string } }): void {
+    this.pendingEnemyEditData = data;
+    this.placementMode.set('enemy-edit');
   }
 
   onAddPlayer(): void {
     this.playerForm.openNew();
   }
 
-  onPlayerAdded(playerData: { name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }): void {
-    const newPlayer = {
-      id: `player_${Date.now()}`,
-      type: 'player' as const,
-      name: playerData.name,
-      classId: playerData.classId,
-      position: playerData.position,
-      facing: { direction: playerData.facing.direction as 'front' | 'side' | 'back' }
-    };
-    this.boardService.addEntity(newPlayer);
+  onPlayerAdded(playerData: { name: string; classId: string; facing: { direction: string } }): void {
+    this.pendingPlayerData = playerData;
+    this.placementMode.set('player');
   }
 
-  onPlayerEdited(data: { id: string; name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }): void {
-    this.boardService.updateEntity(data.id, {
-      name: data.name,
-      classId: data.classId,
-      position: data.position,
-      facing: { direction: data.facing.direction as 'front' | 'side' | 'back' }
-    });
+  onPlayerEdited(data: { id: string; name: string; classId: string; facing: { direction: string } }): void {
+    this.pendingPlayerEditData = data;
+    this.placementMode.set('player-edit');
   }
 
   onEditPlayerFromBoard(entity: any): void {
@@ -804,9 +837,106 @@ export class DashboardComponent {
     });
   }
 
+  pendingPlayerData: { name: string; classId: string; facing: { direction: string } } | null = null;
+  pendingEnemyData: { name: string; facing: { direction: string } } | null = null;
+  pendingPlayerEditData: { id: string; name: string; classId: string; facing: { direction: string } } | null = null;
+  pendingEnemyEditData: { id: string; name: string; facing: { direction: string } } | null = null;
+
+  onAddCog(): void {
+    this.placementMode.set('cog');
+  }
+
+  onBoardCellClick(position: { x: number; y: number }): void {
+    if (this.placementMode() === 'player' && this.pendingPlayerData) {
+      const newPlayer = {
+        id: `player_${Date.now()}`,
+        type: 'player' as const,
+        name: this.pendingPlayerData.name,
+        classId: this.pendingPlayerData.classId,
+        position,
+        facing: { direction: this.pendingPlayerData.facing.direction as 'front' | 'side' | 'back' }
+      };
+      this.boardService.addEntity(newPlayer);
+      this.simulationService.clearSimulation();
+      this.pendingPlayerData = null;
+      this.placementMode.set('none');
+      return;
+    }
+
+    if (this.placementMode() === 'enemy' && this.pendingEnemyData) {
+      const newEnemy = {
+        id: `enemy_${Date.now()}`,
+        type: 'enemy' as const,
+        name: this.pendingEnemyData.name,
+        position,
+        facing: { direction: this.pendingEnemyData.facing.direction as 'front' | 'side' | 'back' }
+      };
+      this.boardService.addEntity(newEnemy);
+      this.simulationService.clearSimulation();
+      this.pendingEnemyData = null;
+      this.placementMode.set('none');
+      return;
+    }
+
+    if (this.placementMode() === 'player-edit' && this.pendingPlayerEditData) {
+      this.boardService.updateEntity(this.pendingPlayerEditData.id, {
+        name: this.pendingPlayerEditData.name,
+        classId: this.pendingPlayerEditData.classId,
+        position,
+        facing: { direction: this.pendingPlayerEditData.facing.direction as 'front' | 'side' | 'back' }
+      });
+      this.pendingPlayerEditData = null;
+      this.simulationService.clearSimulation();
+      this.placementMode.set('none');
+      return;
+    }
+
+    if (this.placementMode() === 'enemy-edit' && this.pendingEnemyEditData) {
+      this.boardService.updateEntity(this.pendingEnemyEditData.id, {
+        name: this.pendingEnemyEditData.name,
+        position,
+        facing: { direction: this.pendingEnemyEditData.facing.direction as 'front' | 'side' | 'back' }
+      });
+      this.pendingEnemyEditData = null;
+      this.simulationService.clearSimulation();
+      this.placementMode.set('none');
+      return;
+    }
+
+    if (this.placementMode() === 'cog') {
+      this.boardService.addMechanism({
+        id: `mechanism_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+        type: 'cog',
+        position,
+        charges: 0
+      });
+      this.simulationService.clearSimulation();
+      this.placementMode.set('none');
+    }
+  }
+
+  placementInstruction(): string {
+    const mode = this.placementMode();
+    if (mode === 'player') return 'Cliquez sur une case de la map pour placer le joueur.';
+    if (mode === 'enemy') return "Cliquez sur une case de la map pour placer l'ennemi.";
+    if (mode === 'player-edit') return 'Cliquez sur une case de la map pour déplacer le joueur modifié.';
+    if (mode === 'enemy-edit') return "Cliquez sur une case de la map pour déplacer l'ennemi modifié.";
+    return 'Cliquez sur une case de la map pour placer le rouage.';
+  }
+
+  cancelPlacement(): void {
+    this.placementMode.set('none');
+    this.pendingEnemyData = null;
+    this.pendingPlayerData = null;
+    this.pendingEnemyEditData = null;
+    this.pendingPlayerEditData = null;
+  }
+
   onClearBoard(): void {
     this.boardService.clearBoard();
     this.timelineService.clearCurrentTimeline();
+    this.simulationService.clearSimulation();
+    this.cancelPlacement();
     alert('✓ Plateau et timeline complètement effacés !');
   }
 

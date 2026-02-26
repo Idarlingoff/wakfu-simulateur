@@ -1,3 +1,11 @@
+-- =========================================
+-- CONNAISSANCE DU PASSÉ
+-- =========================================
+
+-- nettoyage si déjà présent
+DELETE FROM passive_effect WHERE passive_id = 'XEL_CONNAISSANCE_PASSE';
+DELETE FROM passive WHERE id = 'XEL_CONNAISSANCE_PASSE';
+
 INSERT INTO passive (id, class_id, name, description) VALUES
     ('XEL_CONNAISSANCE_PASSE','XEL','Connaissance du passé',
      'À chaque tour de cadran : +2 PW. Gagnera +2 PA en début de tour. '

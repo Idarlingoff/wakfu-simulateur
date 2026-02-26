@@ -32,11 +32,25 @@ export interface TimelineStep {
   description?: string;
 }
 
+export interface TimelineBoardEntitySetup {
+  id: string;
+  type: 'player' | 'enemy';
+  name: string;
+  classId?: string;
+  position: Position;
+  facing: Facing;
+}
+
+export interface TimelineBoardSetup {
+  entities: TimelineBoardEntitySetup[];
+}
+
 export interface Timeline {
   id: string;
   name: string;
   buildId: string;
   steps: TimelineStep[];
+  boardSetup?: TimelineBoardSetup;
   currentTurn?: number;
   maxTurns?: number;
   createdAt?: Date;

@@ -9,6 +9,7 @@ import { FormsModule } from '@angular/forms';
 import { SpellWithLevel } from '../models/spell.model';
 import { SpellReference } from '../models/build.model';
 import { DataCacheService } from '../services/data-cache.service';
+import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '../utils/innate-spells.utils';
 
 @Component({
   selector: 'app-spell-selector',
@@ -17,7 +18,12 @@ import { DataCacheService } from '../services/data-cache.service';
   template: `
     <div class="spell-selector">
       <div class="selector-header">
-        <h4>Sorts ({{ countSelected() }}/12)</h4>
+        <h4>
+          Sorts ({{ countSelected() }}/12)
+          @if (isCurrentClassXelor()) {
+            <small class="innate-note">+ 3 sorts innés auto</small>
+          }
+        </h4>
         <button type="button" class="btn-open" (click)="openModal()">
           ⚔️ Gérer les sorts
         </button>
@@ -37,21 +43,23 @@ import { DataCacheService } from '../services/data-cache.service';
               <div class="spell-slots-section">
                 <h4>Barre de sorts ({{ countSelected() }}/12)</h4>
                 <div class="spell-bar">
-                  @for (spell of selectedSpells; track $index; let i = $index) {
-                    <div class="spell-slot" [class.filled]="spell !== null">
-                      @if (spell) {
-                        <div class="spell-card" (click)="removeSpell(i)">
-                          <span class="spell-icon">✨</span>
-                          <span class="spell-name">{{ getSpellName(spell.spellId) }}</span>
-                          <button class="remove-btn" title="Retirer">✕</button>
-                        </div>
-                      } @else {
-                        <div class="empty-slot" (click)="openSpellPicker(i)">
-                          <span>+</span>
-                        </div>
-                      }
-                    </div>
-                  }
+                  <div
+                    class="spell-slot"
+                    *ngFor="let spell of selectedSpells; let i = index; trackBy: trackBySelectedSpellSlot"
+                    [class.filled]="spell !== null"
+                  >
+                    @if (spell) {
+                      <div class="spell-card" (click)="removeSpell(i)">
+                        <span class="spell-icon">✨</span>
+                        <span class="spell-name">{{ getSpellName(spell.spellId) }}</span>
+                        <button class="remove-btn" title="Retirer">✕</button>
+                      </div>
+                    } @else {
+                      <div class="empty-slot" (click)="openSpellPicker(i)">
+                        <span>+</span>
+                      </div>
+                    }
+                  </div>
                 </div>
               </div>
 
@@ -124,6 +132,15 @@ import { DataCacheService } from '../services/data-cache.service';
       margin: 0;
       text-transform: uppercase;
       letter-spacing: 1px;
+    }
+
+    .innate-note {
+      margin-left: 8px;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: normal;
     }
 
     .btn-open {
@@ -493,13 +510,16 @@ export class SpellSelectorComponent implements OnChanges {
 
       const spells = await this.dataCache.getSpells(this.classId);
 
-      if (spells.length === 0) {
+      const innateSpellIds = new Set(getInnateSpellIdsForClass(this.classId));
+      const selectableSpells = spells.filter(spell => !innateSpellIds.has(spell.id));
+
+      if (selectableSpells.length === 0) {
         console.warn(`⚠️ Aucun sort disponible pour la classe ${this.classId}`);
         this.errorMessage.set(`⚠️ Aucun sort disponible pour cette classe. Vérifiez que le backend est démarré et que les données sont chargées.`);
       }
 
       // Convertir en SpellWithLevel (level par défaut à 1)
-      const spellsWithLevel: SpellWithLevel[] = spells.map(spell => ({
+      const spellsWithLevel: SpellWithLevel[] = selectableSpells.map(spell => ({
         ...spell,
         level: 1
       }));
@@ -579,5 +599,12 @@ export class SpellSelectorComponent implements OnChanges {
   isSpellSelected(spellId: string): boolean {
     return this.selectedSpells.some(s => s !== null && s.spellId === spellId);
   }
-}
 
+  isCurrentClassXelor(): boolean {
+    return isXelorClass(this.classId);
+  }
+
+  trackBySelectedSpellSlot(index: number, spell: SpellReference | null): string {
+    return spell ? `${index}_${spell.spellId}` : `empty_${index}`;
+  }
+}

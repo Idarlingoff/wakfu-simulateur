@@ -6,6 +6,11 @@
 import { Injectable } from '@angular/core';
 import { Timeline, TimelineStep, TimelineAction } from '../../models/timeline.model';
 import { Build } from '../../models/build.model';
+import {
+  areEquivalentSpellIds,
+  buildSpellReferencesWithInnates,
+  canonicalizeInnateSpellId
+} from '../../utils/innate-spells.utils';
 
 export interface TimelineValidationResult {
   valid: boolean;
@@ -178,7 +183,7 @@ export class TimelineValidatorService {
     }
 
     if (build?.spellBar?.spells) {
-      const spellExists = build.spellBar.spells.some(s => s?.spellId === action.spellId);
+      const spellExists = buildSpellReferencesWithInnates(build).some(s => s.spellId === action.spellId);
       if (!spellExists) {
         errors.push({
           stepIndex,
@@ -258,14 +263,15 @@ export class TimelineValidatorService {
     for (const step of timeline.steps) {
       for (const action of step.actions) {
         if (action.type === 'CastSpell' && action.spellId) {
-          spellUsageCount.set(action.spellId, (spellUsageCount.get(action.spellId) || 0) + 1);
+          const spellId = canonicalizeInnateSpellId(action.spellId);
+          spellUsageCount.set(spellId, (spellUsageCount.get(spellId) || 0) + 1);
         }
       }
     }
 
     if (build.spellBar?.spells) {
-      const unusedSpells = build.spellBar.spells.filter(
-        spell => spell && !spellUsageCount.has(spell.spellId)
+      const unusedSpells = buildSpellReferencesWithInnates(build).filter(
+        spell => !spellUsageCount.has(canonicalizeInnateSpellId(spell.spellId))
       );
       if (unusedSpells.length > 0) {
         warnings.push({
@@ -300,7 +306,7 @@ export class TimelineValidatorService {
   ): { valid: boolean; reason?: string } {
     switch (action.type) {
       case 'CastSpell': {
-        const spell = build.spellBar?.spells?.find(s => s?.spellId === action.spellId);
+        const spell = buildSpellReferencesWithInnates(build).find(s => areEquivalentSpellIds(s.spellId, action.spellId));
         if (!spell) {
           return { valid: false, reason: 'Sort non trouvé dans le build' };
         }
@@ -322,4 +328,3 @@ export class TimelineValidatorService {
     }
   }
 }
-

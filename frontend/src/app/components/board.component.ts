@@ -3,14 +3,16 @@
  * Interactive combat map showing entities, mechanisms, and spell actions
  */
 
-import { Component, inject, computed, output, effect } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, inject, computed, output, effect, input } from '@angular/core';import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
 import { SimulationService } from '../services/simulation.service';
-import { BoardEntity } from '../models/board.model';
-import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism} from '../utils/mechanism-utils';
+import { ResourceRegenerationService } from '../services/processors/resource-regeneration.service';
+import { BoardEntity, Mechanism } from '../models/board.model';
+import { Position, TimelineAction } from '../models/timeline.model';
+import { Build } from '../models/build.model';
+import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
 
 interface BoardCell {
   x: number;
@@ -35,17 +37,44 @@ interface BoardCell {
           </div>
         </div>
         <div class="board-controls">
-          <button (click)="onPreviousStep()" [disabled]="currentStepIndex() === 0" class="btn-nav">
+          <!-- Nouveau : Bouton pour lancer toute la simulation -->
+          <button
+            (click)="onRunFullSimulation()"
+            [disabled]="isSimulating() || currentStepIndex() > 0 || !hasMinimumBoardSetup()"
+            class="btn-run-full"
+            title="Exécuter toute la timeline d'un coup">
+            @if (isSimulating()) {
+              <span>⏳ Simulation en cours...</span>
+            } @else {
+              <span>▶ Lancer Toute la Simulation</span>
+            }
+          </button>
+
+          <div class="divider"></div>
+
+          <!-- Contrôles step-by-step -->
+          <button (click)="onPreviousStep()" [disabled]="currentStepIndex() === 0 || isSimulating()" class="btn-nav">
             ◀ Étape Précédente
           </button>
           <span class="step-indicator">
             {{ currentStepIndex() === 0 ? 'État initial' : 'Étape ' + currentStepIndex() }} / {{ totalSteps() - 1 }}
           </span>
-          <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1" class="btn-nav">
+          <button (click)="onNextStep()" [disabled]="currentStepIndex() >= totalSteps() - 1 || isSimulating() || !hasMinimumBoardSetup()" class="btn-nav">
             Étape Suivante ▶
           </button>
-          <button (click)="onReset()" class="btn-reset">🔄 Réinitialiser</button>
+
+          <div class="divider"></div>
+
+          <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">🔄 Réinitialiser</button>
         </div>
+      </div>
+
+      <div class="board-setup-warning" *ngIf="currentTimeline() && !hasMinimumBoardSetup()">
+        ⚠️ Placement requis: ajoutez au moins 1 allié et 1 ennemi avant de lancer la timeline.
+      </div>
+
+      <div class="placement-help" *ngIf="placementMode() !== 'none'">
+        📍 {{ getPlacementHelpText() }}
       </div>
 
       <!-- Legend -->
@@ -76,10 +105,12 @@ interface BoardCell {
               *ngFor="let cell of boardCells()"
               class="cell"
               [ngStyle]="{ 'grid-column': cell.x + 1, 'grid-row': cell.y + 1 }"
+              [class.pending-placement]="placementMode() !== 'none'"
               [class.has-entity]="cell.hasEntity"
               [class.has-mechanism]="cell.hasMechanism"
               [class.has-action]="cell.isAction"
               [title]="'(' + cell.x + ', ' + cell.y + ')'"
+              (click)="onCellClick(cell)"
             >
             <!-- Coordinates -->
             <span class="coord" *ngIf="cell.x === 0 || cell.y === 0">
@@ -102,27 +133,30 @@ interface BoardCell {
             <div
               *ngIf="getDialHourAtPosition(cell.x, cell.y) as dialHour"
               class="dial-hour"
-              [title]="'Cadran - ' + dialHour.hour + 'h'"
+              [class.current-hour]="isCurrentDialHour(dialHour.hour)"
+              [title]="'Cadran - ' + dialHour.hour + 'h' + (isCurrentDialHour(dialHour.hour) ? ' (HEURE COURANTE)' : '')"
             >
               <img
                 [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'"
                 [alt]="'Heure ' + dialHour.hour"
                 class="dial-hour-image"
               />
+              <span *ngIf="isCurrentDialHour(dialHour.hour)" class="current-hour-indicator">⏰</span>
             </div>
 
             <!-- Mechanism -->
             <div
               *ngIf="getMechanismAtPosition(cell.x, cell.y) as mech"
               class="mechanism"
-              [class]="mech.type"
-              [title]="getMechanismTitle(mech.type)"
+              [ngClass]="[mech.type, (mech.type === 'cog' && (mech.charges || 0) > 0) ? 'has-charges' : '']"
+              [title]="getMechanismTitle(mech.type) + (mech.charges ? ' (' + mech.charges + ' charges)' : '')"
             >
               <img
                 [src]="getMechanismImage(mech.type, mech.charges)"
                 [alt]="getMechanismTitle(mech.type)"
                 class="mechanism-image"
               />
+              <span *ngIf="mech.type === 'cog' && (mech.charges || 0) > 0" class="charge-badge">{{ mech.charges }}</span>
             </div>
 
             <!-- Spell Action Indicator -->
@@ -282,9 +316,10 @@ interface BoardCell {
       display: flex;
       gap: 8px;
       align-items: center;
+      flex-wrap: wrap;
     }
 
-    .btn-nav, .btn-reset {
+    .btn-nav, .btn-reset, .btn-run-full {
       background: #253044;
       border: 1px solid var(--stroke);
       color: #e8ecf3;
@@ -293,6 +328,26 @@ interface BoardCell {
       cursor: pointer;
       font-size: 12px;
       transition: all 0.2s;
+    }
+
+    .btn-run-full {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-color: #667eea;
+      font-weight: 600;
+      padding: 10px 16px;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-run-full:hover:not(:disabled) {
+      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-run-full:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
     }
 
     .btn-nav:hover:not(:disabled) {
@@ -306,9 +361,21 @@ interface BoardCell {
       cursor: not-allowed;
     }
 
-    .btn-reset:hover {
+    .btn-reset:hover:not(:disabled) {
       background: #4cc9f0;
       color: #0b1220;
+    }
+
+    .btn-reset:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .divider {
+      width: 1px;
+      height: 24px;
+      background: var(--stroke);
+      margin: 0 4px;
     }
 
     .step-indicator {
@@ -319,6 +386,28 @@ interface BoardCell {
     }
 
     /* Legend */
+    .board-setup-warning {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(239, 71, 111, 0.15);
+      border: 1px solid rgba(239, 71, 111, 0.5);
+      color: #ffb4c4;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .placement-help {
+      margin-bottom: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(76, 201, 240, 0.12);
+      border: 1px solid rgba(76, 201, 240, 0.45);
+      color: #bdefff;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
     .legend {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));  /* Larger min-width for text to fit */
@@ -454,6 +543,11 @@ interface BoardCell {
       box-shadow: 0 0 8px rgba(76, 201, 240, 0.3);
     }
 
+    .cell.pending-placement:hover {
+      box-shadow: 0 0 12px rgba(123, 216, 143, 0.8);
+      border-color: var(--good);
+    }
+
     .cell.has-entity {
       background: #1e2844;
     }
@@ -532,6 +626,34 @@ interface BoardCell {
       filter: drop-shadow(0 0 4px rgba(255, 209, 102, 0.8));
     }
 
+    /* Rouage avec charges - teinte bleue via CSS (remplace rouage-bleu.png corrompu) */
+    .board .mechanism.cog.has-charges .mechanism-image {
+      filter: drop-shadow(0 0 8px rgba(76, 201, 240, 1))
+              hue-rotate(180deg)
+              saturate(1.5)
+              brightness(1.1);
+    }
+
+    /* Badge affichant le nombre de charges */
+    .board .mechanism .charge-badge {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      background: linear-gradient(135deg, #4cc9f0, #00b4d8);
+      color: #0b1220;
+      font-size: 10px;
+      font-weight: bold;
+      min-width: 16px;
+      height: 16px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 4px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+      z-index: 10;
+    }
+
     /* Rouage (cog) - TOUJOURS au premier plan */
     .board .mechanism.cog {
       z-index: 3 !important; /* Au-dessus de tout */
@@ -578,6 +700,45 @@ interface BoardCell {
         opacity: 0.6; /* Légère augmentation */
         filter: drop-shadow(0 0 4px rgba(167, 139, 250, 0.6));
       }
+    }
+
+    /* Heure courante du cadran - MISE EN SURBRILLANCE */
+    .board .dial-hour.current-hour .dial-hour-image {
+      opacity: 1 !important;
+      width: 80%;
+      height: 80%;
+      filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.9)) drop-shadow(0 0 15px rgba(255, 215, 0, 0.6)) !important;
+      animation: currentHourPulse 1s ease-in-out infinite !important;
+    }
+
+    .board .dial-hour.current-hour {
+      z-index: 1 !important; /* Légèrement au-dessus des autres heures */
+    }
+
+    .board .current-hour-indicator {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      font-size: 12px;
+      animation: currentHourBounce 0.5s ease-in-out infinite alternate;
+    }
+
+    @keyframes currentHourPulse {
+      0%, 100% {
+        opacity: 0.9;
+        transform: scale(1);
+        filter: drop-shadow(0 0 8px rgba(255, 215, 0, 0.9)) drop-shadow(0 0 15px rgba(255, 215, 0, 0.6));
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 12px rgba(255, 215, 0, 1)) drop-shadow(0 0 20px rgba(255, 215, 0, 0.8));
+      }
+    }
+
+    @keyframes currentHourBounce {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(-3px); }
     }
 
     /* Sinistro - TOUJOURS au premier plan */
@@ -861,21 +1022,40 @@ export class BoardComponent {
   buildService = inject(BuildService);
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
+  regenerationService = inject(ResourceRegenerationService);
 
   editPlayer = output<BoardEntity>();
   editEnemy = output<BoardEntity>();
   deleteEntity = output<BoardEntity>();
+  boardCellClick = output<Position>();
+  placementMode = input<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
 
   currentTimeline = computed(() => this.timelineService.currentTimeline());
-
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
 
+  // 🆕 Signal pour indiquer si une simulation est en cours
+  isSimulating = computed(() => this.simulationService.isRunning());
+  hasMinimumBoardSetup = computed(() => this.boardService.hasMinimumSetup());
+
+  private lastObservedTimelineId: string | null = null;
+
   constructor() {
-    // Nettoyer l'historique quand on change de timeline
+    // Invalider l'état de simulation à chaque changement réel de timeline
+    // pour éviter les validations effectuées avec un contexte en cache d'une autre timeline.
     effect(() => {
+      const timelineId = this.timelineService.currentTimelineId();
       const timeline = this.currentTimeline();
+
+      if (timelineId === this.lastObservedTimelineId) {
+        return;
+      }
+
+      this.lastObservedTimelineId = timelineId;
+      this.simulationService.clearSimulation();
+      this.regenerationService.clearHistory();
+
       if (timeline) {
-        console.log('🗑️ Timeline changée:', timeline.name);
+        console.log('🗑️ Timeline changée:', timeline.name, '- cache simulation/régénération réinitialisé');
       }
     });
   }
@@ -938,6 +1118,30 @@ export class BoardComponent {
   }
 
   /**
+   * Check if a dial hour is the current hour
+   */
+  isCurrentDialHour(hour: number): boolean {
+    const currentHour = this.boardService.currentDialHour();
+    return currentHour !== undefined && currentHour === hour;
+  }
+
+  /**
+   * Get the current dial hour (for display purposes)
+   */
+  getCurrentDialHour(): number | undefined {
+    return this.boardService.currentDialHour();
+  }
+
+  getPlacementHelpText(): string {
+    const mode = this.placementMode();
+    if (mode === 'player') return 'Cliquez sur une case de la carte pour placer le joueur.';
+    if (mode === 'enemy') return "Cliquez sur une case de la carte pour placer l'ennemi.";
+    if (mode === 'player-edit') return 'Validez votre modification puis cliquez sur une case pour déplacer le joueur.';
+    if (mode === 'enemy-edit') return "Validez votre modification puis cliquez sur une case pour déplacer l'ennemi.";
+    return 'Cliquez sur une case de la carte pour placer le rouage.';
+  }
+
+  /**
    * Get action at position
    * Exclude Move, Transpose, and mechanism spells as they have their own visual representation
    */
@@ -957,26 +1161,8 @@ export class BoardComponent {
       }
 
       // Exclure les sorts qui créent des mécanismes (ils ont leur propre représentation visuelle)
-      if (a.type === 'CastSpell' && a.spellId && isSpellMechanism(a.spellId)) {
-        return false;
-      }
-
-      return true;
+      return !(a.type === 'CastSpell' && a.spellId && isSpellMechanism(a.spellId));
     });
-  }
-
-  /**
-   * Get mechanism icon (deprecated - kept for backward compatibility)
-   */
-  getMechanismIcon(type: string): string {
-    switch(type) {
-      case 'cog':
-      case 'gear': return '⚙️';
-      case 'dial': return '⏰';
-      case 'sinistro': return '💀';
-      case 'regulateur': return '🔧';
-      default: return '⚡';
-    }
   }
 
   /**
@@ -987,32 +1173,10 @@ export class BoardComponent {
   }
 
   /**
-   * Get mechanism image URL (gère les heures du cadran)
-   */
-  getMechanismImageUrl(mechanism: any): string {
-    // Si c'est une heure du cadran (a une propriété hour et un dialId)
-    if (mechanism.type === 'dial' && mechanism.hour && mechanism.dialId) {
-      return `http://localhost:8080/resources/dial/dial_hours-${mechanism.hour}.png`;
-    }
-    // Sinon, utiliser l'image normale du mécanisme
-    return this.getMechanismImage(mechanism.type, mechanism.charges);
-  }
-
-  /**
    * Get mechanism title (localized name)
    */
   getMechanismTitle(type: string): string {
     return getMechanismDisplayName(type);
-  }
-
-  /**
-   * Get mechanism title with hour (pour les heures du cadran)
-   */
-  getMechanismTitleWithHour(mechanism: any): string {
-    if (mechanism.type === 'dial' && mechanism.hour) {
-      return `Cadran - ${mechanism.hour}h`;
-    }
-    return this.getMechanismTitle(mechanism.type);
   }
 
   /**
@@ -1030,36 +1194,300 @@ export class BoardComponent {
   }
 
   /**
-   * Navigation
+   * Navigation - Step by step
+   * Exécute un seul step à la fois avec validation complète
    */
   async onNextStep(): Promise<void> {
     const timeline = this.currentTimeline();
     const build = this.buildService.selectedBuildA();
     const currentIndex = this.currentStepIndex();
 
+    console.log('');
+    console.log('🔵 [onNextStep] DÉBUT - Index actuel:', currentIndex);
+
     if (!timeline || !build) {
       console.warn('⚠️ Timeline ou Build manquant');
       return;
     }
-
-    // Si c'est la première étape (index 0 → 1), sauvegarder l'état initial
-    if (currentIndex === 0) {
-      this.boardService.saveInitialState();
-      console.log('💾 État initial du board sauvegardé');
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant de simuler.');
+      return;
     }
 
-    // Passer à l'étape suivante d'abord
+    // Si c'est la première étape, sauvegarder l'état initial
+    if (currentIndex === 0) {
+      console.log('💾 Sauvegarde de l\'état initial du board');
+      this.boardService.saveInitialState();
+    }
+
+    // Vérifier qu'il reste des steps à exécuter
+    if (currentIndex >= timeline.steps.length) {
+      console.warn('⚠️ Aucun step suivant disponible');
+      return;
+    }
+
+    const realStepIndex = currentIndex;
+    console.log(`\n🔹 [onNextStep] Exécution du step ${realStepIndex + 1}/${timeline.steps.length}...`);
+
+    // ✅ Appeler executeStep pour valider et exécuter le step
+    const success = await this.simulationService.executeStep(build, timeline, realStepIndex);
+
+    if (!success) {
+      console.error(`❌ Le step ${realStepIndex + 1} a échoué`);
+      // Récupérer le message d'erreur depuis les résultats
+      const stepResult = this.simulationService.getStepResult(realStepIndex);
+      const failedAction = stepResult?.actions.find((a: any) => !a.success);
+      const errorMessage = failedAction?.message || 'Action impossible à exécuter';
+
+      alert(`⚠️ Erreur au step ${realStepIndex + 1}:\n${errorMessage}`);
+
+      // ❌ NE PAS mettre à jour la map en cas d'échec
+      console.log('🚫 Map non mise à jour (step échoué)');
+      return;
+    }
+
+    console.log(`✅ Step ${realStepIndex + 1} exécuté avec succès`);
+
+    // ✅ Le step a réussi : avancer l'index et mettre à jour le board
     this.timelineService.nextStep();
 
-    // Puis exécuter l'étape qu'on vient d'atteindre (si elle existe)
-    const newIndex = this.currentStepIndex();
-    if (newIndex > 0 && newIndex <= timeline.steps.length) {
-      const realStepIndex = newIndex - 1; // L'index réel dans le tableau steps
-      await this.simulationService.executeStep(build, timeline, realStepIndex);
-
-      // Sauvegarder l'état après l'exécution pour l'historique
-      this.boardService.pushState();
+    // Appliquer les actions visuelles (mécanismes, etc.)
+    const step = timeline.steps[realStepIndex];
+    for (const action of step.actions) {
+      await this.applyVisualAction(action, build, realStepIndex);
     }
+
+    // Sauvegarder l'état après l'application
+    this.boardService.pushState();
+
+    // Si on vient d'exécuter le dernier step, afficher le récapitulatif de fin
+    if (this.currentStepIndex() >= timeline.steps.length) {
+      this.logFinalSimulationSummaryFromCache(timeline.steps.length);
+    }
+
+    // Afficher les résultats
+    const stepResult = this.simulationService.getStepResult(realStepIndex);
+    if (stepResult) {
+      const actionResults = stepResult.actions.filter((a: any) => a.success);
+      if (actionResults.length > 0) {
+        const paUsed = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
+        const wpUsed = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
+        const paRegenerated = actionResults.reduce((sum: number, a: any) => sum + (a.paRegenerated || 0), 0);
+        const wpRegenerated = actionResults.reduce((sum: number, a: any) => sum + (a.wpRegenerated || 0), 0);
+
+        console.log('📊 Résultats du step:', {
+          actionsReussies: actionResults.length,
+          paUtilises: paUsed,
+          wpUtilises: wpUsed,
+          degats: actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0)
+        });
+
+        // 🆕 Logs détaillés pour la régénération de PA/PW
+        if (paRegenerated > 0 || wpRegenerated > 0) {
+          console.log('');
+          console.log('💫 ═══════════════════════════════════════════════════');
+          console.log('💫 RÉGÉNÉRATION DE RESSOURCES');
+          console.log('💫 ═══════════════════════════════════════════════════');
+          if (paRegenerated > 0) {
+            console.log(`💫 ⚡ PA régénérés: +${paRegenerated}`);
+          }
+          if (wpRegenerated > 0) {
+            console.log(`💫 🔮 PW régénérés: +${wpRegenerated}`);
+          }
+          console.log('💫 ═══════════════════════════════════════════════════');
+        }
+
+        // Log du contexte après le step (ressources restantes)
+        const contextAfter = stepResult.contextAfter;
+        if (contextAfter) {
+          console.log('');
+          console.log('📈 État des ressources après le step:', {
+            paRestants: contextAfter.availablePa,
+            wpRestants: contextAfter.availablePw,
+            mpRestants: contextAfter.availableMp
+          });
+        }
+      }
+    }
+
+    console.log('🔵 [onNextStep] FIN');
+    console.log('');
+  }
+
+  /**
+   * Affiche un récapitulatif final basé sur le cache de simulation
+   * Utilisé pour le mode étape par étape lorsqu'on atteint le dernier step
+   */
+  private logFinalSimulationSummaryFromCache(totalSteps: number): void {
+    let totalDamage = 0;
+    let totalPaUsed = 0;
+    let totalWpUsed = 0;
+    let totalMpUsed = 0;
+    let stepsExecuted = 0;
+
+    for (let stepIndex = 0; stepIndex < totalSteps; stepIndex++) {
+      const stepResult = this.simulationService.getStepResult(stepIndex);
+      if (!stepResult?.success) {
+        continue;
+      }
+
+      stepsExecuted++;
+      const actionResults = stepResult.actions.filter((a: any) => a.success);
+      totalDamage += actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0);
+      totalPaUsed += actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
+      totalWpUsed += actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
+      totalMpUsed += actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🎉 SIMULATION ÉTAPE PAR ÉTAPE TERMINÉE');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📊 Résultats finaux:');
+    console.log(`  ✅ Steps exécutés: ${stepsExecuted}/${totalSteps}`);
+    console.log(`  💥 Dégâts totaux: ${totalDamage}`);
+    console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
+    console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
+    console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
+
+    const regenSummary = this.regenerationService.getRegenerationSummary();
+    if (regenSummary.totalPaRegenerated > 0 || regenSummary.totalPwRegenerated > 0) {
+      console.log('');
+      console.log('💫 RÉGÉNÉRATION TOTALE (service centralisé):');
+      console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
+      console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
+      console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
+      console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
+
+      if (regenSummary.bySource.size > 0) {
+        console.log('');
+        console.log('💫 Détail par source:');
+        regenSummary.bySource.forEach((stats, source) => {
+          const parts = [];
+          if (stats.pa > 0) parts.push(`+${stats.pa} PA`);
+          if (stats.pw > 0) parts.push(`+${stats.pw} PW`);
+          console.log(`  💫   • ${source}: ${parts.join(', ')}`);
+        });
+      }
+    }
+
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('');
+  }
+
+  private async applyVisualAction(action: TimelineAction, _build: Build, stepIndex: number): Promise<void> {
+    if (action.type === 'CastSpell' && action.spellId) {
+      // Vérifier si le sort crée un mécanisme
+      console.log(`🔍 Analyse du sort: "${action.spellId}"`);
+      const mechanismType = getSpellMechanismType(action.spellId);
+      console.log(`🎯 Type de mécanisme détecté: ${mechanismType || 'aucun'}`);
+
+      if (mechanismType && action.targetPosition) {
+        // 🆕 Vérifier si un mécanisme de ce type existe déjà sur le plateau
+        // La stratégie de classe (XelorSimulationStrategy) a déjà créé le mécanisme
+        // lors de l'exécution de la simulation. On ne doit pas en créer un doublon.
+        const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
+
+        if (existingMechanisms.length > 0) {
+          console.log(`ℹ️ Mécanisme ${mechanismType} déjà créé par la stratégie de classe - pas de doublon`);
+
+          // 🆕 Pour les cadrans, vérifier aussi que les heures existent déjà
+          if (mechanismType === 'dial') {
+            const dialHours = this.boardService.dialHours();
+            if (dialHours.length > 0) {
+              console.log(`ℹ️ Heures du cadran déjà créées (${dialHours.length} heures) - pas de doublon`);
+            }
+          }
+          return;
+        }
+
+        console.log(`✅ Création d'un mécanisme ${mechanismType} à la position (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+        // Créer le mécanisme
+        const mechanism: Mechanism = {
+          id: `mechanism_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: mechanismType,
+          position: action.targetPosition,
+          charges: 0,
+          turn: stepIndex + 1,
+          spellId: action.spellId
+        };
+
+        // Ajouter le mécanisme au plateau
+        this.boardService.addMechanism(mechanism);
+        console.log('🎉 Mécanisme créé et ajouté au plateau:', mechanism);
+
+        // Si c'est un cadran, créer les 12 heures autour
+        if (mechanismType === 'dial') {
+          const playerEntity = this.boardService.player();
+          const playerPosition = playerEntity?.position || { x: 6, y: 6 };
+          this.createDialHours(mechanism.id, action.targetPosition, playerPosition);
+        }
+      }
+    }
+  }
+
+  /**
+   * Crée les 12 heures autour d'un cadran
+   */
+  private createDialHours(dialId: string, centerPosition: Position, playerPosition: Position): void {
+    console.log(`🕐 [DIAL_HOURS] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
+
+    const dx = centerPosition.x - playerPosition.x;
+    const dy = centerPosition.y - playerPosition.y;
+
+    let rotation = 0;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      rotation = dx > 0 ? 1 : 3;
+    } else {
+      rotation = dy > 0 ? 2 : 0;
+    }
+
+    const baseHourPositions = [
+      { hour: 12, offsetX: 0, offsetY: -3 },
+      { hour: 1, offsetX: +1, offsetY: -2 },
+      { hour: 2, offsetX: +2, offsetY: -1 },
+      { hour: 3, offsetX: +3, offsetY: 0 },
+      { hour: 4, offsetX: +2, offsetY: +1 },
+      { hour: 5, offsetX: +1, offsetY: +2 },
+      { hour: 6, offsetX: 0, offsetY: +3 },
+      { hour: 7, offsetX: -1, offsetY: +2 },
+      { hour: 8, offsetX: -2, offsetY: +1 },
+      { hour: 9, offsetX: -3, offsetY: 0 },
+      { hour: 10, offsetX: -2, offsetY: -1 },
+      { hour: 11, offsetX: -1, offsetY: -2 }
+    ];
+
+    baseHourPositions.forEach(({ hour, offsetX, offsetY }) => {
+      let rotatedX = offsetX;
+      let rotatedY = offsetY;
+
+      // Rotation de 90 degrés (sens horaire) appliquée 'rotation' fois
+      for (let i = 0; i < rotation; i++) {
+        // Formule de rotation: (x, y) -> (-y, x)
+        const newX = -rotatedY;
+        const newY = rotatedX;
+        rotatedX = newX;
+        rotatedY = newY;
+      }
+
+      const hourPosition = {
+        x: centerPosition.x + rotatedX,
+        y: centerPosition.y + rotatedY
+      };
+
+      if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
+        const dialHour = {
+          id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          dialId: dialId,
+          hour: hour,
+          position: hourPosition
+        };
+
+        this.boardService.addDialHour(dialHour);
+        console.log(`  ✅ Hour ${hour} created at (${hourPosition.x}, ${hourPosition.y})`);
+      }
+    });
   }
 
   onPreviousStep(): void {
@@ -1073,7 +1501,11 @@ export class BoardComponent {
       const newIndex = this.currentStepIndex();
       this.boardService.restoreStateAtIndex(newIndex);
 
-      console.log(`⏮️ Retour à l'étape ${newIndex}`);
+      // Tronquer le cache de simulation pour conserver uniquement les steps encore valides
+      // et permettre une reprise correcte avec "Étape suivante"
+      this.simulationService.trimSimulationCacheToStep(newIndex);
+
+      console.log(`⏮️ Retour à l'étape ${newIndex} - Cache de simulation tronqué`);
     }
   }
 
@@ -1084,7 +1516,208 @@ export class BoardComponent {
     // Restaurer l'état initial du board
     this.boardService.restoreInitialState();
 
+    // Nettoyer le cache de simulation
+    this.simulationService.clearSimulation();
+
+    // Nettoyer l'historique de régénération
+    this.regenerationService.clearHistory();
+
     console.log('🔄 Timeline et Board réinitialisés');
+  }
+
+  /**
+   * Lance toute la simulation d'un coup
+   * Exécute tous les steps avec validation à chaque étape
+   * Met à jour le board à chaque step réussi
+   * S'arrête et retourne l'erreur si un step échoue
+   */
+  async onRunFullSimulation(): Promise<void> {
+    const timeline = this.currentTimeline();
+    const build = this.buildService.selectedBuildA();
+
+    if (!timeline || !build) {
+      console.warn('⚠️ Timeline ou Build manquant');
+      return;
+    }
+
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant de simuler.');
+      return;
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 LANCEMENT SIMULATION COMPLÈTE');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📋 Timeline:', timeline.name);
+    console.log('🔢 Nombre de steps:', timeline.steps.length);
+
+    // Sauvegarder l'état initial
+    this.boardService.saveInitialState();
+    console.log('💾 État initial sauvegardé');
+
+    // Réinitialiser le service de simulation
+    this.simulationService.clearSimulation();
+
+    // Variables pour suivre la simulation
+    let totalDamage = 0;
+    let totalPaUsed = 0;
+    let totalWpUsed = 0;
+    let totalMpUsed = 0;
+    let totalPaRegenerated = 0;
+    let totalWpRegenerated = 0;
+    let stepsExecuted = 0;
+
+    // Exécuter chaque step un par un
+    for (let stepIndex = 0; stepIndex < timeline.steps.length; stepIndex++) {
+      const step = timeline.steps[stepIndex];
+      console.log('');
+      console.log(`┌───────────────────────────────────────────────────────┐`);
+      console.log(`│  🔹 STEP ${stepIndex + 1}/${timeline.steps.length}: ${step.description || step.id}`);
+      console.log(`└───────────────────────────────────────────────────────┘`);
+
+      // ✅ Exécuter le step avec validation complète
+      const success = await this.simulationService.executeStep(build, timeline, stepIndex);
+
+      if (!success) {
+        // ❌ Le step a échoué : NE PAS mettre à jour le board
+        console.error(`❌ Step ${stepIndex + 1} échoué`);
+
+        // Récupérer le message d'erreur
+        const stepResult = this.simulationService.getStepResult(stepIndex);
+        const failedAction = stepResult?.actions.find((a: any) => !a.success);
+        const errorMessage = failedAction?.message || 'Action impossible à exécuter';
+
+        console.log('🚫 Board non mis à jour pour ce step');
+        console.log('═══════════════════════════════════════════════════════');
+        console.log(`❌ Simulation arrêtée au step ${stepIndex + 1}`);
+        console.log('═══════════════════════════════════════════════════════');
+
+        alert(`⚠️ Simulation arrêtée au step ${stepIndex + 1}:\n${errorMessage}`);
+        return;
+      }
+
+      // ✅ Le step a réussi : mettre à jour le board
+      console.log(`✅ Step ${stepIndex + 1} exécuté avec succès`);
+
+      // Récupérer les résultats du step
+      const stepResult = this.simulationService.getStepResult(stepIndex);
+      if (stepResult) {
+        const actionResults = stepResult.actions.filter((a: any) => a.success);
+
+        // Calculer les totaux
+        const stepDamage = actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0);
+        const stepPa = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
+        const stepWp = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
+        const stepMp = actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
+        const stepPaRegen = actionResults.reduce((sum: number, a: any) => sum + (a.paRegenerated || 0), 0);
+        const stepWpRegen = actionResults.reduce((sum: number, a: any) => sum + (a.wpRegenerated || 0), 0);
+
+        totalDamage += stepDamage;
+        totalPaUsed += stepPa;
+        totalWpUsed += stepWp;
+        totalMpUsed += stepMp;
+        totalPaRegenerated += stepPaRegen;
+        totalWpRegenerated += stepWpRegen;
+
+        console.log('📊 Résultats du step:', {
+          degats: stepDamage,
+          PA: stepPa,
+          WP: stepWp,
+          MP: stepMp
+        });
+
+        // 🆕 Logs détaillés pour la régénération de PA/PW
+        if (stepPaRegen > 0 || stepWpRegen > 0) {
+          console.log('');
+          console.log('💫 ═══════════════════════════════════════════════════');
+          console.log(`💫 RÉGÉNÉRATION AU STEP ${stepIndex + 1}`);
+          console.log('💫 ═══════════════════════════════════════════════════');
+          if (stepPaRegen > 0) {
+            console.log(`💫 ⚡ PA régénérés: +${stepPaRegen}`);
+          }
+          if (stepWpRegen > 0) {
+            console.log(`💫 🔮 PW régénérés: +${stepWpRegen}`);
+          }
+          console.log('💫 ═══════════════════════════════════════════════════');
+        }
+
+        // Log du contexte après le step (ressources restantes)
+        const contextAfter = stepResult.contextAfter;
+        if (contextAfter) {
+          console.log('📈 État des ressources après le step:', {
+            paRestants: contextAfter.availablePa,
+            wpRestants: contextAfter.availablePw,
+            mpRestants: contextAfter.availableMp
+          });
+        }
+      }
+
+      // Avancer l'index de la timeline
+      this.timelineService.nextStep();
+
+      // Appliquer les actions visuelles au board (mécanismes, etc.)
+      for (const action of step.actions) {
+        await this.applyVisualAction(action, build, stepIndex);
+      }
+
+      // Sauvegarder l'état du board après ce step
+      this.boardService.pushState();
+      console.log('💾 Board mis à jour et état sauvegardé');
+
+      stepsExecuted++;
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🎉 SIMULATION COMPLÈTE TERMINÉE AVEC SUCCÈS');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📊 Résultats finaux:');
+    console.log(`  ✅ Steps exécutés: ${stepsExecuted}/${timeline.steps.length}`);
+    console.log(`  💥 Dégâts totaux: ${totalDamage}`);
+    console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
+    console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
+    console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
+
+    // 🆕 Afficher le résumé de régénération depuis le service centralisé
+    const regenSummary = this.regenerationService.getRegenerationSummary();
+    if (regenSummary.totalPaRegenerated > 0 || regenSummary.totalPwRegenerated > 0) {
+      console.log('');
+      console.log('💫 RÉGÉNÉRATION TOTALE (service centralisé):');
+      console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
+      console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
+      console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
+      console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
+
+      // Détail par source
+      if (regenSummary.bySource.size > 0) {
+        console.log('');
+        console.log('💫 Détail par source:');
+        regenSummary.bySource.forEach((stats, source) => {
+          const parts = [];
+          if (stats.pa > 0) parts.push(`+${stats.pa} PA`);
+          if (stats.pw > 0) parts.push(`+${stats.pw} PW`);
+          console.log(`  💫   • ${source}: ${parts.join(', ')}`);
+        });
+      }
+    } else if (totalPaRegenerated > 0 || totalWpRegenerated > 0) {
+      // Fallback sur les compteurs locaux si le service n'a pas d'événements
+      console.log('');
+      console.log('💫 RÉGÉNÉRATION TOTALE:');
+      if (totalPaRegenerated > 0) {
+        console.log(`  💫 ⚡ PA régénérés: +${totalPaRegenerated}`);
+      }
+      if (totalWpRegenerated > 0) {
+        console.log(`  💫 🔮 PW régénérés: +${totalWpRegenerated}`);
+      }
+      console.log(`  📈 Bilan net PA: ${totalPaRegenerated - totalPaUsed}`);
+      console.log(`  📈 Bilan net PW: ${totalWpRegenerated - totalWpUsed}`);
+    }
+
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('');
   }
 
   /**
@@ -1102,5 +1735,9 @@ export class BoardComponent {
     if (confirm(`Supprimer ${entity.type === 'player' ? 'le joueur' : "l'ennemi"} "${entity.name}" ?`)) {
       this.boardService.removeEntity(entity.id);
     }
+  }
+
+  onCellClick(cell: BoardCell): void {
+    this.boardCellClick.emit({ x: cell.x, y: cell.y });
   }
 }

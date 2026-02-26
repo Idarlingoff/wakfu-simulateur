@@ -66,6 +66,7 @@ export interface Build {
   id: string;
   name: string;
   classId: string;
+  characterClass?: string; // Nom de la classe (ex: 'Xelor', 'Iop', 'Eniripsa', etc.)
   characterLevel: number;
   spellBar: SpellBar;
   passiveBar: PassiveBar;

@@ -27,6 +27,24 @@ export interface TotalStats {
   initiative?: number;
   control?: number;
   block?: number;
+  // Maîtrises élémentaires
+  masteryFire?: number;
+  masteryWater?: number;
+  masteryEarth?: number;
+  masteryAir?: number;
+  // Maîtrises spécifiques
+  healingMastery?: number;
+  berserkMastery?: number;
+  meleeMastery?: number;
+  distanceMastery?: number;
+  singleTargetMastery?: number;
+  areaMastery?: number;
+  // Résistances
+  resistanceFire?: number;
+  resistanceWater?: number;
+  resistanceEarth?: number;
+  resistanceAir?: number;
+  critResistance?: number;
 }
 
 @Injectable({

@@ -62,7 +62,12 @@ import { DataCacheService } from '../services/data-cache.service';
 
               <!-- Liste des passifs disponibles -->
               <div class="available-section">
-                <h4>Passifs disponibles</h4>
+                <div class="available-header">
+                  <h4>Passifs disponibles</h4>
+                  <button type="button" class="btn-refresh" (click)="refreshPassives()" [disabled]="loading()" title="Rafraîchir la liste des passifs">
+                    🔄
+                  </button>
+                </div>
                 <div class="search-box">
                   <input
                     type="text"
@@ -325,6 +330,42 @@ import { DataCacheService } from '../services/data-cache.service';
       padding-top: 16px;
     }
 
+    .available-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .available-header h4 {
+      margin: 0;
+    }
+
+    .btn-refresh {
+      background: var(--panel-2);
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-refresh:hover:not(:disabled) {
+      background: var(--panel);
+      border-color: var(--accent);
+    }
+
+    .btn-refresh:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .available-section h4 {
       margin-bottom: 12px;
     }
@@ -554,6 +595,15 @@ export class PassiveSelectorComponent implements OnChanges {
     this.modalOpen.set(false);
     this.searchQuery = '';
     this.currentSlotIndex.set(-1);
+  }
+
+  /**
+   * Rafraîchit la liste des passifs en vidant le cache
+   */
+  async refreshPassives(): Promise<void> {
+    console.log('[PassiveSelector] refreshPassives - Vidage du cache et rechargement');
+    this.dataCache.clearPassivesCache();
+    await this.loadPassives();
   }
 
   async loadPassives(): Promise<void> {

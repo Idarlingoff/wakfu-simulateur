@@ -9,9 +9,7 @@ import { FormsModule } from '@angular/forms';
 
 interface EnemyForm {
   name: string;
-  positionX: number;
-  positionY: number;
-  facing: 'front' | 'back' | 'left' | 'right';
+  facing: 'front' | 'back' | 'side';
 }
 
 @Component({
@@ -40,39 +38,12 @@ interface EnemyForm {
                 />
               </div>
 
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Position X *</label>
-                  <input
-                    type="number"
-                    [(ngModel)]="form.positionX"
-                    name="positionX"
-                    min="0"
-                    max="12"
-                    required
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label>Position Y *</label>
-                  <input
-                    type="number"
-                    [(ngModel)]="form.positionY"
-                    name="positionY"
-                    min="0"
-                    max="12"
-                    required
-                  />
-                </div>
-              </div>
-
               <div class="form-group">
                 <label>Direction *</label>
                 <select [(ngModel)]="form.facing" name="facing" required>
                   <option value="front">⬇️ Avant</option>
                   <option value="back">⬆️ Arrière</option>
-                  <option value="left">⬅️ Gauche</option>
-                  <option value="right">➡️ Droite</option>
+                  <option value="side">⬅️➡️ Côté</option>
                 </select>
               </div>
             </div>
@@ -256,20 +227,20 @@ export class EnemyFormComponent {
   isOpen = signal(false);
   editMode = signal(false);
   editingId = signal<string | null>(null);
+  editingPosition = signal<{ x: number; y: number } | null>(null);
 
   form: EnemyForm = {
     name: '',
-    positionX: 6,
-    positionY: 6,
     facing: 'front'
   };
 
-  enemyAdded = output<{ name: string; position: { x: number; y: number }; facing: { direction: string } }>();
-  enemyEdited = output<{ id: string; name: string; position: { x: number; y: number }; facing: { direction: string } }>();
+  enemyAdded = output<{ name: string; facing: { direction: string } }>();
+  enemyEdited = output<{ id: string; name: string; facing: { direction: string } }>();
 
   openNew(): void {
     this.editMode.set(false);
     this.editingId.set(null);
+    this.editingPosition.set(null);
     this.resetForm();
     this.isOpen.set(true);
   }
@@ -279,8 +250,6 @@ export class EnemyFormComponent {
     this.editingId.set(enemy.id);
     this.form = {
       name: enemy.name,
-      positionX: enemy.position.x,
-      positionY: enemy.position.y,
       facing: enemy.facing.direction as any
     };
     this.isOpen.set(true);
@@ -288,6 +257,7 @@ export class EnemyFormComponent {
 
   onClose(): void {
     this.isOpen.set(false);
+    this.editingPosition.set(null);
     this.resetForm();
   }
 
@@ -298,7 +268,6 @@ export class EnemyFormComponent {
 
     const data = {
       name: this.form.name.trim(),
-      position: { x: this.form.positionX, y: this.form.positionY },
       facing: { direction: this.form.facing }
     };
 
@@ -317,8 +286,6 @@ export class EnemyFormComponent {
   private resetForm(): void {
     this.form = {
       name: '',
-      positionX: 6,
-      positionY: 6,
       facing: 'front'
     };
   }

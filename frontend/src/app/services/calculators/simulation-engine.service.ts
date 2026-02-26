@@ -8,23 +8,150 @@ import { Injectable, inject } from '@angular/core';
 import { DamageCalculatorService, DamageCalculationParams } from './damage-calculator.service';
 import { StatsCalculatorService, TotalStats } from './stats-calculator.service';
 import { BoardService } from '../board.service';
+import { WakfuApiService } from '../wakfu-api.service';
 import { Build } from '../../models/build.model';
 import { Timeline, TimelineStep, TimelineAction, Position } from '../../models/timeline.model';
 import { Spell } from '../../models/spell.model';
 import { BoardEntity, Mechanism } from '../../models/board.model';
-import { isSpellMechanism, getSpellMechanismType, getMechanismImagePath } from '../../utils/mechanism-utils';
+import { SpellCastingValidatorService } from '../validators/spell-casting-validator.service';
+import { MovementValidatorService } from '../validators/movement-validator.service';
+import { ClassStrategyFactory } from '../strategies/class-strategy-factory.service';
+import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy.interface';
+import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
+import { firstValueFrom } from 'rxjs';
+import {buildSpellReferencesWithInnates, canonicalizeInnateSpellId} from '../../utils/innate-spells.utils';
+
+/**
+ * Phases d'exécution des effets de sorts
+ * Correspond à la colonne `phase` de la table `spell_effect`
+ */
+export type EffectPhase =
+  | 'PRE_CAST'           // Avant le cast (vérification de coûts supplémentaires)
+  | 'ON_CAST'            // Au moment du lancer
+  | 'IMMEDIATE'          // Immédiat (équivalent à ON_CAST)
+  | 'ON_HIT'             // Quand le sort touche
+  | 'ON_END_TURN'        // À la fin du tour du lanceur
+  | 'ON_TARGET_TURN_START' // Au début du tour de la cible
+  | 'ON_TARGET_TURN_END'   // À la fin du tour de la cible
+  | 'ON_HOUR_WRAPPED';     // Quand l'heure du cadran fait un tour complet
+
+/**
+ * Effet différé - Effet d'un sort qui sera résolu plus tard
+ * Le passif "Maître du Cadran" déclenche RESOLVE_DELAYED_EFFECTS sur ON_HOUR_WRAPPED
+ * pour résoudre ces effets immédiatement
+ */
+export interface DelayedEffect {
+  id: string;
+  spellId: string;
+  spellName: string;
+  originalPhase: EffectPhase;
+  effectType: string;
+  targetScope: string;
+  targetPosition: Position;
+  casterPosition: Position;
+  params: Record<string, any>;
+  registeredOnTurn: number;
+  contextSnapshot?: {
+    masteryPrimary?: number;
+    masterySecondary?: number;
+    critRate?: number;
+    critMastery?: number;
+    dommageInflict?: number;
+  };
+}
+
+/**
+ * Enregistrement d'un mouvement non-PM (pour le sort "Retour Spontané")
+ * Permet de tracker les téléportations, poussées, attirances et échanges de position
+ */
+export interface MovementRecord {
+  // Identifiant unique du mouvement
+  id: string;
+  // Type de mouvement
+  type: 'teleport' | 'push' | 'pull' | 'swap' | 'swap_mechanism';
+  // ID de l'entité ou du mécanisme déplacé
+  targetId: string;
+  // Type de cible ('entity' ou 'mechanism')
+  targetType: 'entity' | 'mechanism';
+  // Nom de la cible (pour les logs)
+  targetName: string;
+  // Position avant le mouvement
+  fromPosition: Position;
+  // Position après le mouvement
+  toPosition: Position;
+  // ID du sort qui a causé le mouvement (optionnel)
+  sourceSpellId?: string;
+  // ID de l'action timeline qui a causé le mouvement (optionnel)
+  sourceActionId?: string;
+  // Timestamp du mouvement
+  timestamp: number;
+  // Pour les swaps: informations sur l'autre entité/mécanisme impliqué
+  swapPartner?: {
+    id: string;
+    type: 'entity' | 'mechanism';
+    name: string;
+    fromPosition: Position;
+    toPosition: Position;
+  };
+}
 
 export interface SimulationContext {
   availablePa: number;
   availablePw: number;
   availableMp: number;
-  currentPosition?: Position;
-  playerPosition?: Position;
+  currentPosition: Position;
+  playerPosition: Position;
+  range: number;
   entities?: BoardEntity[];
   mechanisms?: Mechanism[];
   buffs?: any[];
   debuffs?: any[];
   turn?: number;
+
+  // Action timeline en cours d'exécution (utile pour corréler des effets post-cast)
+  currentActionId?: string;
+
+  mechanismCharges?: Map<string, number>;
+  // Compteurs partagés des charges des mécanismes Xélor par type.
+  // Permet de générer des charges avant même la pose d'un mécanisme.
+  sharedMechanismCharges?: Map<'cog' | 'sinistro', number>;
+  activeAuras?: Set<string>;
+  currentDialHour?: number;
+  dialId?: string;
+
+  // Indique si le cadran a déjà fait un tour complet depuis sa pose
+  // Le passif "Connaissance du passé" ne proc pas au premier passage de 12 à 1
+  dialFirstLoopCompleted?: boolean;
+
+  // IDs des passifs actifs du build (pour vérifier des conditions comme Rémanence)
+  activePassiveIds?: string[];
+
+  // Compteur d'utilisation de sorts par tour (spellId -> nombre d'utilisations ce tour)
+  spellUsageThisTurn?: Map<string, number>;
+
+  // Compteur d'utilisation de sorts par cible (spellId -> Map<targetKey, usageCount>)
+  spellUsagePerTarget?: Map<string, Map<string, number>>;
+
+  // Effets différés pour le passif "Maître du Cadran"
+  // Ces effets sont joués lors d'un tour de cadran (hour wrap)
+  delayedEffects?: DelayedEffect[];
+
+  // Compteur de mécanismes posés ce tour (type -> nombre de poses)
+  // Utilisé pour les restrictions comme "1 cadran par tour max"
+  mechanismsPlacedThisTurn?: Map<string, number>;
+
+  // État Distorsion (actif/inactif et cooldown restant en tours)
+  // Distorsion possède un cooldown de 3 tours de relance
+  distorsionActive?: boolean;
+  distorsionCooldownRemaining?: number;
+
+  // Historique des mouvements non-PM ce tour (pour "Retour Spontané")
+  // Stocke les téléportations, poussées, attirances et échanges de position
+  movementHistory?: MovementRecord[];
+
+  // Actions déclenchées automatiquement (ex: explosions de mécanismes)
+  // Elles sont injectées dans les résultats du step pour alimenter les dégâts/reporting UI.
+  pendingTriggeredActions?: SimulationActionResult[];
 }
 
 export interface SimulationActionResult {
@@ -71,12 +198,88 @@ export class SimulationEngineService {
 
   // Cache pour les sorts complets (sera rempli par un service externe)
   private readonly spellsCache = new Map<string, Spell>();
-  private readonly boardService = inject(BoardService);
+  private readonly boardService: BoardService = inject(BoardService);
+  private readonly spellCastingValidator: SpellCastingValidatorService = inject(SpellCastingValidatorService);
+  private readonly movementValidator: MovementValidatorService = inject(MovementValidatorService);
+  private readonly classStrategyFactory: ClassStrategyFactory = inject(ClassStrategyFactory);
+  private readonly regenerationService: ResourceRegenerationService = inject(ResourceRegenerationService);
+
+  // Stratégie de classe actuelle (sera définie au début de la simulation)
+  private currentClassStrategy?: ClassSimulationStrategy;
 
   constructor(
     private readonly damageCalculator: DamageCalculatorService,
-    private readonly statsCalculator: StatsCalculatorService
+    private readonly statsCalculator: StatsCalculatorService,
+    private readonly wakfuApi: WakfuApiService
   ) {}
+
+  /**
+   * Clone une position pour éviter les mutations partagées entre steps
+   */
+  private clonePosition(position: Position): Position {
+    return { ...position };
+  }
+
+  /**
+   * Clone le contexte de simulation pour figer un snapshot par step
+   */
+  private cloneContext(context: SimulationContext): SimulationContext {
+    return {
+      ...context,
+      currentPosition: this.clonePosition(context.currentPosition),
+      playerPosition: this.clonePosition(context.playerPosition),
+      entities: context.entities?.map(entity => ({
+        ...entity,
+        position: this.clonePosition(entity.position)
+      })),
+      mechanisms: context.mechanisms?.map(mechanism => ({
+        ...mechanism,
+        position: this.clonePosition(mechanism.position)
+      })),
+      buffs: context.buffs ? [...context.buffs] : undefined,
+      debuffs: context.debuffs ? [...context.debuffs] : undefined,
+      activePassiveIds: context.activePassiveIds ? [...context.activePassiveIds] : undefined,
+      spellUsageThisTurn: context.spellUsageThisTurn ? new Map(context.spellUsageThisTurn) : undefined,
+      spellUsagePerTarget: context.spellUsagePerTarget
+        ? new Map(
+          Array.from(context.spellUsagePerTarget.entries()).map(([spellId, usageMap]) => [
+            spellId,
+            new Map(usageMap)
+          ])
+        )
+        : undefined,
+      mechanismCharges: context.mechanismCharges ? new Map(context.mechanismCharges) : undefined,
+      sharedMechanismCharges: context.sharedMechanismCharges
+        ? new Map(context.sharedMechanismCharges)
+        : undefined,
+      activeAuras: context.activeAuras ? new Set(context.activeAuras) : undefined,
+      delayedEffects: context.delayedEffects?.map(effect => ({
+        ...effect,
+        targetPosition: this.clonePosition(effect.targetPosition),
+        casterPosition: this.clonePosition(effect.casterPosition),
+        params: { ...effect.params },
+        contextSnapshot: effect.contextSnapshot ? { ...effect.contextSnapshot } : undefined
+      })),
+      mechanismsPlacedThisTurn: context.mechanismsPlacedThisTurn
+        ? new Map(context.mechanismsPlacedThisTurn)
+        : undefined,
+      movementHistory: context.movementHistory?.map(movement => ({
+        ...movement,
+        fromPosition: this.clonePosition(movement.fromPosition),
+        toPosition: this.clonePosition(movement.toPosition),
+        swapPartner: movement.swapPartner
+          ? {
+            ...movement.swapPartner,
+            fromPosition: this.clonePosition(movement.swapPartner.fromPosition),
+            toPosition: this.clonePosition(movement.swapPartner.toPosition)
+          }
+          : undefined
+      })),
+      pendingTriggeredActions: context.pendingTriggeredActions
+        ? context.pendingTriggeredActions.map(action => ({ ...action }))
+        : undefined
+    };
+  }
 
   /**
    * Définit le cache des sorts (appelé depuis l'extérieur avec les données complètes)
@@ -89,42 +292,89 @@ export class SimulationEngineService {
   /**
    * Exécute une simulation complète
    */
-  runSimulation(build: Build, timeline: Timeline): SimulationResult {
-    // Calculer les stats totales du build avec les passifs
+  async runSimulation(build: Build, timeline: Timeline): Promise<SimulationResult> {
+    console.log('CALLED runSimulation');
+
+    // Réinitialiser l'historique de régénération pour cette nouvelle simulation
+    this.regenerationService.clearHistory();
+
+    console.log('');
+    console.log('╔═══════════════════════════════════════════════════════╗');
+    console.log('║  🎮 DÉMARRAGE DE LA SIMULATION                       ║');
+    console.log('╚═══════════════════════════════════════════════════════╝');
+    console.log('📦 Build:', build.name);
+    console.log('🎭 Classe:', build.classId || 'Default');
+    console.log('📋 Timeline:', timeline.name);
+    console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
+    console.log('');
+
+    this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
+    console.log(`Stratégie de classe: ${this.currentClassStrategy.classId}`);
+    console.log('');
+
     let buildStats = this.statsCalculator.calculateTotalStats(build);
 
-    // Récupérer les entités et mécanismes du plateau
+    console.log('📊 Stats calculées:', {
+      AP: buildStats.ap,
+      WP: buildStats.wp,
+      MP: buildStats.mp,
+      HP: buildStats.hp,
+      'Maitrise Primaire': buildStats.masteryPrimary
+    });
+    console.log('');
+
     const boardState = this.boardService.state();
     const entities = boardState.entities || [];
     const mechanisms: Mechanism[] = this.boardService.mechanisms();
 
-    // Trouver la position du joueur
     const playerEntity = entities.find((e: BoardEntity) => e.type === 'player');
     const playerPosition = playerEntity?.position || { x: 7, y: 7 };
 
-    // Créer le contexte initial
+    // Extraire les IDs des passifs actifs du build
+    const activePassiveIds = build.passiveBar?.passives
+      ?.filter(p => p !== null)
+      ?.map(p => p!.passiveId) || [];
+
     const initialContext: SimulationContext = {
       availablePa: buildStats.ap,
       availablePw: buildStats.wp,
       availableMp: buildStats.mp,
       currentPosition: playerPosition,
       playerPosition: playerPosition,
+      range: buildStats.range || 0, // Portée du joueur
       entities: entities,
       mechanisms: mechanisms,
       buffs: [],
       debuffs: [],
-      turn: 1
+      turn: 1,
+      activePassiveIds: activePassiveIds,
+      // Compteurs d'utilisation de sorts (réinitialisés chaque tour)
+      spellUsageThisTurn: new Map<string, number>(),
+      spellUsagePerTarget: new Map<string, Map<string, number>>(),
+      // Compteur de mécanismes posés ce tour (réinitialisé chaque tour)
+      mechanismsPlacedThisTurn: new Map<string, number>()
     };
+
+    if (this.currentClassStrategy) {
+      this.currentClassStrategy.initializeClassContext(initialContext, build);
+
+      buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, initialContext);
+      console.log('📊 Stats après passifs de classe:', {
+        AP: buildStats.ap,
+        'Maitrise Primaire': buildStats.masteryPrimary
+      });
+      console.log('');
+    }
 
     const steps: SimulationStepResult[] = [];
     const errors: string[] = [];
-    let currentContext = { ...initialContext };
+    let currentContext = this.cloneContext(initialContext);
     let totalDamage = 0;
 
     // Exécuter chaque step de la timeline
     for (let i = 0; i < timeline.steps.length; i++) {
       const step = timeline.steps[i];
-      const stepResult = this.executeStep(
+      const stepResult = await this.executeStep(
         step,
         currentContext,
         build,
@@ -133,7 +383,7 @@ export class SimulationEngineService {
       );
 
       steps.push(stepResult);
-      currentContext = stepResult.contextAfter;
+      currentContext = this.cloneContext(stepResult.contextAfter);
 
       // Accumuler les dégâts
       for (const action of stepResult.actions) {
@@ -149,13 +399,31 @@ export class SimulationEngineService {
       }
     }
 
+    console.log('');
+    console.log('╔═══════════════════════════════════════════════════════╗');
+    console.log('║  ✅ FIN DE LA SIMULATION                             ║');
+    console.log('╚═══════════════════════════════════════════════════════╝');
+    console.log('📊 Résultat:');
+    console.log('  ✅ Succès:', errors.length === 0);
+    console.log('  💥 Dégâts totaux:', totalDamage);
+    console.log('  ⚡ PA utilisés:', initialContext.availablePa - currentContext.availablePa);
+    console.log('  🔮 WP utilisés:', initialContext.availablePw - currentContext.availablePw);
+    console.log('  🏃 MP utilisés:', initialContext.availableMp - currentContext.availableMp);
+    if (errors.length > 0) {
+      console.log('  ❌ Erreurs:', errors);
+    }
+    console.log('');
+
+    // Afficher le résumé de la régénération de ressources
+    this.regenerationService.logRegenerationSummary('RÉSUMÉ RÉGÉNÉRATION - FIN DE SIMULATION');
+
     return {
       buildId: build.id || '',
       timelineId: timeline.id || '',
       buildStats,
-      initialContext,
+      initialContext: this.cloneContext(initialContext),
       steps,
-      finalContext: currentContext,
+      finalContext: this.cloneContext(currentContext),
       totalDamage,
       totalPaUsed: initialContext.availablePa - currentContext.availablePa,
       totalPwUsed: initialContext.availablePw - currentContext.availablePw,
@@ -168,44 +436,61 @@ export class SimulationEngineService {
   /**
    * Exécute un step de la timeline
    */
-  private executeStep(
+  private async executeStep(
     step: TimelineStep,
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats,
     stepNumber: number
-  ): SimulationStepResult {
+  ): Promise<SimulationStepResult> {
+    console.log('');
+    console.log('┌───────────────────────────────────────────────────────┐');
+    console.log(`│  🔹 ÉTAPE ${stepNumber}: ${step.description || step.id}`);
+    console.log('└───────────────────────────────────────────────────────┘');
+    console.log(`🎬 Nombre d'actions: ${step.actions.length}`);
+    console.log(`📍 Position joueur (context): (${context.playerPosition?.x}, ${context.playerPosition?.y})`);
+    console.log(`📍 Position joueur (BoardService): (${this.boardService.player()?.position?.x}, ${this.boardService.player()?.position?.y})`);
+    console.log(`⏰ Dial state (context): dialId=${context.dialId}, currentHour=${context.currentDialHour}`);
+    console.log(`⏰ Dial state (BoardService): activeDialId=${this.boardService.activeDialId()}, currentHour=${this.boardService.currentDialHour()}`);
+    console.log('');
+
     const actions: SimulationActionResult[] = [];
-    let currentContext = { ...context };
+    let currentContext = this.cloneContext(context);
     let stepSuccess = true;
 
-
-    // Exécuter chaque action du step
     for (const action of step.actions) {
-      const actionResult = this.executeAction(action, currentContext, build, buildStats);
+      console.log(`▶️  Action ${action.type}...`);
+      currentContext.currentActionId = action.id;
+      const actionResult = await this.executeAction(action, currentContext, build, buildStats);
+      currentContext.currentActionId = undefined;
       actions.push(actionResult);
 
       if (actionResult.success) {
-        // Déduire les ressources utilisées
         currentContext.availablePa -= actionResult.paCost;
         currentContext.availablePw -= actionResult.pwCost;
         currentContext.availableMp -= actionResult.mpCost;
 
-        // Mettre à jour la position si c'était un déplacement
         if (action.type === 'Move' && action.targetPosition) {
           this.updateContextPosition(currentContext, action.targetPosition);
         }
       } else {
         stepSuccess = false;
-        break; // Arrêter le step si une action échoue
+        break;
       }
+    }
+
+    const triggeredActions = currentContext.pendingTriggeredActions || [];
+    if (triggeredActions.length > 0) {
+      console.log(`⚙️ [STEP] ${triggeredActions.length} action(s) déclenchée(s) ajoutée(s) au résultat`);
+      actions.push(...triggeredActions);
+      currentContext.pendingTriggeredActions = [];
     }
 
     return {
       stepId: step.id || `step_${stepNumber}`,
       stepNumber,
       actions,
-      contextAfter: currentContext,
+      contextAfter: this.cloneContext(currentContext),
       success: stepSuccess
     };
   }
@@ -213,12 +498,12 @@ export class SimulationEngineService {
   /**
    * Exécute une action individuelle
    */
-  private executeAction(
+  private async executeAction(
     action: TimelineAction,
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats
-  ): SimulationActionResult {
+  ): Promise<SimulationActionResult> {
     const baseResult: SimulationActionResult = {
       success: false,
       actionId: action.id || '',
@@ -231,7 +516,7 @@ export class SimulationEngineService {
 
     switch (action.type) {
       case 'CastSpell':
-        return this.executeCastSpell(action, context, build, buildStats);
+        return await this.executeCastSpell(action, context, build, buildStats);
 
       case 'Move':
         return this.executeMove(action, context);
@@ -247,44 +532,111 @@ export class SimulationEngineService {
   /**
    * Exécute un sort
    */
-  private executeCastSpell(
+  private async executeCastSpell(
     action: TimelineAction,
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats
-  ): SimulationActionResult {
-    // Trouver la référence du sort dans le build
-    const spellRef = build.spellBar?.spells?.find(s => s && s.spellId === action.spellId);
+  ): Promise<SimulationActionResult> {
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🎯 [CAST SPELL] Tentative de lancement de sort');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📦 Spell ID:', action.spellId);
+    console.log('📍 Position cible:', action.targetPosition);
+    console.log('⚡ Ressources disponibles:', {
+      AP: context.availablePa,
+      WP: context.availablePw,
+      MP: context.availableMp
+    });
+    console.log('═══════════════════════════════════════════════════════');
+
+    // Trouver la référence du sort dans le build (inclut les sorts innés)
+    const spellRef = buildSpellReferencesWithInnates(build).find(s => s.spellId === action.spellId);
 
     if (!spellRef) {
       return {
         success: false,
         actionId: action.id || '',
         actionType: 'CastSpell',
-        spellId: action.spellId,
+        spellId: canonicalizeInnateSpellId(action.spellId),
         spellName: 'Unknown',
         paCost: 0,
         pwCost: 0,
         mpCost: 0,
-        message: `Spell not found in build: ${action.spellId}`
+        message: `Sort non trouvé dans le build: ${action.spellId}`
       };
     }
 
-    // Récupérer les données complètes du sort depuis le cache
-    const spell = this.spellsCache.get(spellRef.spellId);
+    // Récupérer les données complètes du sort depuis le cache ou l'API
+    let spell = this.spellsCache.get(spellRef.spellId);
 
     if (!spell) {
-      // Fallback: utiliser des valeurs par défaut si le sort n'est pas dans le cache
-      console.warn(`Spell ${spellRef.spellId} not in cache, using default values`);
-      return this.executeCastSpellWithDefaults(action, context, spellRef.spellId, buildStats);
+      console.warn(`⚠️ Sort ${spellRef.spellId} non trouvé dans le cache, chargement depuis l'API...`);
+
+      try {
+        // Charger le sort depuis l'API
+        spell = await firstValueFrom(this.wakfuApi.getSpellById(spellRef.spellId));
+
+        // Mettre en cache pour les prochains appels
+        this.spellsCache.set(spell.id, spell);
+
+        console.log(`✅ Sort chargé depuis l'API:`, spell.name);
+      } catch (error) {
+        console.error(`❌ Impossible de charger le sort ${spellRef.spellId} depuis l'API:`, error);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'CastSpell',
+          spellId: spellRef.spellId,
+          spellName: spellRef.spellId,
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: `Sort introuvable: ${spellRef.spellId}. Vérifiez que le sort existe en base de données.`
+        };
+      }
     }
 
-    const paCost = spell.paCost || 0;
-    const pwCost = spell.pwCost || 0;
+    // Calculer les coûts de base
+    let paCost = spell.paCost || 0;
+    let pwCost = spell.pwCost || 0;
+
+    // Appliquer les coûts supplémentaires des passifs de classe (ex: Connaissance du passé)
+    if (this.currentClassStrategy?.getSpellExtraCost) {
+      const extraCost = this.currentClassStrategy.getSpellExtraCost(spell, context);
+      paCost += extraCost.extraPaCost;
+      pwCost += extraCost.extraPwCost;
+
+      if (extraCost.extraPaCost > 0 || extraCost.extraPwCost > 0) {
+        console.log(`💰 [EXTRA COST] Coûts supplémentaires appliqués: +${extraCost.extraPaCost} PA, +${extraCost.extraPwCost} PW`);
+        console.log(`💰 [EXTRA COST] Coût total: ${paCost} PA, ${pwCost} PW`);
+      }
+    }
 
     // Déterminer la position de la cible
     const targetPosition = action.targetPosition || context.currentPosition;
-    const casterPosition = context.playerPosition || context.currentPosition;
+
+    // Utiliser la position du BoardService comme source de vérité (plus fiable après téléportation)
+    const playerFromBoard = this.boardService.player();
+    const casterPosition = playerFromBoard?.position || context.playerPosition || context.currentPosition;
+
+    // Synchroniser le contexte avec le BoardService si nécessaire
+    if (playerFromBoard?.position &&
+        (context.playerPosition?.x !== playerFromBoard.position.x ||
+         context.playerPosition?.y !== playerFromBoard.position.y)) {
+      console.log(`🔄 [SYNC] Synchronizing context position with BoardService: (${context.playerPosition?.x}, ${context.playerPosition?.y}) → (${playerFromBoard.position.x}, ${playerFromBoard.position.y})`);
+      context.playerPosition = playerFromBoard.position;
+      context.currentPosition = playerFromBoard.position;
+
+      // IMPORTANT: Mettre à jour aussi la position dans context.entities
+      if (context.entities) {
+        const playerEntityInContext = context.entities.find(e => e.type === 'player');
+        if (playerEntityInContext) {
+          playerEntityInContext.position = playerFromBoard.position;
+        }
+      }
+    }
 
     if (!targetPosition || !casterPosition) {
       return {
@@ -300,8 +652,27 @@ export class SimulationEngineService {
       };
     }
 
-    // Vérifier les ressources
-    if (context.availablePa < paCost) {
+    // 🆕 Utiliser le validateur pour vérifier toutes les conditions
+    console.log('🔍 [VALIDATION] Vérification des conditions de lancement...');
+    console.log('🔍 [VALIDATION] Position du lanceur (context.playerPosition):', casterPosition);
+    console.log('🔍 [VALIDATION] Position cible:', targetPosition);
+    console.log('🔍 [VALIDATION] Position du joueur dans BoardService:', this.boardService.player()?.position);
+    const validation = this.spellCastingValidator.validateSpellCast(
+      spell,
+      casterPosition,
+      targetPosition,
+      context
+    );
+
+    console.log('✅ [VALIDATION] Résultat:', {
+      canCast: validation.canCast,
+      reason: validation.reason,
+      details: validation.details
+    });
+
+    if (!validation.canCast) {
+      console.log('❌ [CAST SPELL] Sort impossible à lancer !');
+      console.log('═══════════════════════════════════════════════════════');
       return {
         success: false,
         actionId: action.id || '',
@@ -311,29 +682,53 @@ export class SimulationEngineService {
         paCost,
         pwCost,
         mpCost: 0,
-        message: `Insufficient PA (need ${paCost}, have ${context.availablePa})`
+        message: validation.reason || 'Cannot cast spell',
+        details: validation.details
       };
     }
 
-    if (context.availablePw < pwCost) {
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId: spell.id,
-        spellName: spell.name,
-        paCost,
-        pwCost,
-        mpCost: 0,
-        message: `Insufficient PW (need ${pwCost}, have ${context.availablePw})`
-      };
-    }
+    console.log('✅ [CAST SPELL] Validation réussie ! Le sort peut être lancé');
 
-    // Vérifier si c'est un sort de mécanisme
-    const isMechanism = isSpellMechanism(spell.id);
+    // 🆕 Vérifier si c'est un sort de classe avec validation spécifique
+    if (this.currentClassStrategy) {
+      // Validation spécifique de classe (ex: Régulateur doit être posé sur une heure du cadran)
+      const classValidation = this.currentClassStrategy.validateClassSpecificCasting(
+        spell,
+        casterPosition,
+        targetPosition,
+        context
+      );
 
-    if (isMechanism) {
-      return this.executeMechanismSpell(action, context, spell, paCost, pwCost);
+      if (!classValidation.canCast) {
+        console.log(`❌ [CLASS VALIDATION] ${classValidation.reason}`);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'CastSpell',
+          spellId: spell.id,
+          spellName: spell.name,
+          paCost,
+          pwCost,
+          mpCost: 0,
+          message: classValidation.reason || 'Condition de classe non remplie'
+        };
+      }
+
+      const isClassMechanism = this.currentClassStrategy.isClassMechanismSpell(spell.id);
+
+      if (isClassMechanism) {
+        console.log(`🔧 [CLASS MECHANISM] Detected class mechanism spell for ${this.currentClassStrategy.classId}`);
+        const result = this.currentClassStrategy.executeClassMechanismSpell(action, context, spell, paCost, pwCost);
+
+        // 🆕 Traiter les effets spécifiques de classe
+        if (result.success) {
+          this.currentClassStrategy.processClassSpecificEffects(spell, action, context, result);
+          // Mettre à jour les compteurs d'utilisation
+          this.updateSpellUsageCounters(spell, action.targetPosition, context);
+        }
+
+        return result;
+      }
     }
 
     // Utiliser les stats du build directement (les passifs sont déjà appliqués)
@@ -355,8 +750,7 @@ export class SimulationEngineService {
 
     const damageResult = this.damageCalculator.calculateDamage(damageParams);
 
-
-    return {
+    const result: SimulationActionResult = {
       success: true,
       actionId: action.id || '',
       actionType: 'CastSpell',
@@ -373,273 +767,138 @@ export class SimulationEngineService {
         lineOfSight: spell.lineOfSight
       }
     };
+
+    // 🆕 Traiter les effets spécifiques de classe pour TOUS les sorts (pas seulement les mécanismes)
+    if (this.currentClassStrategy && result.success) {
+      this.currentClassStrategy.processClassSpecificEffects(spell, action, context, result);
+    }
+
+    // Mettre à jour les compteurs d'utilisation
+    if (result.success) {
+      this.updateSpellUsageCounters(spell, action.targetPosition, context);
+    }
+
+    return result;
   }
 
   /**
-   * Exécute un sort avec des valeurs par défaut (fallback)
+   * Met à jour les compteurs d'utilisation de sort
+   * Note: Pour usePerTarget, on utilise l'ID de l'entité ciblée (pas la position)
+   * afin que le compteur suive l'entité même si elle se déplace
    */
-  private executeCastSpellWithDefaults(
-    action: TimelineAction,
-    context: SimulationContext,
-    spellId: string,
-    buildStats: TotalStats
-  ): SimulationActionResult {
-    const defaultPaCost = 3;
-    const defaultPwCost = 0;
-    const defaultBaseDamage = 100;
-
-    if (context.availablePa < defaultPaCost) {
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId,
-        spellName: spellId,
-        paCost: defaultPaCost,
-        pwCost: defaultPwCost,
-        mpCost: 0,
-        message: `Insufficient PA (need ${defaultPaCost}, have ${context.availablePa})`
-      };
+  private updateSpellUsageCounters(spell: Spell, targetPosition: Position | undefined, context: SimulationContext): void {
+    // Initialiser les Maps si nécessaire
+    if (!context.spellUsageThisTurn) {
+      context.spellUsageThisTurn = new Map<string, number>();
+    }
+    if (!context.spellUsagePerTarget) {
+      context.spellUsagePerTarget = new Map<string, Map<string, number>>();
     }
 
-    const damageParams: DamageCalculationParams = {
-      baseDamage: defaultBaseDamage,
-      masteryPrimary: buildStats.masteryPrimary,
-      masterySecondary: buildStats.masterySecondary,
-      backMastery: buildStats.backMastery,
-      dommageInflict: buildStats.dommageInflict,
-      critRate: buildStats.critRate,
-      critMastery: buildStats.critMastery,
-      resistance: 0
-    };
+    // Incrémenter le compteur d'utilisation par tour
+    const currentUsage = context.spellUsageThisTurn.get(spell.id) || 0;
+    context.spellUsageThisTurn.set(spell.id, currentUsage + 1);
+    console.log(`📊 [USAGE] ${spell.name}: ${currentUsage + 1} utilisation(s) ce tour`);
 
-    const damageResult = this.damageCalculator.calculateDamage(damageParams);
+    // Incrémenter le compteur d'utilisation par cible (basé sur l'entité, pas la position)
+    if (targetPosition) {
+      // Chercher l'entité à la position cible
+      const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
 
-    return {
-      success: true,
-      actionId: action.id || '',
-      actionType: 'CastSpell',
-      spellId,
-      spellName: spellId,
-      damage: damageResult.finalDamage,
-      paCost: defaultPaCost,
-      pwCost: defaultPwCost,
-      mpCost: 0,
-      message: `Cast ${spellId} for ${damageResult.finalDamage} damage (default values)`,
-      details: {
-        damageBreakdown: damageResult.breakdown,
-        isCritical: damageResult.isCritical
+      // Utiliser l'ID de l'entité si trouvée, sinon fallback sur la position
+      const targetKey = targetEntity
+        ? `entity:${targetEntity.id}`
+        : `pos:${targetPosition.x},${targetPosition.y}`;
+
+      if (!context.spellUsagePerTarget.has(spell.id)) {
+        context.spellUsagePerTarget.set(spell.id, new Map<string, number>());
       }
-    };
-  }
 
-  /**
-   * Extrait les dégâts de base d'un sort
-   */
-  private extractBaseDamageFromSpell(_spell: Spell): number {
-    // Pour l'instant, utiliser une valeur par défaut
-    // TODO: Analyser les effets du sort pour extraire les dégâts réels
-    return 100;
-  }
+      const spellTargetUsage = context.spellUsagePerTarget.get(spell.id)!;
+      const currentTargetUsage = spellTargetUsage.get(targetKey) || 0;
+      spellTargetUsage.set(targetKey, currentTargetUsage + 1);
 
-  /**
-   * Exécute un sort de mécanisme (Rouage, Sinistro, Cadran, Régulateur)
-   */
-  private executeMechanismSpell(
-    action: TimelineAction,
-    context: SimulationContext,
-    spell: Spell,
-    paCost: number,
-    pwCost: number
-  ): SimulationActionResult {
-    console.log(`🔧 [MECHANISM] executeMechanismSpell called for spell: ${spell.id} (${spell.name})`);
-
-    const mechanismType = getSpellMechanismType(spell.id);
-
-    if (!mechanismType) {
-      console.error(`❌ [MECHANISM] Type not found for spell: ${spell.id}`);
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId: spell.id,
-        spellName: spell.name,
-        paCost,
-        pwCost,
-        mpCost: 0,
-        message: `Mechanism type not found for ${spell.name}`
-      };
-    }
-
-    const imageUrl = 'http://localhost:8080/' + getMechanismImagePath(mechanismType, 0);
-
-    console.log(`✅ [MECHANISM] Type found:`, {
-      type: mechanismType,
-      imageUrl: imageUrl
-    });
-
-    // Vérifier que la position cible est fournie
-    if (!action.targetPosition) {
-      console.error(`❌ [MECHANISM] No target position for spell ${spell.name}`);
-      return {
-        success: false,
-        actionId: action.id || '',
-        actionType: 'CastSpell',
-        spellId: spell.id,
-        spellName: spell.name,
-        paCost,
-        pwCost,
-        mpCost: 0,
-        message: `No target position for mechanism ${spell.name}`
-      };
-    }
-
-    console.log(`📍 [MECHANISM] Target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
-
-    // Créer le mécanisme
-    const mechanism: Mechanism = {
-      id: `${mechanismType}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
-      type: mechanismType,
-      position: action.targetPosition,
-      charges: 0,
-      spellId: spell.id
-    };
-
-    console.log(`🏗️ [MECHANISM] Mechanism object created:`, mechanism);
-
-    // Ajouter le mécanisme au plateau via le BoardService
-    this.boardService.addMechanism(mechanism);
-
-    console.log(`✅ [MECHANISM] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
-
-    // Si c'est un cadran, créer les 12 heures autour (orientées selon la direction du lancer)
-    if (mechanismType === 'dial') {
-      // Récupérer la position du joueur
-      const playerEntity = this.boardService.player();
-      const playerPosition = playerEntity?.position || context.playerPosition || { x: 6, y: 6 };
-
-      this.createDialHours(mechanism.id, action.targetPosition, playerPosition);
-    }
-
-    // Consommer les ressources
-    context.availablePa -= paCost;
-    context.availablePw -= pwCost;
-
-    return {
-      success: true,
-      actionId: action.id || '',
-      actionType: 'CastSpell',
-      spellId: spell.id,
-      spellName: spell.name,
-      paCost,
-      pwCost,
-      mpCost: 0,
-      message: `Placed ${spell.name} at (${action.targetPosition.x}, ${action.targetPosition.y})`,
-      details: {
-        mechanismType: mechanismType,
-        mechanismId: mechanism.id
-      }
-    };
-  }
-
-  /**
-   * Crée les 12 heures autour d'un cadran, orientées selon la direction du lancer
-   */
-  private createDialHours(dialId: string, centerPosition: Position, playerPosition: Position): void {
-    console.log(`🕐 [DIAL_HOURS] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
-    console.log(`👤 [DIAL_HOURS] Player position: (${playerPosition.x}, ${playerPosition.y})`);
-
-    // Calculer la direction du lancer (du joueur vers le cadran)
-    const dx = centerPosition.x - playerPosition.x;
-    const dy = centerPosition.y - playerPosition.y;
-
-    console.log(`📐 [DIAL_HOURS] Direction vector: (${dx}, ${dy})`);
-
-    // Déterminer la rotation à appliquer selon la direction dominante
-    let rotation = 0; // En quarts de tour (0, 1, 2, 3)
-    let directionName = '';
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      // Direction horizontale dominante
-      if (dx > 0) {
-        // Droite (Est)
-        rotation = 1; // 90° sens horaire
-        directionName = 'DROITE (Est)';
+      if (targetEntity) {
+        console.log(`📊 [USAGE] ${spell.name} sur ${targetEntity.name} (${targetEntity.id}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
       } else {
-        // Gauche (Ouest)
-        rotation = 3; // 270° sens horaire (ou -90°)
-        directionName = 'GAUCHE (Ouest)';
+        console.log(`📊 [USAGE] ${spell.name} sur position (${targetPosition.x}, ${targetPosition.y}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
       }
+    }
+  }
+
+
+  /**
+   * Extrait les dégâts de base d'un sort depuis ses effets
+   */
+  private extractBaseDamageFromSpell(spell: Spell): number {
+    console.log('🔍 [DAMAGE EXTRACTION] Extraction des dégâts du sort:', spell.name);
+
+    // Chercher la variante NORMAL (pas CRIT)
+    const normalVariant = spell.variants.find(v => v.kind === 'NORMAL');
+
+    if (!normalVariant) {
+      console.warn('⚠️ Aucune variante NORMAL trouvée, retour à 0 dégâts');
+      return 0;
+    }
+
+    console.log('📦 Variante NORMAL trouvée avec', normalVariant.effects.length, 'effets');
+
+    // Chercher les effets de type "damage" dans les effets
+    // Les effets de dégâts peuvent avoir effect = "DEAL_DAMAGE" ou contenir "damage" dans l'effet
+    let totalBaseDamage = 0;
+
+    for (const effect of normalVariant.effects) {
+      console.log('  🔹 Effet:', {
+        effect: effect.effect,
+        element: effect.element,
+        minValue: effect.minValue,
+        maxValue: effect.maxValue,
+        targetScope: effect.targetScope,
+        extendedData: effect.extendedData
+      });
+
+      // Vérifier si c'est un effet de dégâts
+      const isDamageEffect = effect.effect === 'DEAL_DAMAGE'
+        || effect.effect?.toLowerCase().includes('damage')
+        || effect.effect?.toLowerCase().includes('dégât');
+
+      if (isDamageEffect) {
+        let damage = 0;
+
+        // D'abord essayer minValue/maxValue
+        if (effect.minValue !== undefined && effect.minValue !== null &&
+            effect.maxValue !== undefined && effect.maxValue !== null) {
+          damage = (effect.minValue + effect.maxValue) / 2;
+          console.log(`  ✅ Dégâts trouvés (min/max): ${effect.minValue}-${effect.maxValue} (moyenne: ${damage})`);
+        }
+        // Sinon, lire depuis extendedData (params_json du backend)
+        else if (effect.extendedData) {
+          const params = effect.extendedData;
+          if (params.amount !== undefined) {
+            damage = params.amount;
+            console.log(`  ✅ Dégâts trouvés (extendedData.amount): ${damage}`);
+          } else if (params.minValue !== undefined && params.maxValue !== undefined) {
+            damage = (params.minValue + params.maxValue) / 2;
+            console.log(`  ✅ Dégâts trouvés (extendedData min/max): ${params.minValue}-${params.maxValue} (moyenne: ${damage})`);
+          }
+        }
+
+        if (damage > 0) {
+          totalBaseDamage += damage;
+        }
+      }
+    }
+
+    if (totalBaseDamage === 0) {
+      console.warn('⚠️ Aucun effet de dégâts trouvé dans le sort, retour à 0');
+      console.log('  💡 Ce sort ne fait peut-être pas de dégâts (mécanisme, buff, etc.)');
     } else {
-      // Direction verticale dominante
-      if (dy > 0) {
-        // Bas (Sud) - Y+ = vers le bas
-        rotation = 2; // 180°
-        directionName = 'BAS (Sud)';
-      } else {
-        // Haut (Nord) - Y- = vers le haut
-        rotation = 0; // 0° (orientation par défaut)
-        directionName = 'HAUT (Nord)';
-      }
+      console.log(`💥 Total des dégâts de base extraits: ${totalBaseDamage}`);
     }
 
-    console.log(`🧭 [DIAL_HOURS] Direction détectée: ${directionName}, Rotation: ${rotation * 90}°`);
-
-    // Positions de base des heures (12h vers le HAUT/NORD par défaut)
-    // Avec Y- = Nord, Y+ = Sud, X+ = Est, X- = Ouest
-    const baseHourPositions = [
-      { hour: 12, offsetX: 0, offsetY: -3 },   // 12h - Nord (haut)
-      { hour: 1, offsetX: +1, offsetY: -2 },   // 1h
-      { hour: 2, offsetX: +2, offsetY: -1 },   // 2h
-      { hour: 3, offsetX: +3, offsetY: 0 },    // 3h - Est (droite)
-      { hour: 4, offsetX: +2, offsetY: +1 },   // 4h
-      { hour: 5, offsetX: +1, offsetY: +2 },   // 5h
-      { hour: 6, offsetX: 0, offsetY: +3 },    // 6h - Sud (bas)
-      { hour: 7, offsetX: -1, offsetY: +2 },   // 7h
-      { hour: 8, offsetX: -2, offsetY: +1 },   // 8h
-      { hour: 9, offsetX: -3, offsetY: 0 },    // 9h - Ouest (gauche)
-      { hour: 10, offsetX: -2, offsetY: -1 },  // 10h
-      { hour: 11, offsetX: -1, offsetY: -2 }   // 11h
-    ];
-
-    let hoursCreated = 0;
-
-    baseHourPositions.forEach(({ hour, offsetX, offsetY }) => {
-      // Appliquer la rotation
-      let rotatedX = offsetX;
-      let rotatedY = offsetY;
-
-      // Rotation par quarts de tour (sens horaire)
-      for (let i = 0; i < rotation; i++) {
-        const tempX = rotatedX;
-        rotatedX = -rotatedY;  // Rotation 90° sens horaire: (x,y) -> (-y,x)
-        rotatedY = tempX;
-      }
-
-      const hourPosition: Position = {
-        x: centerPosition.x + rotatedX,
-        y: centerPosition.y + rotatedY
-      };
-
-      // Vérifier que la position est dans les limites du plateau (13x13)
-      if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
-        const dialHour = {
-          id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-          dialId: dialId,  // Référence au cadran central
-          hour: hour,      // Numéro de l'heure (1-12)
-          position: hourPosition
-        };
-
-        this.boardService.addDialHour(dialHour);
-        hoursCreated++;
-        console.log(`  ✅ Hour ${hour} created at (${hourPosition.x}, ${hourPosition.y}) [rotated offset: (${rotatedX}, ${rotatedY})]`);
-      } else {
-        console.warn(`  ⚠️ Hour ${hour} skipped - position out of bounds: (${hourPosition.x}, ${hourPosition.y})`);
-      }
-    });
-
-    console.log(`🕐 [DIAL_HOURS] Created ${hoursCreated}/12 hours around dial ${dialId} (oriented ${directionName})`);
+    return totalBaseDamage;
   }
+
 
   /**
    * Exécute un déplacement
@@ -648,91 +907,143 @@ export class SimulationEngineService {
     action: TimelineAction,
     context: SimulationContext
   ): SimulationActionResult {
-    const mpCost = action.details?.['mpCost'] || 1;
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚶 [MOVE] Tentative de déplacement');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📍 Position cible:', action.targetPosition);
+    console.log('⚡ Ressources disponibles:', {
+      AP: context.availablePa,
+      WP: context.availablePw,
+      MP: context.availableMp
+    });
+    console.log('═══════════════════════════════════════════════════════');
 
-    if (context.availableMp < mpCost) {
+    // Déterminer quelle entité déplacer
+    let entityToMove;
+    let currentPosition: Position;
+
+    if (action.entityId) {
+      // Si un entityId est spécifié, utiliser cette entité
+      entityToMove = this.boardService.getEntity(action.entityId);
+      if (!entityToMove) {
+        console.error(`Entité introuvable: ${action.entityId}`);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'Move',
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: `Entity not found: ${action.entityId}`
+        };
+      }
+      currentPosition = entityToMove.position;
+    } else {
+      // Sinon, déplacer le joueur par défaut
+      entityToMove = this.boardService.player();
+      if (!entityToMove) {
+        console.error(`Aucun joueur trouvé sur le plateau`);
+        return {
+          success: false,
+          actionId: action.id || '',
+          actionType: 'Move',
+          paCost: 0,
+          pwCost: 0,
+          mpCost: 0,
+          message: 'No player found on board'
+        };
+      }
+      currentPosition = context.playerPosition || entityToMove.position;
+    }
+
+    if (!action.targetPosition) {
       return {
         success: false,
         actionId: action.id || '',
         actionType: 'Move',
         paCost: 0,
         pwCost: 0,
-        mpCost,
-        message: `Insufficient MP (need ${mpCost}, have ${context.availableMp})`
+        mpCost: 0,
+        message: 'No target position specified'
       };
     }
 
-    // Mettre à jour la position de l'entité sur le plateau
-    if (action.targetPosition) {
-      // Déterminer quelle entité déplacer
-      let entityToMove;
+    // 🆕 Utiliser le validateur pour vérifier le déplacement
+    console.log('🔍 [VALIDATION] Vérification du déplacement...');
+    console.log('  De:', currentPosition);
+    console.log('  Vers:', action.targetPosition);
 
-      if (action.entityId) {
-        // Si un entityId est spécifié, utiliser cette entité
-        entityToMove = this.boardService.getEntity(action.entityId);
-        if (!entityToMove) {
-          console.error(`Entité introuvable: ${action.entityId}`);
-          return {
-            success: false,
-            actionId: action.id || '',
-            actionType: 'Move',
-            paCost: 0,
-            pwCost: 0,
-            mpCost: 0,
-            message: `Entity not found: ${action.entityId}`
-          };
-        }
-      } else {
-        // Sinon, déplacer le joueur par défaut
-        entityToMove = this.boardService.player();
-        if (!entityToMove) {
-          console.error(`Aucun joueur trouvé sur le plateau`);
-          return {
-            success: false,
-            actionId: action.id || '',
-            actionType: 'Move',
-            paCost: 0,
-            pwCost: 0,
-            mpCost: 0,
-            message: 'No player found on board'
-          };
-        }
-      }
+    const validation = this.movementValidator.validateMovement(
+      currentPosition,
+      action.targetPosition,
+      context
+    );
 
-      // Effectuer le déplacement
-      this.boardService.updateEntityPosition(entityToMove.id, action.targetPosition);
-      console.log(`${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
+    console.log('✅ [VALIDATION] Résultat:', {
+      canMove: validation.canMove,
+      reason: validation.reason,
+      cost: validation.cost,
+      details: validation.details
+    });
 
-      // Mettre à jour le contexte si c'est le joueur
-      if (entityToMove.type === 'player') {
-        this.updateContextPosition(context, action.targetPosition);
-      }
-
-      // Mettre à jour la direction si spécifiée
-      if (action.targetFacing) {
-        this.boardService.updateEntityFacing(entityToMove.id, action.targetFacing);
-        console.log(`${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
-      }
-
+    if (!validation.canMove) {
+      console.log('❌ [MOVE] Déplacement impossible !');
+      console.log('═══════════════════════════════════════════════════════');
       return {
-        success: true,
+        success: false,
         actionId: action.id || '',
         actionType: 'Move',
         paCost: 0,
-        pwCost: 0,
-        mpCost,
-        message: `${entityToMove.name} moved to (${action.targetPosition.x}, ${action.targetPosition.y})`
+        pwCost: validation.cost.wp,
+        mpCost: validation.cost.mp,
+        message: validation.reason || 'Cannot move',
+        details: validation.details
       };
     }
 
+    console.log('✅ [MOVE] Validation réussie ! Déplacement autorisé');
+    console.log(`💰 Coût: ${validation.cost.mp} MP, ${validation.cost.wp} WP`);
+    console.log('═══════════════════════════════════════════════════════');
+
+    // Effectuer le déplacement
+    this.boardService.updateEntityPosition(entityToMove.id, action.targetPosition);
+    console.log(`${entityToMove.name} déplacé vers (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
+    // Si le déplacement est depuis une heure du cadran, avancer l'heure courante de 1
+    if (validation.details?.movementType === 'dial_hour' && validation.cost.wp > 0) {
+      const advanceResult = this.boardService.advanceCurrentDialHour(1);
+      // Mettre à jour aussi le contexte pour rester synchronisé
+      context.currentDialHour = advanceResult.newHour;
+      console.log(`⏰ [DIAL] Heure courante avancée de 1 → nouvelle heure: ${advanceResult.newHour}${advanceResult.wrapped ? ' (tour complet!)' : ''}`);
+
+      // Si un tour complet s'est produit, déclencher les effets de wrap via la stratégie de classe
+      if (advanceResult.wrapped && this.currentClassStrategy?.processHourWrap) {
+        console.log(`🔄 [DIAL] Tour complet détecté ! Déclenchement des effets de wrap...`);
+        this.currentClassStrategy.processHourWrap(context);
+      }
+    }
+
+    // Mettre à jour le contexte si c'est le joueur
+    if (entityToMove.type === 'player') {
+      this.updateContextPosition(context, action.targetPosition);
+    }
+
+    // Mettre à jour la direction si spécifiée
+    if (action.targetFacing) {
+      this.boardService.updateEntityFacing(entityToMove.id, action.targetFacing);
+      console.log(`${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
+    }
+
     return {
-      success: false,
+      success: true,
       actionId: action.id || '',
       actionType: 'Move',
       paCost: 0,
-      pwCost: 0,
-      mpCost: 0,
-      message: 'No target position specified'
+      pwCost: validation.cost.wp,
+      mpCost: validation.cost.mp,
+      message: `${entityToMove.name} moved to (${action.targetPosition.x}, ${action.targetPosition.y})${validation.details?.movementType === 'dial_hour' ? ' (via dial hour)' : ''}`,
+      details: validation.details
     };
   }
 
@@ -751,6 +1062,33 @@ export class SimulationEngineService {
       mpCost: 0,
       message: 'Waited for next turn'
     };
+  }
+
+  /**
+   * 🆕 Exécute un SEUL step avec le contexte fourni (sans ré-exécuter les steps précédents)
+   * Utilisé pour l'exécution incrémentale step-by-step
+   */
+  async executeSingleStep(
+    step: TimelineStep,
+    context: SimulationContext,
+    build: Build,
+    stepNumber: number
+  ): Promise<SimulationStepResult> {
+    // Initialiser la stratégie de classe si nécessaire
+    if (!this.currentClassStrategy) {
+      this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
+    }
+
+    // Calculer les stats du build
+    let buildStats = this.statsCalculator.calculateTotalStats(build);
+
+    // Appliquer les passifs de classe
+    if (this.currentClassStrategy) {
+      buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, context);
+    }
+
+    // Exécuter le step
+    return await this.executeStep(step, context, build, buildStats, stepNumber);
   }
 
 

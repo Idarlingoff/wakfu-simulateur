@@ -10,9 +10,7 @@ import { FormsModule } from '@angular/forms';
 interface PlayerForm {
   name: string;
   classId: string;
-  positionX: number;
-  positionY: number;
-  facing: 'front' | 'side' | 'right';
+  facing: 'front' | 'side' | 'back';
 }
 
 @Component({
@@ -62,32 +60,6 @@ interface PlayerForm {
                   name="name"
                   placeholder="Laissez vide pour utiliser le nom de la classe"
                 />
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Position X *</label>
-                  <input
-                    type="number"
-                    [(ngModel)]="form.positionX"
-                    name="positionX"
-                    min="0"
-                    max="12"
-                    required
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label>Position Y *</label>
-                  <input
-                    type="number"
-                    [(ngModel)]="form.positionY"
-                    name="positionY"
-                    min="0"
-                    max="12"
-                    required
-                  />
-                </div>
               </div>
 
               <div class="form-group">
@@ -279,21 +251,21 @@ export class PlayerFormComponent {
   isOpen = signal(false);
   editMode = signal(false);
   editingId = signal<string | null>(null);
+  editingPosition = signal<{ x: number; y: number } | null>(null);
 
   form: PlayerForm = {
     name: '',
     classId: '',
-    positionX: 6,
-    positionY: 6,
     facing: 'front'
   };
 
-  playerAdded = output<{ name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }>();
-  playerEdited = output<{ id: string; name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }>();
+  playerAdded = output<{ name: string; classId: string; facing: { direction: string } }>();
+  playerEdited = output<{ id: string; name: string; classId: string; facing: { direction: string } }>();
 
   openNew(): void {
     this.editMode.set(false);
     this.editingId.set(null);
+    this.editingPosition.set(null);
     this.resetForm();
     this.isOpen.set(true);
   }
@@ -301,11 +273,10 @@ export class PlayerFormComponent {
   openEdit(player: { id: string; name: string; classId: string; position: { x: number; y: number }; facing: { direction: string } }): void {
     this.editMode.set(true);
     this.editingId.set(player.id);
+    this.editingPosition.set(player.position);
     this.form = {
       name: player.name,
       classId: player.classId,
-      positionX: player.position.x,
-      positionY: player.position.y,
       facing: player.facing.direction as any
     };
     this.isOpen.set(true);
@@ -313,6 +284,7 @@ export class PlayerFormComponent {
 
   onClose(): void {
     this.isOpen.set(false);
+    this.editingPosition.set(null);
     this.resetForm();
   }
 
@@ -331,7 +303,6 @@ export class PlayerFormComponent {
     const data = {
       name,
       classId: this.form.classId,
-      position: { x: this.form.positionX, y: this.form.positionY },
       facing: { direction: this.form.facing }
     };
 
@@ -353,8 +324,6 @@ export class PlayerFormComponent {
     this.form = {
       name: '',
       classId: '',
-      positionX: 6,
-      positionY: 6,
       facing: 'front'
     };
   }
@@ -382,4 +351,3 @@ export class PlayerFormComponent {
     return classNames[classId] || classId;
   }
 }
-

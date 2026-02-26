@@ -3,10 +3,13 @@
  * Affiche un résumé des actions et ressources de la timeline
  */
 
-import { Component, inject, computed } from '@angular/core';
+import { Component, inject, computed, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
+import { DataCacheService } from '../services/data-cache.service';
+import { SimulationService } from '../services/simulation.service';
+import { Spell } from '../models/spell.model';
 
 interface ResourceSummary {
   apUsed: number;
@@ -421,9 +424,58 @@ interface ActionSummary {
 export class TimelineSummaryComponent {
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
+  dataCacheService = inject(DataCacheService);
+  simulationService = inject(SimulationService);
+
+  // Cache local des sorts pour récupérer les coûts
+  private spellsCache = signal<Map<string, Spell>>(new Map());
 
   currentTimeline = computed(() => this.timelineService.currentTimeline());
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
+
+  constructor() {
+    // Charger les sorts quand la timeline ou le build change
+    effect(() => {
+      const timeline = this.currentTimeline();
+      const build = this.buildService.selectedBuildA();
+      if (timeline && build?.classId) {
+        this.loadSpells(build.classId);
+      }
+    });
+  }
+
+  /**
+   * Charge les sorts de la classe pour avoir accès aux coûts PA/PW
+   */
+  private async loadSpells(classId: string): Promise<void> {
+    try {
+      const spells = await this.dataCacheService.getSpells(classId);
+      const cache = new Map<string, Spell>();
+      spells.forEach(spell => cache.set(spell.id, spell));
+      this.spellsCache.set(cache);
+    } catch (error) {
+      console.error('Erreur lors du chargement des sorts:', error);
+    }
+  }
+
+  /**
+   * Récupère les coûts d'un sort depuis le cache
+   */
+  private getSpellCosts(spellId: string): { paCost: number; pwCost: number } {
+    const spell = this.spellsCache().get(spellId);
+    return {
+      paCost: spell?.paCost ?? 0,
+      pwCost: spell?.pwCost ?? 0
+    };
+  }
+
+  /**
+   * Récupère le nom d'un sort depuis le cache
+   */
+  private getSpellName(spellId: string): string {
+    const spell = this.spellsCache().get(spellId);
+    return spell?.name ?? spellId;
+  }
 
   totalSteps = computed(() => {
     const timeline = this.currentTimeline();
@@ -436,6 +488,8 @@ export class TimelineSummaryComponent {
   pastActions = computed((): ActionSummary[] => {
     const timeline = this.currentTimeline();
     const currentIndex = this.currentStepIndex();
+    // Déclencher la réactivité quand le cache de sorts change
+    const spellsCache = this.spellsCache();
 
     if (!timeline || currentIndex === 0) return [];
 
@@ -449,10 +503,14 @@ export class TimelineSummaryComponent {
         let resources = '';
 
         switch (action.type) {
-          case 'CastSpell':
-            description = `Sort: ${action.spellId || 'inconnu'}`;
-            resources = `PA: ${action.details?.['paCost'] || 0}, PW: ${action.details?.['pwCost'] || 0}`;
+          case 'CastSpell': {
+            const spellId = action.spellId || '';
+            const spellName = this.getSpellName(spellId);
+            const costs = this.getSpellCosts(spellId);
+            description = `Sort: ${spellName}`;
+            resources = `PA: ${costs.paCost}, PW: ${costs.pwCost}`;
             break;
+          }
           case 'Move':
             description = `Déplacement vers (${action.targetPosition?.x}, ${action.targetPosition?.y})`;
             resources = `PM: ${action.details?.['mpCost'] || 1}`;
@@ -485,6 +543,8 @@ export class TimelineSummaryComponent {
     const timeline = this.currentTimeline();
     const currentIndex = this.currentStepIndex();
     const build = this.buildService.selectedBuildA();
+    // Déclencher la réactivité quand le cache de sorts change
+    const spellsCache = this.spellsCache();
 
     if (!timeline || !build) {
       return {
@@ -503,37 +563,55 @@ export class TimelineSummaryComponent {
     let apUsed = 0;
     let mpUsed = 0;
     let wpUsed = 0;
-    let apRegenerated = 0;
-    let wpRegenerated = 0;
     const gearExplosionsMap = new Map<number, number>();
+    let apRemaining = build.stats.ap;
+    let mpRemaining = build.stats.mp;
+    let wpRemaining = build.stats.wp;
 
     // Parcourir les étapes exécutées
     for (let i = 0; i < currentIndex && i < timeline.steps.length; i++) {
+      const stepResult = this.simulationService.getStepResult(i);
+
+      // ✅ Source de vérité prioritaire: résultats du moteur de simulation
+      if (stepResult) {
+        const successfulActions = stepResult.actions.filter((action: any) => action.success);
+
+        apUsed += successfulActions.reduce((sum: number, action: any) => sum + (action.paCost || 0), 0);
+        wpUsed += successfulActions.reduce((sum: number, action: any) => sum + (action.pwCost || 0), 0);
+        mpUsed += successfulActions.reduce((sum: number, action: any) => sum + (action.mpCost || 0), 0);
+
+        apRemaining = stepResult.contextAfter?.availablePa ?? apRemaining;
+        wpRemaining = stepResult.contextAfter?.availablePw ?? wpRemaining;
+        mpRemaining = stepResult.contextAfter?.availableMp ?? mpRemaining;
+        continue;
+      }
+
+      // Fallback: approximation si le cache de simulation n'est pas disponible
       const step = timeline.steps[i];
       step.actions.forEach(action => {
         if (action.type === 'CastSpell') {
-          apUsed += action.details?.['paCost'] || 0;
-          wpUsed += action.details?.['pwCost'] || 0;
+          // Récupérer les coûts du sort depuis le cache
+          const costs = this.getSpellCosts(action.spellId || '');
+          apUsed += costs.paCost;
+          wpUsed += costs.pwCost;
 
           // Détection des explosions de rouage
           if (action.details?.['gearExplosion']) {
             const level = action.details['gearLevel'] || 1;
             gearExplosionsMap.set(level, (gearExplosionsMap.get(level) || 0) + 1);
-            // Les explosions de rouage régénèrent 1 PW par niveau
-            wpRegenerated += level;
           }
         } else if (action.type === 'Move') {
           mpUsed += action.details?.['mpCost'] || 1;
         }
       });
 
-      // Régénération en début de tour (tous les X étapes)
-      // Pour simplifier, on régénère 1 AP tous les 2 tours
-      if ((i + 1) % 2 === 0) {
-        apRegenerated += 1;
-      }
+      apRemaining = Math.max(0, build.stats.ap - apUsed);
+      mpRemaining = Math.max(0, build.stats.mp - mpUsed);
+      wpRemaining = Math.max(0, build.stats.wp - wpUsed);
     }
 
+    const apRegenerated = Math.max(0, apUsed - (build.stats.ap - apRemaining));
+    const wpRegenerated = Math.max(0, wpUsed - (build.stats.wp - wpRemaining));
     const gearExplosions = Array.from(gearExplosionsMap.entries())
       .map(([level, count]) => ({ level, count }))
       .sort((a, b) => a.level - b.level);
@@ -544,9 +622,9 @@ export class TimelineSummaryComponent {
       wpUsed,
       apRegenerated,
       wpRegenerated,
-      apRemaining: Math.max(0, build.stats.ap - apUsed + apRegenerated),
-      mpRemaining: Math.max(0, build.stats.mp - mpUsed),
-      wpRemaining: Math.max(0, build.stats.wp - wpUsed + wpRegenerated),
+      apRemaining: Math.max(0, apRemaining),
+      mpRemaining: Math.max(0, mpRemaining),
+      wpRemaining: Math.max(0, wpRemaining),
       gearExplosions
     };
   });
