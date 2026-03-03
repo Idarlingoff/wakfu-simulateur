@@ -53,8 +53,7 @@ import { Spell } from '../../models/spell.model';
         </div>
       </div>
     </div>
-  `,
-  styleUrl: './spell-modal.component.css'
+  `
 })
 export class SpellModalComponent {
   searchQuery = signal('');
@@ -148,7 +147,6 @@ export class SpellModalComponent {
   }
 
   onClose(): void {
-    // TODO: Emit close event or use dialog ref
   }
 }
 

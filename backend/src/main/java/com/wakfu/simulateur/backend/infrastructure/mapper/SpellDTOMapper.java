@@ -7,9 +7,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Simple mapper: Entity -> DTO for REST API
- */
 @Component
 public class SpellDTOMapper {
 
@@ -61,10 +58,10 @@ public class SpellDTOMapper {
                 .map(e -> SpellDTO.SpellEffectDTO.builder()
                         .id(e.getId())
                         .ordinal(e.getOrderIndex())
-                        .element(null) // Not in current entity structure
+                        .element(null)
                         .effect(e.getEffectType())
                         .targetScope(e.getTargetScope() != null ? e.getTargetScope().name() : null)
-                        .durationType(null) // Not in current entity structure
+                        .durationType(null)
                         .duration(null)
                         .phase(e.getPhase())
                         .cooldown(null)
@@ -100,7 +97,7 @@ public class SpellDTOMapper {
         if (entities == null) return List.of();
         return entities.stream()
                 .map(b -> SpellDTO.SpellRatioBreakpointDTO.builder()
-                        .id(null) // Composite key, not a simple Long
+                        .id(null)
                         .threshold(b.getId() != null ? b.getId().getLvl() : 0)
                         .ratio(b.getRatio())
                         .build())

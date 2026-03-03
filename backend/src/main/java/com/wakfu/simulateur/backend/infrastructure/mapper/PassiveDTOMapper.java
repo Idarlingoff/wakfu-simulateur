@@ -8,9 +8,6 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Simple mapper: Entity -> DTO for REST API
- */
 @Component
 public class PassiveDTOMapper {
 
@@ -39,7 +36,7 @@ public class PassiveDTOMapper {
                         .id(e.getId())
                         .ordinal(e.getOrderIndex())
                         .stat(e.getEffectType())
-                        .value(0) // Not directly available in current structure
+                        .value(0)
                         .build())
                 .collect(Collectors.toList());
     }

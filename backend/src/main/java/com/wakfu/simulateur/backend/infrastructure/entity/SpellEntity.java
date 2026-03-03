@@ -25,7 +25,7 @@ public class SpellEntity {
     private String name;
 
     @Column(length = 16)
-    private String element; // "WATER", "NEUTRAL", ...
+    private String element;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "spell_type", nullable = false, length = 16)
