@@ -1,12 +1,13 @@
 import {inject, Injectable} from '@angular/core';
 import {Spell} from '../../../models/spell.model';
 import {Position, TimelineAction} from '../../../models/timeline.model';
-import {SimulationContext, SimulationActionResult} from '../../calculators/simulation-engine.service';
+import {SimulationActionResult, SimulationContext} from '../../calculators/simulation-engine.service';
 import {BoardService} from '../../board.service';
 import {ResourceRegenerationService} from '../../processors/resource-regeneration.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorMovementService} from './xelor-movement.service';
 import {XelorDialService} from './xelor-dial.service';
+import {getXelorState} from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root'})
 export class XelorTeleportService {
@@ -29,13 +30,11 @@ export class XelorTeleportService {
     context: SimulationContext,
     actionResult: SimulationActionResult
   ): void {
-    // Récupérer la variante appropriée
     const variantKind = actionResult.details?.isCritical ? 'CRIT' : 'NORMAL';
     const variant = spell.variants.find(v => v.kind === variantKind)
       || spell.variants.find(v => v.kind === 'NORMAL');
     if (!variant) return;
 
-    // Chercher les effets de téléportation
     const teleportEffects = variant.effects.filter(
       e => e.effect === 'TELEPORT' || e.effect === 'TELEPORT_SYMMETRIC'
     );
@@ -47,13 +46,11 @@ export class XelorTeleportService {
         continue;
       }
 
-      // Extraire les paramètres du teleport
       const cells = effect.extendedData?.cells || 2;
       const direction = effect.extendedData?.direction || 'BACK';
 
       console.log(`[XELOR TELEPORT] 🌀 Processing TELEPORT effect: ${cells} cells, direction: ${direction}`);
 
-      // Position du lanceur (joueur)
       const playerEntity = this.boardService.player();
       const casterPosition = playerEntity?.position || context.playerPosition;
       if (!casterPosition) {
@@ -61,18 +58,15 @@ export class XelorTeleportService {
         continue;
       }
 
-      // Position de la cible
       const targetPosition = action.targetPosition;
       if (!targetPosition) {
         console.warn(`[XELOR TELEPORT] ⚠️ No target position found`);
         continue;
       }
 
-      // Trouver l'entité cible à la position
       const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
 
-      // Si pas d'entité, vérifier s'il y a un mécanisme à la position cible
-      const targetMechanism = !targetEntity ? this.boardService.getMechanismAtPosition(targetPosition) : null;
+      const targetMechanism = targetEntity ? null : this.boardService.getMechanismAtPosition(targetPosition);
 
       if (!targetEntity && !targetMechanism) {
         console.warn(`[XELOR TELEPORT] ⚠️ No entity or mechanism found at target position (${targetPosition.x}, ${targetPosition.y})`);
@@ -85,27 +79,21 @@ export class XelorTeleportService {
         console.log(`[XELOR TELEPORT] 🎯 Target mechanism: ${targetMechanism.type} (${targetMechanism.id}) at (${targetPosition.x}, ${targetPosition.y})`);
       }
 
-      // Calculer la direction de téléportation (du lanceur vers la cible)
       const dx = targetPosition.x - casterPosition.x;
       const dy = targetPosition.y - casterPosition.y;
 
-      // Normaliser la direction
       let dirX = 0, dirY = 0;
       if (Math.abs(dx) > Math.abs(dy)) {
         dirX = dx > 0 ? 1 : -1;
       } else if (Math.abs(dy) > Math.abs(dx)) {
         dirY = dy > 0 ? 1 : -1;
       } else {
-        // Diagonale : on priorise X par convention
         dirX = dx !== 0 ? (dx > 0 ? 1 : -1) : 0;
         dirY = dy !== 0 ? (dy > 0 ? 1 : -1) : 0;
       }
 
-      // Direction BACK signifie "pousser la cible loin du lanceur"
-      // Direction FRONT signifie "tirer la cible vers le lanceur"
       const pushMultiplier = direction === 'BACK' ? 1 : -1;
 
-      // Calculer la position de destination
       const destinationPosition: Position = {
         x: targetPosition.x + (dirX * cells * pushMultiplier),
         y: targetPosition.y + (dirY * cells * pushMultiplier)
@@ -113,7 +101,6 @@ export class XelorTeleportService {
 
       console.log(`[XELOR TELEPORT] 📍 Destination calculated: (${destinationPosition.x}, ${destinationPosition.y})`);
 
-      // Vérifier les limites du plateau
       const state = this.boardService.state();
       if (destinationPosition.x < 0 || destinationPosition.x >= state.cols ||
         destinationPosition.y < 0 || destinationPosition.y >= state.rows) {
@@ -121,10 +108,8 @@ export class XelorTeleportService {
         continue;
       }
 
-      // Vérifier si la position de destination est occupée par une ENTITÉ
       const entityAtDestination = this.boardService.getEntityAtPosition(destinationPosition);
 
-      // Vérifier si la position de destination est occupée par un MÉCANISME
       const mechanismAtDestination = this.boardService.getMechanismAtPosition(destinationPosition);
 
       console.log(`[XELOR TELEPORT] 🔍 Checking destination (${destinationPosition.x}, ${destinationPosition.y}):`);
@@ -134,7 +119,6 @@ export class XelorTeleportService {
       // === CAS 1: La cible est une ENTITÉ ===
       if (targetEntity) {
         if (entityAtDestination) {
-          // Échange de position avec une autre entité !
           console.log(`[XELOR TELEPORT] 🔄 Position occupied by entity ${entityAtDestination.name} - SWAP!`);
 
           const swapSuccess = this.boardService.swapEntityPositions(targetEntity.id, entityAtDestination.id);
@@ -142,7 +126,6 @@ export class XelorTeleportService {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Swap successful!`);
 
-            // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
               1,
@@ -153,14 +136,11 @@ export class XelorTeleportService {
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap bonus)`);
 
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
             this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'entity_entity_swap');
 
-            // Mettre à jour le contexte avec les nouvelles positions
             this.xelorMovementService.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
             this.xelorMovementService.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
 
-            // Mettre à jour playerPosition/currentPosition si nécessaire
             if (targetEntity.type === 'player') {
               context.playerPosition = destinationPosition;
               context.currentPosition = destinationPosition;
@@ -170,7 +150,6 @@ export class XelorTeleportService {
               context.currentPosition = targetPosition;
             }
 
-            // Ajouter les détails de l'échange au résultat
             if (!actionResult.details) actionResult.details = {};
             actionResult.details.teleport = {
               type: 'swap',
@@ -181,7 +160,6 @@ export class XelorTeleportService {
               paGained: 1
             };
 
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
             this.xelorMovementService.recordMovement(
               context,
               'swap',
@@ -201,7 +179,6 @@ export class XelorTeleportService {
             );
           }
         } else if (mechanismAtDestination) {
-          // Échange de position avec un mécanisme !
           console.log(`[XELOR TELEPORT] 🔄 Position occupied by mechanism ${mechanismAtDestination.type} (${mechanismAtDestination.id}) - SWAP!`);
 
           const swapSuccess = this.boardService.swapEntityWithMechanism(targetEntity.id, mechanismAtDestination.id);
@@ -209,12 +186,10 @@ export class XelorTeleportService {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Entity/Mechanism swap successful!`);
 
-            // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
             if (mechanismAtDestination.type === 'dial') {
-              this.xelorDialService.updateDialHoursAfterSwap(mechanismAtDestination.id, context);
+              this.xelorDialService.updateDialHoursAfterSwap(mechanismAtDestination.id);
             }
 
-            // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
               1,
@@ -225,19 +200,15 @@ export class XelorTeleportService {
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap with mechanism bonus)`);
 
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
             this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'entity_mechanism_swap');
 
-            // Mettre à jour le contexte avec la nouvelle position de l'entité
             this.xelorMovementService.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
 
-            // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est échangé
             if (targetEntity.type === 'player') {
               context.playerPosition = destinationPosition;
               context.currentPosition = destinationPosition;
             }
 
-            // Ajouter les détails de l'échange au résultat
             if (!actionResult.details) actionResult.details = {};
             actionResult.details.teleport = {
               type: 'swap_mechanism',
@@ -248,7 +219,6 @@ export class XelorTeleportService {
               paGained: 1
             };
 
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
             this.xelorMovementService.recordMovement(
               context,
               'swap_mechanism',
@@ -268,21 +238,17 @@ export class XelorTeleportService {
             );
           }
         } else {
-          // Téléportation simple
           console.log(`[XELOR TELEPORT] 🌀 Simple teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
 
           this.boardService.updateEntityPosition(targetEntity.id, destinationPosition);
 
-          // Mettre à jour le contexte avec la nouvelle position de l'entité
           this.xelorMovementService.updateEntityPositionInContext(context, targetEntity.id, destinationPosition);
 
-          // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est téléporté
           if (targetEntity.type === 'player') {
             context.playerPosition = destinationPosition;
             context.currentPosition = destinationPosition;
           }
 
-          // Ajouter les détails au résultat
           if (!actionResult.details) actionResult.details = {};
           actionResult.details.teleport = {
             type: 'simple',
@@ -291,7 +257,6 @@ export class XelorTeleportService {
             to: destinationPosition
           };
 
-          // 🆕 Enregistrer le mouvement pour "Retour Spontané"
           this.xelorMovementService.recordMovement(
             context,
             'teleport',
@@ -306,10 +271,10 @@ export class XelorTeleportService {
           console.log(`[XELOR TELEPORT] ✅ Teleport successful!`);
         }
       }
+
       // === CAS 2: La cible est un MÉCANISME ===
       else if (targetMechanism) {
         if (entityAtDestination) {
-          // Échange mécanisme <-> entité
           console.log(`[XELOR TELEPORT] 🔄 Mechanism target, destination occupied by entity ${entityAtDestination.name} - SWAP!`);
 
           const swapSuccess = this.boardService.swapEntityWithMechanism(entityAtDestination.id, targetMechanism.id);
@@ -317,12 +282,10 @@ export class XelorTeleportService {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Mechanism/Entity swap successful!`);
 
-            // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
             if (targetMechanism.type === 'dial') {
-              this.xelorDialService.updateDialHoursAfterSwap(targetMechanism.id, context);
+              this.xelorDialService.updateDialHoursAfterSwap(targetMechanism.id);
             }
 
-            // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
               1,
@@ -333,19 +296,15 @@ export class XelorTeleportService {
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
 
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
             this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'mechanism_entity_swap');
 
-            // Mettre à jour le contexte avec la nouvelle position de l'entité
             this.xelorMovementService.updateEntityPositionInContext(context, entityAtDestination.id, targetPosition);
 
-            // Mettre à jour playerPosition/currentPosition si c'est le joueur qui est échangé
             if (entityAtDestination.type === 'player') {
               context.playerPosition = targetPosition;
               context.currentPosition = targetPosition;
             }
 
-            // Ajouter les détails de l'échange au résultat
             if (!actionResult.details) actionResult.details = {};
             actionResult.details.teleport = {
               type: 'swap_mechanism',
@@ -356,7 +315,6 @@ export class XelorTeleportService {
               paGained: 1
             };
 
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
             this.xelorMovementService.recordMovement(
               context,
               'swap_mechanism',
@@ -376,7 +334,6 @@ export class XelorTeleportService {
             );
           }
         } else if (mechanismAtDestination) {
-          // Échange mécanisme <-> mécanisme
           console.log(`[XELOR TELEPORT] 🔄 Mechanism target, destination occupied by mechanism ${mechanismAtDestination.type} - SWAP!`);
 
           const swapSuccess = this.boardService.swapMechanismPositions(targetMechanism.id, mechanismAtDestination.id);
@@ -384,15 +341,13 @@ export class XelorTeleportService {
           if (swapSuccess) {
             console.log(`[XELOR TELEPORT] ✅ Mechanism/Mechanism swap successful!`);
 
-            // 🆕 Si l'un des mécanismes est un cadran, mettre à jour les heures
             if (targetMechanism.type === 'dial') {
-              this.xelorDialService.updateDialHoursAfterSwap(targetMechanism.id, context);
+              this.xelorDialService.updateDialHoursAfterSwap(targetMechanism.id);
             }
             if (mechanismAtDestination.type === 'dial') {
-              this.xelorDialService.updateDialHoursAfterSwap(mechanismAtDestination.id, context);
+              this.xelorDialService.updateDialHoursAfterSwap(mechanismAtDestination.id);
             }
 
-            // Regain de 1 PA pour le lanceur
             this.regenerationService.regeneratePA(
               context,
               1,
@@ -403,10 +358,8 @@ export class XelorTeleportService {
 
             console.log(`[XELOR TELEPORT] 💰 +1 PA granted (mechanism swap bonus)`);
 
-            // 🆕 Passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
             this.xelorPassivesService.applyCoursduTempsOnTransposition(context, 'mechanism_mechanism_swap');
 
-            // Ajouter les détails de l'échange au résultat
             if (!actionResult.details) actionResult.details = {};
             actionResult.details.teleport = {
               type: 'swap_mechanisms',
@@ -417,7 +370,6 @@ export class XelorTeleportService {
               paGained: 1
             };
 
-            // 🆕 Enregistrer le mouvement pour "Retour Spontané"
             this.xelorMovementService.recordMovement(
               context,
               'swap',
@@ -437,17 +389,14 @@ export class XelorTeleportService {
             );
           }
         } else {
-          // Téléportation simple du mécanisme
           console.log(`[XELOR TELEPORT] 🌀 Simple mechanism teleport to (${destinationPosition.x}, ${destinationPosition.y})`);
 
           this.boardService.updateMechanismPosition(targetMechanism.id, destinationPosition);
 
-          // 🆕 Si le mécanisme est un cadran, mettre à jour les heures après la téléportation
           if (targetMechanism.type === 'dial') {
-            this.xelorDialService.updateDialHoursAfterSwap(targetMechanism.id, context);
+            this.xelorDialService.updateDialHoursAfterSwap(targetMechanism.id);
           }
 
-          // Ajouter les détails au résultat
           if (!actionResult.details) actionResult.details = {};
           actionResult.details.teleport = {
             type: 'simple_mechanism',
@@ -456,7 +405,6 @@ export class XelorTeleportService {
             to: destinationPosition
           };
 
-          // 🆕 Enregistrer le mouvement pour "Retour Spontané"
           this.xelorMovementService.recordMovement(
             context,
             'teleport',
@@ -498,9 +446,8 @@ export class XelorTeleportService {
     const entitiesInArea = state.entities.filter(entity => {
       const dx = entity.position.x - center.x;
       const dy = entity.position.y - center.y;
-      const onCross = (dx === 0 && Math.abs(dy) <= areaRange)
+      return (dx === 0 && Math.abs(dy) <= areaRange)
         || (dy === 0 && Math.abs(dx) <= areaRange);
-      return onCross;
     });
 
     // Ordre de traitement identique au jeu: du centre vers les extrémités.
@@ -513,7 +460,6 @@ export class XelorTeleportService {
         return distanceA - distanceB;
       }
 
-      // Tie-breaker stable/déterministe pour éviter les variations d'ordre.
       if (a.position.y !== b.position.y) {
         return a.position.y - b.position.y;
       }
@@ -590,8 +536,19 @@ export class XelorTeleportService {
             context.currentPosition = from;
           }
 
-          movements.push({ entityId: entity.id, from, to: oppositeFrom, swappedWith: oppositeEntity.id });
-          movements.push({ entityId: oppositeEntity.id, from: oppositeFrom, to: from, swappedWith: entity.id });
+          movements.push(
+            {
+              entityId: entity.id,
+              from,
+              to: oppositeFrom,
+              swappedWith: oppositeEntity.id },
+            {
+            entityId: oppositeEntity.id,
+            from: oppositeFrom,
+            to: from,
+            swappedWith: entity.id
+            }
+          );
         }
 
         processedEntityIds.add(entity.id);
@@ -667,7 +624,7 @@ export class XelorTeleportService {
     const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
     const targetMechanism = this.boardService.getMechanismAtPosition(targetPosition);
 
-    const currentHour = context.currentDialHour ?? this.boardService.currentDialHour();
+    const currentHour = getXelorState(context, true).currentDialHour ?? this.boardService.currentDialHour();
     const reverseOnOddHour = params?.reverseOnOddHour === true;
     const shouldReverse = reverseOnOddHour && typeof currentHour === 'number' && currentHour % 2 === 1;
 
@@ -763,7 +720,7 @@ export class XelorTeleportService {
         }
 
         if (occupantMechanism.type === 'dial') {
-          this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id, context);
+          this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id);
         }
 
         this.xelorMovementService.recordMovement(
@@ -831,7 +788,7 @@ export class XelorTeleportService {
         }
 
         if (movingMechanism.type === 'dial') {
-          this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
+          this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id);
         }
 
         this.xelorMovementService.recordMovement(
@@ -872,10 +829,10 @@ export class XelorTeleportService {
         if (!swapSuccess) return;
 
         if (movingMechanism.type === 'dial') {
-          this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
+          this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id);
         }
         if (occupantMechanism.type === 'dial') {
-          this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id, context);
+          this.xelorDialService.updateDialHoursAfterSwap(occupantMechanism.id);
         }
 
         this.xelorMovementService.recordMovement(
@@ -913,7 +870,7 @@ export class XelorTeleportService {
 
       this.boardService.updateMechanismPosition(movingMechanism.id, destination);
       if (movingMechanism.type === 'dial') {
-        this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id, context);
+        this.xelorDialService.updateDialHoursAfterSwap(movingMechanism.id);
       }
 
       this.xelorMovementService.recordMovement(

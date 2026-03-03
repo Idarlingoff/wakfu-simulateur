@@ -5,6 +5,7 @@ import {BoardService} from '../../board.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorMechanismsService} from './xelor-mechanisms.service';
 import {XelorDelayedEffectsService} from './xelor-delayed-effects.service';
+import { getXelorState } from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
 export class XelorDialService {
@@ -22,15 +23,13 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
     console.log(`[XELOR DIAL] Creating 12 hours around dial at (${centerPosition.x}, ${centerPosition.y})`);
     console.log(`[XELOR DIAL] Player position: (${playerPosition.x}, ${playerPosition.y})`);
 
-    // Calculer la direction du lancer
     const dx = centerPosition.x - playerPosition.x;
     const dy = centerPosition.y - playerPosition.y;
 
     console.log(`[XELOR DIAL] Direction vector: (${dx}, ${dy})`);
 
-    // Déterminer la rotation à appliquer
     let rotation = 0;
-    let directionName = '';
+    let directionName: string;
 
     if (Math.abs(dx) > Math.abs(dy)) {
       if (dx > 0) {
@@ -40,19 +39,16 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
         rotation = 3;
         directionName = 'GAUCHE (Ouest)';
       }
+    } else if (dy > 0) {
+      rotation = 2;
+      directionName = 'BAS (Sud)';
     } else {
-      if (dy > 0) {
-        rotation = 2;
-        directionName = 'BAS (Sud)';
-      } else {
-        rotation = 0;
-        directionName = 'HAUT (Nord)';
-      }
+      rotation = 0;
+      directionName = 'HAUT (Nord)';
     }
 
     console.log(`[XELOR DIAL] Direction: ${directionName}, Rotation: ${rotation * 90}°`);
 
-    // Positions de base des heures (12h vers le HAUT/NORD par défaut)
     const baseHourPositions = [
       { hour: 12, offsetX: 0, offsetY: -3 },
       { hour: 1, offsetX: +1, offsetY: -2 },
@@ -74,7 +70,6 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       let rotatedX = offsetX;
       let rotatedY = offsetY;
 
-      // Rotation par quarts de tour (sens horaire)
       for (let i = 0; i < rotation; i++) {
         const tempX = rotatedX;
         rotatedX = -rotatedY;
@@ -86,7 +81,6 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
         y: centerPosition.y + rotatedY
       };
 
-      // Vérifier que la position est dans les limites du plateau (13x13)
       if (hourPosition.x >= 0 && hourPosition.x < 13 && hourPosition.y >= 0 && hourPosition.y < 13) {
         const dialHour = {
           id: `dial_hour_${hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -112,11 +106,10 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
    * (ancienne position du cadran -> nouvelle position du cadran)
    *
    * @param dialId ID du cadran
-   * @param context Contexte de simulation (non utilisé mais conservé pour compatibilité)
    */
-  public updateDialHoursAfterSwap(dialId: string, context?: SimulationContext): void {
+  public updateDialHoursAfterSwap(dialId: string): void {
     const dial = this.boardService.getMechanism(dialId);
-    if (!dial || dial.type !== 'dial') {
+    if (dial?.type !== 'dial') {
       console.warn(`[XELOR DIAL] ⚠️ Cannot update dial hours: dial not found (${dialId})`);
       return;
     }
@@ -124,7 +117,6 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
     const newDialPosition = dial.position;
     console.log(`[XELOR DIAL] 🔄 Updating dial hours after swap - new dial position: (${newDialPosition.x}, ${newDialPosition.y})`);
 
-    // Récupérer les heures existantes (copie profonde pour éviter les problèmes de références)
     const existingHours = this.boardService.getDialHours(dialId).map(h => ({
       hour: h.hour,
       position: { x: h.position.x, y: h.position.y }
@@ -134,7 +126,6 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       return;
     }
 
-    // Trouver l'heure 6 et l'heure 12 pour calculer l'ancien centre du cadran
     const hour12 = existingHours.find(h => h.hour === 12);
     const hour6 = existingHours.find(h => h.hour === 6);
     if (!hour12 || !hour6) {
@@ -142,11 +133,9 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       return;
     }
 
-    // L'ancien centre était entre l'heure 12 et l'heure 6
     const oldCenterX = Math.round((hour12.position.x + hour6.position.x) / 2);
     const oldCenterY = Math.round((hour12.position.y + hour6.position.y) / 2);
 
-    // Calculer le vecteur de translation (ancienne position -> nouvelle position)
     const translationX = newDialPosition.x - oldCenterX;
     const translationY = newDialPosition.y - oldCenterY;
 
@@ -156,16 +145,13 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
     console.log(`[XELOR DIAL] 📍 Hour 6 was at: (${hour6.position.x}, ${hour6.position.y})`);
     console.log(`[XELOR DIAL] 📍 Translation vector: (${translationX}, ${translationY})`);
 
-    // Log toutes les heures pour diagnostic
     console.log(`[XELOR DIAL] 📋 All existing hours BEFORE translation:`);
     existingHours.forEach(h => {
       console.log(`[XELOR DIAL]   Hour ${h.hour}: (${h.position.x}, ${h.position.y})`);
     });
 
-    // Supprimer les anciennes heures
     this.boardService.removeDialHoursForDial(dialId);
 
-    // Recréer les heures avec la translation appliquée
     let hoursCreated = 0;
     existingHours.forEach(oldHour => {
       const newHourPosition: Position = {
@@ -173,7 +159,6 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
         y: oldHour.position.y + translationY
       };
 
-      // Vérifier que la position est dans les limites du plateau (13x13)
       if (newHourPosition.x >= 0 && newHourPosition.x < 13 && newHourPosition.y >= 0 && newHourPosition.y < 13) {
         const dialHour = {
           id: `dial_hour_${oldHour.hour}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
@@ -198,21 +183,18 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
    * L'heure courante avance de 1 par PW dépensé
    */
   public advanceDialHourByPwCost(pwCost: number, context: SimulationContext): void {
-    if (!context.dialId || context.currentDialHour === undefined) {
-      console.log(`[XELOR] ⚠️ advanceDialHourByPwCost skipped: dialId=${context.dialId}, currentDialHour=${context.currentDialHour}`);
+    if (!getXelorState(context, true).dialId || getXelorState(context, true).currentDialHour === undefined) {
+      console.log(`[XELOR] ⚠️ advanceDialHourByPwCost skipped: dialId=${getXelorState(context, true).dialId}, currentDialHour=${getXelorState(context, true).currentDialHour}`);
       return;
     }
 
     console.log(`[XELOR] ⏰ Advancing dial hour by ${pwCost} (PW cost)`);
     console.log(`[XELOR] ⏰ BoardService state: activeDialId=${this.boardService.activeDialId()}, currentDialHour=${this.boardService.currentDialHour()}`);
 
-    // Avancer via le BoardService pour mettre à jour le signal
     const result = this.boardService.advanceCurrentDialHour(pwCost);
 
-    // Mettre à jour le contexte
-    context.currentDialHour = result.newHour;
+    getXelorState(context, true).currentDialHour = result.newHour;
 
-    // Traiter le wrap si nécessaire
     if (result.wrapped) {
       console.log(`[XELOR] 🔄 Hour wrap detected! Triggering ON_HOUR_WRAPPED effects`);
       this.processHourWrap(context);
@@ -226,27 +208,21 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
   public processHourWrap(context: SimulationContext): void {
     console.log('[XELOR] 🔄 Processing hour wrap effects (dial completed a full rotation)');
 
-    // Vérifier si c'est le premier tour de cadran après la pose
-    const isFirstLoop = !context.dialFirstLoopCompleted;
+    const isFirstLoop = !getXelorState(context, true).dialFirstLoopCompleted;
 
     if (isFirstLoop) {
       console.log('[XELOR] 🔄 First hour wrap since dial placement - marking first loop as completed');
-      context.dialFirstLoopCompleted = true;
+      getXelorState(context, true).dialFirstLoopCompleted = true;
     }
 
-    // Les Rouages infligent des dégâts supplémentaires (status_effect avec tick_phase = ON_HOUR_WRAPPED)
-    if (context.activeAuras?.has('ROUAGE_AURA')) {
+    if (getXelorState(context, true).activeAuras?.has('ROUAGE_AURA')) {
       this.xelorMechanismsService.applyRouageDamage(context);
     }
 
-    // Les Sinistros soignent à nouveau (status_effect avec tick_phase = ON_HOUR_WRAPPED)
-    if (context.activeAuras?.has('SINISTRO_AURA')) {
+    if (getXelorState(context, true).activeAuras?.has('SINISTRO_AURA')) {
       this.xelorMechanismsService.applySinistroHealing(context);
     }
 
-    // Passif "Connaissance du passé" (XEL_CONNAISSANCE_PASSE):
-    // Quand l'heure courante fait un tour complet du cadran, régénère 2 PA et 2 PW
-    // IMPORTANT: Ne se déclenche PAS au premier passage de 12 à 1 après la pose du cadran
     if (this.xelorPassiveService.hasConnaissancePassePassive(context)) {
       if (isFirstLoop) {
         console.log('[XELOR CONNAISSANCE_PASSE] ⏳ First loop after dial placement - Connaissance du passé does NOT trigger');
@@ -255,9 +231,6 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       }
     }
 
-    // Passif "Maître du Cadran" (XEL_MAITRE_CADRAN):
-    // Quand l'heure courante fait un tour complet du cadran,
-    // les effets délayés (ON_END_TURN, ON_TARGET_TURN_START, etc.) se résolvent immédiatement
     if (this.xelorPassiveService.hasMaitreDuCadranPassive(context)) {
       this.xelorDelayedEffectService.resolveDelayedEffects(context);
     }
@@ -267,30 +240,27 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
    * Avance l'heure du cadran et déclenche les effets associés
    */
   public advanceDialHour(context: SimulationContext, hoursToAdvance: number = 1): void {
-    if (context.currentDialHour === undefined) return;
+    if (getXelorState(context, true).currentDialHour === undefined) return;
 
-    const previousHour = context.currentDialHour;
-    // Calculer la nouvelle heure (en restant dans 1-12)
-    context.currentDialHour = ((context.currentDialHour - 1 + hoursToAdvance) % 12) + 1;
+    const state = getXelorState(context, true);
+    const previousHour = state.currentDialHour as number;
 
-    console.log(`[XELOR] Dial hour advanced: ${previousHour} → ${context.currentDialHour} (${hoursToAdvance > 0 ? '+' : ''}${hoursToAdvance}h)`);
+    state.currentDialHour = ((previousHour - 1 + hoursToAdvance) % 12) + 1;
 
-    // Détection du tour de cadran (hour wrap)
-    // Un tour de cadran se produit si l'heure actuelle est "inférieure" à l'heure précédente
-    // (en considérant le cycle 1-12), ce qui signifie qu'on a "bouclé"
-    const hasWrapped = this.hasDialHourWrapped(previousHour, context.currentDialHour, hoursToAdvance);
+    console.log(`[XELOR] Dial hour advanced: ${previousHour} → ${state.currentDialHour} (${hoursToAdvance > 0 ? '+' : ''}${hoursToAdvance}h)`);
+
+    const hasWrapped = this.hasDialHourWrapped(previousHour, state.currentDialHour as number, hoursToAdvance);
 
     if (hasWrapped) {
-      console.log(`[XELOR] 🔄 Hour wrap detected! (${previousHour} → ${context.currentDialHour}) - Triggering ON_HOUR_WRAPPED effects`);
+      console.log(`[XELOR] 🔄 Hour wrap detected! (${previousHour} → ${state.currentDialHour}) - Triggering ON_HOUR_WRAPPED effects`);
       this.processHourWrap(context);
     }
 
-    // Vérifier si le joueur est sur la nouvelle heure courante (Ponctualité)
     const playerEntity = this.boardService.player();
-    if (playerEntity && context.dialId) {
-      const playerHour = this.boardService.getDialHourAtPosition(playerEntity.position, context.dialId);
-      if (playerHour === context.currentDialHour) {
-        console.log(`[XELOR] ⭐ Ponctualité! Player is on current hour (${context.currentDialHour})`);
+    if (playerEntity && getXelorState(context, true).dialId) {
+      const playerHour = this.boardService.getDialHourAtPosition(playerEntity.position, getXelorState(context, true).dialId);
+      if (playerHour === state.currentDialHour) {
+        console.log(`[XELOR] ⭐ Ponctualité! Player is on current hour (${state.currentDialHour})`);
         // TODO: Appliquer le buff Ponctualité (+50% DI)
       }
     }
@@ -307,33 +277,27 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
    * - 10 → 2 avec +4h: WRAP (10 + 4 = 14 = 2, on passe par 12→1)
    */
   private hasDialHourWrapped(previousHour: number, newHour: number, hoursAdvanced: number): boolean {
-    // Si on avance dans le sens horaire normal
     if (hoursAdvanced > 0) {
-      // Calculer combien on a avancé en réalité (peut dépasser 12)
       const totalHours = previousHour + hoursAdvanced;
-      // Si on dépasse 12, on a fait un wrap
       return totalHours > 12;
     }
 
-    // Si on recule (hoursAdvanced négatif), on wrap si la nouvelle heure est supérieure
-    // Exemple: 3 → 11 avec -4h signifie qu'on a reculé en passant par 12
     if (hoursAdvanced < 0) {
       return newHour > previousHour;
     }
 
-    // hoursAdvanced === 0, pas de changement
     return false;
   }
 
   /**
-   * Modifie directement l'heure du cadran (utilisé par les sorts comme Désynchronisation, Distorsion)
-   * Cette méthode peut faire avancer ou reculer l'heure de plusieurs positions
+   * Modifie directement l'heure du cadran
+   * Cette méthode peut faire avancer l'heure de plusieurs positions
    *
    * @param context Le contexte de simulation
    * @param hours Nombre d'heures à avancer (positif) ou reculer (négatif)
    */
   public setDialHourOffset(context: SimulationContext, hours: number): void {
-    if (!context.dialId || context.currentDialHour === undefined) {
+    if (!getXelorState(context, true).dialId || getXelorState(context, true).currentDialHour === undefined) {
       console.warn(`[XELOR] Cannot set dial hour offset: no active dial`);
       return;
     }
@@ -349,7 +313,7 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
    * @param targetHour L'heure cible (1-12)
    */
   public setDialHourDirect(context: SimulationContext, targetHour: number): void {
-    if (!context.dialId || context.currentDialHour === undefined) {
+    if (!getXelorState(context, true).dialId || getXelorState(context, true).currentDialHour === undefined) {
       console.warn(`[XELOR] Cannot set dial hour: no active dial`);
       return;
     }
@@ -359,14 +323,12 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       return;
     }
 
-    const previousHour = context.currentDialHour;
+    const previousHour = getXelorState(context, true).currentDialHour as number;
 
-    // Calculer le nombre d'heures à avancer pour atteindre l'heure cible
     let hoursToAdvance: number;
     if (targetHour >= previousHour) {
       hoursToAdvance = targetHour - previousHour;
     } else {
-      // On doit passer par 12→1 pour atteindre la cible
       hoursToAdvance = (12 - previousHour) + targetHour;
     }
 

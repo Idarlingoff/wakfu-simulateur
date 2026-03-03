@@ -5,6 +5,7 @@ import { SimulationContext } from "../../calculators/simulation-engine.service";
 import {BoardService} from '../../board.service';
 import {ClassValidationResult} from '../class-simulation-strategy.interface';
 import {getSpellMechanismType} from '../../../utils/mechanism-utils';
+import { getXelorState } from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
 export class XelorCastValidatorService {
@@ -23,9 +24,8 @@ export class XelorCastValidatorService {
   ): ClassValidationResult {
     const mechanismType = getSpellMechanismType(spell.id);
 
-    // Validation: 1 cadran par tour maximum
     if (mechanismType === 'dial') {
-      const dialsPlacedThisTurn = context.mechanismsPlacedThisTurn?.get('dial') || 0;
+      const dialsPlacedThisTurn = getXelorState(context, true).mechanismsPlacedThisTurn?.get('dial') || 0;
       if (dialsPlacedThisTurn >= 1) {
         console.log(`[XELOR] ❌ Cadran déjà posé ce tour (${dialsPlacedThisTurn}/1)`);
         return {
@@ -35,9 +35,7 @@ export class XelorCastValidatorService {
       }
     }
 
-    // Validation spécifique pour le Régulateur
     if (mechanismType === 'regulateur') {
-      // Le régulateur ne peut être posé QUE sur les cases heures du cadran
       const isOnDialHour = this.boardService.isPositionOnDialHour(targetPosition);
 
       if (!isOnDialHour) {
@@ -48,7 +46,6 @@ export class XelorCastValidatorService {
         };
       }
 
-      // Vérifier qu'il y a un cadran actif
       const dials = this.boardService.getMechanismsByType('dial');
       if (dials.length === 0) {
         console.log(`[XELOR] ❌ Régulateur cannot be placed: no active dial on board`);
@@ -61,10 +58,7 @@ export class XelorCastValidatorService {
       console.log(`[XELOR] ✅ Régulateur can be placed on dial hour at (${targetPosition.x}, ${targetPosition.y})`);
     }
 
-    // Validation spécifique Paradoxe: la case ciblée doit contenir une cible (entité OU mécanisme).
     if (spell.id === 'XEL_PARADOXE') {
-      // IMPORTANT: utiliser d'abord le contexte de simulation (source de vérité pour le step en cours),
-      // puis fallback sur le BoardService pour les cas UI hors simulation.
       const targetEntityInContext = context.entities?.find(entity =>
         entity.position.x === targetPosition.x && entity.position.y === targetPosition.y
       );
@@ -99,7 +93,7 @@ export class XelorCastValidatorService {
    * Vérifie si Distorsion est actuellement active
    */
   public isDistorsionActive(context: SimulationContext): boolean {
-    return context.distorsionActive === true;
+    return getXelorState(context, true).distorsionActive;
   }
 
   /**

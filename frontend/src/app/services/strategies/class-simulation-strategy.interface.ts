@@ -1,18 +1,10 @@
-/**
- * Interface abstraite pour les stratégies de simulation par classe
- * Définit les méthodes spécifiques à chaque classe de personnage
- */
-
 import { Spell } from '../../models/spell.model';
-import { Position } from '../../models/timeline.model';
+import { Position, TimelineAction } from '../../models/timeline.model';
 import { SimulationContext, SimulationActionResult } from '../calculators/simulation-engine.service';
-import { TimelineAction } from '../../models/timeline.model';
 import { Build } from '../../models/build.model';
 import { TotalStats } from '../calculators/stats-calculator.service';
+import { MovementValidationResult } from '../validators/movement-validator.service';
 
-/**
- * Résultat de validation spécifique à une classe
- */
 export interface ClassValidationResult {
   canCast: boolean;
   reason?: string;
@@ -21,17 +13,14 @@ export interface ClassValidationResult {
 
 /**
  * Interface abstraite pour les stratégies de simulation par classe
+ * Définit les méthodes spécifiques à chaque classe de personnage
  */
 export abstract class ClassSimulationStrategy {
 
-  /**
-   * Nom de la classe (ex: 'Xelor', 'Iop', 'Eniripsa', etc.)
-   */
   abstract readonly classId: string;
 
   /**
    * Vérifie les conditions de lancement spécifiques à la classe
-   * (ex: pour Xelor - présence de mécanismes, charges, etc.)
    *
    * @param spell Sort à vérifier
    * @param casterPosition Position du lanceur
@@ -48,7 +37,6 @@ export abstract class ClassSimulationStrategy {
 
   /**
    * Traite les effets spécifiques à la classe après le lancement d'un sort
-   * (ex: pour Xelor - gestion des charges de mécanismes, création d'heures, etc.)
    *
    * @param spell Sort lancé
    * @param action Action de la timeline
@@ -64,7 +52,6 @@ export abstract class ClassSimulationStrategy {
 
   /**
    * Applique les passifs spécifiques à la classe sur les stats du build
-   * (ex: pour Xelor - bonus selon le nombre de mécanismes, etc.)
    *
    * @param build Build du joueur
    * @param baseStats Stats de base calculées
@@ -87,7 +74,6 @@ export abstract class ClassSimulationStrategy {
 
   /**
    * Exécute un sort de mécanisme spécifique à la classe
-   * (ex: pour Xelor - pose de Rouage, Cadran, Sinistro, etc.)
    *
    * @param action Action de la timeline
    * @param context Contexte de simulation
@@ -114,26 +100,24 @@ export abstract class ClassSimulationStrategy {
   abstract initializeClassContext(context: SimulationContext, build: Build): void;
 
   /**
-   * Nettoie les données spécifiques à la classe à la fin d'un tour
-   * (ex: décrémentation de durées de buffs, etc.)
+   * Hook optionnel appelé après un déplacement validé/exécuté.
+   * Permet à une classe de traiter ses règles de mouvement spécifiques.
    *
-   * @param context Contexte à nettoyer
+   * @param action Action de la timeline
+   * @param context Contexte de la simulation
+   * @param validation Résultat de la validation du mouvement
+   * @param result Résultat de l'exécution du mouvement
    */
-  abstract cleanupTurn(context: SimulationContext): void;
-
-  /**
-   * Traite les effets de tour complet du cadran (hour wrap)
-   * Méthode optionnelle - par défaut ne fait rien
-   * (ex: pour Xelor - déclenche les dégâts des rouages, soins des sinistros, effets délayés)
-   *
-   * @param context Contexte de simulation
-   */
-  processHourWrap?(context: SimulationContext): void;
+  onMoveExecuted?(
+    action: TimelineAction,
+    context: SimulationContext,
+    validation: MovementValidationResult,
+    result: SimulationActionResult
+  ): void;
 
   /**
    * Calcule le coût supplémentaire en ressources pour un sort basé sur les passifs actifs
    * Méthode optionnelle - par défaut retourne 0
-   * (ex: pour Xelor avec "Connaissance du passé" - Cadran coûte +2 PW)
    *
    * @param spell Sort à vérifier
    * @param context Contexte de simulation

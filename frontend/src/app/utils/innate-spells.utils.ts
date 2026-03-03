@@ -2,24 +2,11 @@ import { Build, SpellReference } from '../models/build.model';
 
 const XELOR_INNATE_SPELL_IDS = ['XEL_DIAL', 'XEL_DISTO', 'XEL_VDT'] as const;
 
-const INNATE_SPELL_ALIASES: Record<string, string> = {
-  // Dial / Cadran
-  xel_dial: 'XEL_DIAL',
-  dial: 'XEL_DIAL',
-  cadran: 'XEL_DIAL',
-  // Distorsion
-  xel_disto: 'XEL_DISTO',
-  distorsion: 'XEL_DISTO',
-  disto: 'XEL_DISTO',
-  // Vol du temps
-  xel_vdt: 'XEL_VDT',
-  vol_du_temps: 'XEL_VDT',
-  'vol du temps': 'XEL_VDT',
-  vdt: 'XEL_VDT'
-};
-
+/**
+ * Normalise un ID de sort (trim, minuscules, remplace - par _)
+ */
 function normalizeSpellId(spellId: string | undefined | null): string {
-  return (spellId || '').trim().toLowerCase().replace(/-/g, '_');
+  return (spellId || '').trim().toLowerCase().replaceAll('-', '_');
 }
 
 export function isXelorClass(classId: string | undefined | null): boolean {
@@ -35,9 +22,22 @@ export function getInnateSpellIdsForClass(classId: string | undefined | null): s
   return [];
 }
 
+/**
+ * Convertit un ID de sort en son ID canonique
+ * Si l'ID est déjà canonique (XEL_*), le retourne tel quel
+ * Sinon retourne l'ID normalisé en uppercase
+ */
 export function canonicalizeInnateSpellId(spellId: string | undefined | null): string {
-  const normalized = normalizeSpellId(spellId);
-  return INNATE_SPELL_ALIASES[normalized] || (spellId || '').trim();
+  if (!spellId) return '';
+
+  const trimmed = spellId.trim();
+  const normalized = normalizeSpellId(trimmed);
+
+  if (normalized.startsWith('xel_')) {
+    return trimmed.toUpperCase();
+  }
+
+  return normalized.toUpperCase();
 }
 
 export function areEquivalentSpellIds(a: string | undefined | null, b: string | undefined | null): boolean {
