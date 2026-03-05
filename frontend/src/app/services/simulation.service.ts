@@ -1,6 +1,9 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { SimulationEngineService, SimulationResult } from './calculators/simulation-engine.service';
-import { BuildService } from './build.service';
+import {
+  SimulationEngineService,
+  SimulationResult,
+  SimulationStepResult
+} from './calculators/simulation-engine.service';import { BuildService } from './build.service';
 import { TimelineService } from './timeline.service';
 import { Build } from '../models/build.model';
 import { Timeline } from '../models/timeline.model';
@@ -66,6 +69,30 @@ export class SimulationService {
   }
 
   /**
+   * Recalcule les totaux agrégés (dégâts/coûts) à partir d'une liste de steps
+   */
+  private aggregateStepTotals(steps: SimulationStepResult[]): Pick<SimulationResult, 'totalDamage' | 'totalPaUsed' | 'totalPwUsed' | 'totalMpUsed'> {
+    return steps.reduce(
+      (totals, step) => {
+        for (const action of step.actions) {
+          totals.totalDamage += action.damage || 0;
+          totals.totalPaUsed += action.paCost || 0;
+          totals.totalPwUsed += action.pwCost || 0;
+          totals.totalMpUsed += action.mpCost || 0;
+        }
+
+        return totals;
+      },
+      {
+        totalDamage: 0,
+        totalPaUsed: 0,
+        totalPwUsed: 0,
+        totalMpUsed: 0
+      }
+    );
+  }
+
+  /**
    * Tronque le cache de simulation pour revenir à un index donné
    * stepIndex représente le prochain step à exécuter (0 = aucun step exécuté)
    */
@@ -80,31 +107,13 @@ export class SimulationService {
       ? trimmedSteps[trimmedSteps.length - 1].contextAfter
       : this.simulationResultsCache.initialContext;
 
-    const totalDamage = trimmedSteps.reduce(
-      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.damage || 0), 0),
-      0
-    );
-    const totalPaUsed = trimmedSteps.reduce(
-      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.paCost || 0), 0),
-      0
-    );
-    const totalPwUsed = trimmedSteps.reduce(
-      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.pwCost || 0), 0),
-      0
-    );
-    const totalMpUsed = trimmedSteps.reduce(
-      (sum, step) => sum + step.actions.reduce((actionSum, action) => actionSum + (action.mpCost || 0), 0),
-      0
-    );
+    const totals = this.aggregateStepTotals(trimmedSteps);
 
     this.simulationResultsCache = {
       ...this.simulationResultsCache,
       steps: trimmedSteps,
       finalContext: contextAfterTrim,
-      totalDamage,
-      totalPaUsed,
-      totalPwUsed,
-      totalMpUsed,
+      ...totals,
       success: trimmedSteps.every(step => step.success),
       errors: []
     };
@@ -115,7 +124,7 @@ export class SimulationService {
   /**
    * Obtient le résultat d'un step spécifique depuis le cache
    */
-  getStepResult(stepIndex: number): any | null {
+  getStepResult(stepIndex: number): SimulationStepResult | null {
     if (!this.simulationResultsCache) {
       return null;
     }
@@ -125,6 +134,72 @@ export class SimulationService {
     }
 
     return this.simulationResultsCache.steps[stepIndex];
+  }
+
+  private isCacheValid(build: Build, timeline: Timeline): boolean {
+    return this.simulationResultsCache !== null &&
+      this.currentTimelineId === (timeline.id || '') &&
+      this.currentBuildId === (build.id || '');
+  }
+
+  private async executeStepUsingIncrementalCache(build: Build, timeline: Timeline, stepIndex: number): Promise<void> {
+    const step = timeline.steps[stepIndex];
+    const previousContext = this.simulationResultsCache!.finalContext;
+
+    const stepResult = await this.simulationEngine.executeSingleStep(
+      step,
+      previousContext,
+      build,
+      stepIndex + 1
+    );
+
+    this.simulationResultsCache!.steps.push(stepResult);
+    this.simulationResultsCache!.finalContext = stepResult.contextAfter;
+
+    const totals = this.aggregateStepTotals([stepResult]);
+    this.simulationResultsCache!.totalDamage += totals.totalDamage;
+    this.simulationResultsCache!.totalPaUsed += totals.totalPaUsed;
+    this.simulationResultsCache!.totalPwUsed += totals.totalPwUsed;
+    this.simulationResultsCache!.totalMpUsed += totals.totalMpUsed;
+
+    if (!stepResult.success) {
+      this.simulationResultsCache!.success = false;
+      this.simulationResultsCache!.errors.push(
+        `Step ${stepIndex + 1} failed: ${stepResult.actions.find(a => !a.success)?.message}`
+      );
+    }
+
+    console.log(`✅ Cache étendu avec le step ${stepIndex + 1}`);
+  }
+
+  private async executeStepFromScratch(build: Build, timeline: Timeline, stepIndex: number): Promise<void> {
+    console.log(`🔄 Exécution de la simulation depuis le début jusqu'au step ${stepIndex + 1}`);
+
+    const partialTimeline: Timeline = {
+      ...timeline,
+      steps: timeline.steps.slice(0, stepIndex + 1)
+    };
+
+    const result = await this.simulationEngine.runSimulation(build, partialTimeline);
+
+    this.simulationResultsCache = result;
+    this.currentTimelineId = timeline.id || '';
+    this.currentBuildId = build.id || '';
+
+    console.log(`✅ Cache initialisé avec ${result.steps.length} steps`);
+  }
+
+  private validateExecutedStep(stepIndex: number): boolean {
+    const stepResult = this.simulationResultsCache!.steps[stepIndex];
+
+    if (!stepResult || !stepResult.success) {
+      const failedAction = stepResult?.actions.find(a => !a.success);
+      console.error('❌ [executeStep] Step échoué:', failedAction?.message || 'Erreur inconnue');
+      return false;
+    }
+
+    console.log('✅ [executeStep] Step validé avec succès');
+    return true;
   }
 
   /**
@@ -142,9 +217,7 @@ export class SimulationService {
     console.log('🎯 [executeStep] Exécution et validation du step', stepIndex + 1);
 
     try {
-      const cacheIsValid = this.simulationResultsCache !== null &&
-                           this.currentTimelineId === (timeline.id || '') &&
-                           this.currentBuildId === (build.id || '');
+      const cacheIsValid = this.isCacheValid(build, timeline);
 
       const cacheHasThisStep = cacheIsValid && this.simulationResultsCache!.steps.length > stepIndex;
 
@@ -155,64 +228,12 @@ export class SimulationService {
       } else if (cacheHasPreviousSteps) {
         console.log(`🔄 [executeStep] Exécution incrémentale du step ${stepIndex + 1} uniquement`);
 
-        const step = timeline.steps[stepIndex];
-        const previousContext = this.simulationResultsCache!.finalContext;
-
-        const stepResult = await this.simulationEngine.executeSingleStep(
-          step,
-          previousContext,
-          build,
-          stepIndex + 1
-        );
-
-        this.simulationResultsCache!.steps.push(stepResult);
-        this.simulationResultsCache!.finalContext = stepResult.contextAfter;
-
-        for (const action of stepResult.actions) {
-          if (action.damage) {
-            this.simulationResultsCache!.totalDamage += action.damage;
-          }
-          this.simulationResultsCache!.totalPaUsed += action.paCost;
-          this.simulationResultsCache!.totalPwUsed += action.pwCost;
-          this.simulationResultsCache!.totalMpUsed += action.mpCost;
-        }
-
-        if (!stepResult.success) {
-          this.simulationResultsCache!.success = false;
-          this.simulationResultsCache!.errors.push(
-            `Step ${stepIndex + 1} failed: ${stepResult.actions.find(a => !a.success)?.message}`
-          );
-        }
-
-        console.log(`✅ Cache étendu avec le step ${stepIndex + 1}`);
+        await this.executeStepUsingIncrementalCache(build, timeline, stepIndex);
       } else {
-        console.log(`🔄 Exécution de la simulation depuis le début jusqu'au step ${stepIndex + 1}`);
-
-        const partialTimeline: Timeline = {
-          ...timeline,
-          steps: timeline.steps.slice(0, stepIndex + 1)
-        };
-
-        const result = await this.simulationEngine.runSimulation(build, partialTimeline);
-
-        this.simulationResultsCache = result;
-        this.currentTimelineId = timeline.id || '';
-        this.currentBuildId = build.id || '';
-
-        console.log(`✅ Cache initialisé avec ${result.steps.length} steps`);
+        await this.executeStepFromScratch(build, timeline, stepIndex);
       }
 
-      const stepResult = this.simulationResultsCache!.steps[stepIndex];
-
-      if (!stepResult || !stepResult.success) {
-        const failedAction = stepResult?.actions.find((a: any) => !a.success);
-        console.error('❌ [executeStep] Step échoué:', failedAction?.message || 'Erreur inconnue');
-        return false;
-      }
-
-      console.log('✅ [executeStep] Step validé avec succès');
-
-      return true;
+      return this.validateExecutedStep(stepIndex);
     } catch (error) {
       console.error('💥 [executeStep] Erreur lors de l\'exécution du step:', error);
       return false;
