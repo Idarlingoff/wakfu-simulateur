@@ -1227,7 +1227,7 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
-             0, 0, 0, 1, FALSE, FALSE,
+             0, 1, 0, 1, FALSE, FALSE,
              0, 1, 1, 'NONE', 'STEP'
          );
 

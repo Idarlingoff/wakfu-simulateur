@@ -5,6 +5,7 @@ import {TimelineAction} from '../../../models/timeline.model';
 import {BoardService} from '../../board.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorExecuteEffectService} from './xelor-execute-effect.service';
+import { getXelorState } from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
 export class XelorDelayedEffectsService {
@@ -23,17 +24,15 @@ export class XelorDelayedEffectsService {
     action: TimelineAction,
     context: SimulationContext
   ): void {
-    // Phases considérées comme "différées"
     const delayedPhases = ['ON_END_TURN', 'ON_TARGET_TURN_START', 'ON_TARGET_TURN_END'];
 
-    // Utiliser la variante NORMAL par défaut (TODO: gérer les crits)
+    // TODO: gérer les crits pour sablier et horloge
     const variant = spell.variants.find(v => v.kind === 'NORMAL');
     if (!variant) {
       console.log(`[XELOR DELAYED] ⚠️ No NORMAL variant found for spell ${spell.name}`);
       return;
     }
 
-    // Filtrer les effets différés
     const delayedEffects = variant.effects.filter(effect =>
       effect.phase && delayedPhases.includes(effect.phase)
     );
@@ -45,14 +44,11 @@ export class XelorDelayedEffectsService {
 
     console.log(`[XELOR DELAYED] 📦 Found ${delayedEffects.length} delayed effect(s) for spell ${spell.name}`);
 
-    // Position du lanceur et de la cible
     const playerEntity = this.boardService.player();
     const casterPosition = playerEntity?.position || context.playerPosition || { x: 0, y: 0 };
     const targetPosition = action.targetPosition || casterPosition;
 
-    // Enregistrer chaque effet différé
     for (const effect of delayedEffects) {
-      // Extraire le montant - peut être dans extendedData.amount, minValue ou maxValue
       const amount = effect.extendedData?.amount || effect.minValue || effect.maxValue || 0;
 
       const delayedEffect: DelayedEffect = {
@@ -96,30 +92,26 @@ export class XelorDelayedEffectsService {
    * @returns true si l'effet a été enregistré, false sinon
    */
   public registerDelayedEffect(effect: DelayedEffect, context: SimulationContext): boolean {
-    // On enregistre l'effet même si le passif n'est pas actif
-    // (il sera simplement résolu à son moment normal, pas sur hour wrap)
-    if (!context.delayedEffects) {
-      context.delayedEffects = [];
+    if (!getXelorState(context, true).delayedEffects) {
+      getXelorState(context, true).delayedEffects = [];
     }
 
-    // Générer un ID unique si non fourni
     if (!effect.id) {
       effect.id = `delayed_${effect.spellId}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     }
 
-    // Enregistrer le tour si non fourni
     if (!effect.registeredOnTurn) {
       effect.registeredOnTurn = context.turn || 1;
     }
 
-    context.delayedEffects.push(effect);
+    getXelorState(context, true).delayedEffects.push(effect);
 
     const willResolveOnHourWrap = this.xelorPassivesService.hasMaitreDuCadranPassive(context);
     console.log(`[XELOR DELAYED] ✅ Registered delayed effect: ${effect.spellName}`);
     console.log(`[XELOR DELAYED]    Effect type: ${effect.effectType}, Phase: ${effect.originalPhase}`);
     console.log(`[XELOR DELAYED]    Target scope: ${effect.targetScope}`);
     console.log(`[XELOR DELAYED]    Will resolve on hour wrap: ${willResolveOnHourWrap ? 'YES (Maître du Cadran active)' : 'NO'}`);
-    console.log(`[XELOR DELAYED] 📋 Total delayed effects: ${context.delayedEffects.length}`);
+    console.log(`[XELOR DELAYED] 📋 Total delayed effects: ${getXelorState(context, true).delayedEffects.length}`);
 
     return true;
   }
@@ -131,19 +123,17 @@ export class XelorDelayedEffectsService {
    * Correspond à l'effet 'RESOLVE_DELAYED_EFFECTS' avec params: {"owner":"CASTER"}
    */
   public resolveDelayedEffects(context: SimulationContext): void {
-    if (!context.delayedEffects || context.delayedEffects.length === 0) {
+    if (!getXelorState(context, true).delayedEffects || getXelorState(context, true).delayedEffects.length === 0) {
       console.log(`[XELOR MAITRE_CADRAN] 📭 No delayed effects to resolve`);
       return;
     }
 
     console.log(`[XELOR MAITRE_CADRAN] ⚡ RESOLVE_DELAYED_EFFECTS triggered on ON_HOUR_WRAPPED`);
-    console.log(`[XELOR MAITRE_CADRAN] 📋 Resolving ${context.delayedEffects.length} delayed effect(s)...`);
+    console.log(`[XELOR MAITRE_CADRAN] 📋 Resolving ${getXelorState(context, true).delayedEffects.length} delayed effect(s)...`);
 
-    // Copier le tableau pour éviter les modifications pendant l'itération
-    const effectsToResolve = [...context.delayedEffects];
+    const effectsToResolve = [...getXelorState(context, true).delayedEffects];
 
-    // Vider le tableau des effets différés
-    context.delayedEffects = [];
+    getXelorState(context, true).delayedEffects = [];
 
     effectsToResolve.forEach((effect, index) => {
       console.log(`[XELOR MAITRE_CADRAN] 🎯 Resolving effect ${index + 1}/${effectsToResolve.length}:`);

@@ -10,10 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * Simple REST controller for Spell data access
- * No business logic - just CRUD operations
- */
 @RestController
 @RequestMapping("/api/spells")
 @CrossOrigin(origins = "http://localhost:4200")
@@ -27,20 +23,14 @@ public class SpellController {
         this.mapper = mapper;
     }
 
-    /**
-     * Get all spells
-     */
     @GetMapping
     public ResponseEntity<List<SpellDTO>> getAllSpells(
             @RequestParam(required = false) String classId) {
-        // Load variants first (without effects to avoid MultipleBagFetchException)
         List<SpellEntity> entities = spellRepository.findAllWithVariants();
 
-        // Then load breakpoints separately to avoid MultipleBagFetchException
         List<String> ids = entities.stream().map(SpellEntity::getId).toList();
         if (!ids.isEmpty()) {
             List<SpellEntity> entitiesWithBreakpoints = spellRepository.findAllWithBreakpoints(ids);
-            // Merge breakpoints into original entities
             for (SpellEntity entity : entities) {
                 entitiesWithBreakpoints.stream()
                     .filter(e -> e.getId().equals(entity.getId()))
@@ -49,7 +39,6 @@ public class SpellController {
             }
         }
 
-        // Simple filtering by classId if provided
         if (classId != null && !classId.isEmpty()) {
             entities = entities.stream()
                     .filter(s -> s.getCharacterClass() != null &&
@@ -60,12 +49,8 @@ public class SpellController {
         return ResponseEntity.ok(mapper.toDTOs(entities));
     }
 
-    /**
-     * Get spell by ID
-     */
     @GetMapping("/{id}")
     public ResponseEntity<SpellDTO> getSpellById(@PathVariable String id) {
-        // Load variants first (without effects to avoid MultipleBagFetchException)
         Optional<SpellEntity> entityOpt = spellRepository.findByIdWithVariants(id);
         if (entityOpt.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -73,7 +58,6 @@ public class SpellController {
 
         SpellEntity entity = entityOpt.get();
 
-        // Then load breakpoints separately
         spellRepository.findByIdWithBreakpoints(id)
             .ifPresent(e -> entity.setBreakpoints(e.getBreakpoints()));
 

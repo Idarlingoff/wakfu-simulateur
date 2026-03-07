@@ -74,7 +74,6 @@ export class XelorPassivesService {
     const isDistorsionActive = this.xelorCastValidatorService.isDistorsionActive(context);
 
     if (isDistorsionActive) {
-      // Distorsion active : +1 PA
       this.regenerationService.regeneratePA(
         context,
         1,
@@ -84,7 +83,6 @@ export class XelorPassivesService {
       );
       console.log(`[XELOR COURS_DU_TEMPS] ⚡ +1 PA (Distorsion actif) - Transposition: ${transpositionType}`);
     } else {
-      // Distorsion inactif : +1 PW
       this.regenerationService.regeneratePW(
         context,
         1,
@@ -119,7 +117,6 @@ export class XelorPassivesService {
   public applyConnaissancePasseRegeneration(context: SimulationContext): void {
     console.log('[XELOR CONNAISSANCE_PASSE] ⚡ Triggering Connaissance du passé regeneration on ON_HOUR_WRAPPED');
 
-    // Régénérer 2 PA
     this.regenerationService.regeneratePA(
       context,
       2,
@@ -128,7 +125,6 @@ export class XelorPassivesService {
       { trigger: 'ON_HOUR_WRAPPED' }
     );
 
-    // Régénérer 2 PW
     this.regenerationService.regeneratePW(
       context,
       2,
@@ -162,6 +158,7 @@ export class XelorPassivesService {
    *
    * @param mechanismId ID du cadran
    * @param context Contexte de simulation
+   * @param sourceSpellId id du sort source
    * @returns true si le swap a été effectué
    */
   public applyMecanismeSpecialiseSwapForDial(
@@ -169,7 +166,6 @@ export class XelorPassivesService {
     context: SimulationContext,
     sourceSpellId?: string
   ): boolean {
-    // Vérifier si le passif est actif
     if (!this.hasMecanismeSpecialisePassive(context)) {
       console.log(`[XELOR MECANISME_SPECIALISE_DIAL] Passive not active - no swap`);
       return false;
@@ -177,7 +173,6 @@ export class XelorPassivesService {
 
     console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 🔍 Passive active - applying swap for dial`);
 
-    // Récupérer la position ACTUELLE du mécanisme (cadran) depuis le BoardService
     const mechanism = this.boardService.getMechanism(mechanismId);
     if (!mechanism) {
       console.warn(`[XELOR MECANISME_SPECIALISE_DIAL] ⚠️ Mechanism not found - cannot swap`);
@@ -185,7 +180,6 @@ export class XelorPassivesService {
     }
     const dialPosition = mechanism.position;
 
-    // Récupérer la position actuelle du joueur (sur l'heure 6 après téléportation)
     const playerEntity = this.boardService.player();
     if (!playerEntity?.position || !playerEntity?.id) {
       console.warn(`[XELOR MECANISME_SPECIALISE_DIAL] ⚠️ Player not found - cannot swap`);
@@ -193,7 +187,6 @@ export class XelorPassivesService {
     }
     const playerPosition = playerEntity.position;
 
-    // Calculer la distance entre le joueur et le cadran
     const distance = Math.abs(dialPosition.x - playerPosition.x) +
       Math.abs(dialPosition.y - playerPosition.y);
 
@@ -201,13 +194,11 @@ export class XelorPassivesService {
     console.log(`[XELOR MECANISME_SPECIALISE_DIAL]    Player (hour 6): (${playerPosition.x}, ${playerPosition.y})`);
     console.log(`[XELOR MECANISME_SPECIALISE_DIAL]    Dial (center): (${dialPosition.x}, ${dialPosition.y})`);
 
-    // Vérifier si la distance est <= 6 cases
     if (distance > 6) {
       console.log(`[XELOR MECANISME_SPECIALISE_DIAL] ❌ Distance too large (${distance} > 6) - no swap`);
       return false;
     }
 
-    // Effectuer l'échange de position
     console.log(`[XELOR MECANISME_SPECIALISE_DIAL] 🔄 Swapping player with dial (${mechanismId})`);
 
     const swapSuccess = this.boardService.swapEntityWithMechanism(playerEntity.id, mechanismId);
@@ -215,11 +206,9 @@ export class XelorPassivesService {
     if (swapSuccess) {
       console.log(`[XELOR MECANISME_SPECIALISE_DIAL] ✅ Swap successful!`);
 
-      // Mettre à jour le contexte avec la nouvelle position du joueur (= ancienne position du cadran = centre)
       context.playerPosition = dialPosition;
       context.currentPosition = dialPosition;
 
-      // Mettre à jour aussi la position dans context.entities
       if (context.entities) {
         const playerEntityInContext = context.entities.find(e => e.type === 'player');
         if (playerEntityInContext) {
@@ -227,10 +216,8 @@ export class XelorPassivesService {
         }
       }
 
-      // Appliquer le passif "Cours du temps"
       this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_dial_swap');
 
-      // 🆕 Enregistrer le mouvement pour "Retour Spontané"
       this.xelorMovementService.recordMovement(
         context,
         'swap_mechanism',
@@ -239,7 +226,7 @@ export class XelorPassivesService {
         playerEntity.name || 'Player',
         playerPosition,
         dialPosition,
-        sourceSpellId || 'XEL_DIAL', // Le sort cadran est la source du swap automatique
+        sourceSpellId || 'XEL_DIAL',
         {
           id: mechanismId,
           type: 'mechanism',
@@ -265,22 +252,21 @@ export class XelorPassivesService {
    *
    * @param mechanismType Type de mécanisme invoqué ('cog', 'sinistro', 'dial', 'regulateur')
    * @param mechanismId ID du mécanisme invoqué
-   * @param mechanismPosition Position du mécanisme invoqué
+   * @param _mechanismPosition Position initiale du mécanisme
    * @param context Contexte de simulation
+   * @param sourceSpellId id du sort source
    */
   public applyMecanismeSpecialiseSwap(
     mechanismType: string,
     mechanismId: string,
-    _mechanismPosition: Position, // Position initiale, ignorée - on récupère la position actuelle du BoardService
+    _mechanismPosition: Position,
     context: SimulationContext,
     sourceSpellId?: string
   ): void {
-    // Vérifier si le passif est actif
     if (!this.hasMecanismeSpecialisePassive(context)) {
       return;
     }
 
-    // Vérifier si le type de mécanisme est concerné (Rouage, Sinistro, Cadran, Régulateur)
     const eligibleTypes = ['cog', 'sinistro', 'dial', 'regulateur'];
     if (!eligibleTypes.includes(mechanismType)) {
       return;
@@ -288,7 +274,6 @@ export class XelorPassivesService {
 
     console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Passive active - checking swap conditions for ${mechanismType}`);
 
-    // Récupérer la position ACTUELLE du mécanisme depuis le BoardService
     const mechanism = this.boardService.getMechanism(mechanismId);
     if (!mechanism) {
       console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Mechanism not found - cannot swap`);
@@ -296,7 +281,6 @@ export class XelorPassivesService {
     }
     const actualMechanismPosition = mechanism.position;
 
-    // Récupérer la position actuelle du joueur depuis le BoardService
     const playerEntity = this.boardService.player();
     const playerPosition = playerEntity?.position;
 
@@ -305,7 +289,6 @@ export class XelorPassivesService {
       return;
     }
 
-    // Calculer la distance entre le joueur et le mécanisme
     const distance = Math.abs(actualMechanismPosition.x - playerPosition.x) +
       Math.abs(actualMechanismPosition.y - playerPosition.y);
 
@@ -313,16 +296,13 @@ export class XelorPassivesService {
     console.log(`[XELOR MECANISME_SPECIALISE]    Player: (${playerPosition.x}, ${playerPosition.y})`);
     console.log(`[XELOR MECANISME_SPECIALISE]    Mechanism: (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
 
-    // Vérifier si la distance est <= 6 cases
     if (distance > 6) {
       console.log(`[XELOR MECANISME_SPECIALISE] ❌ Distance too large (${distance} > 6) - no swap`);
       return;
     }
 
-    // Effectuer l'échange de position
     console.log(`[XELOR MECANISME_SPECIALISE] 🔄 Swapping player with mechanism ${mechanismType} (${mechanismId})`);
 
-    // S'assurer d'avoir l'ID correct du joueur
     const playerId = playerEntity?.id;
     if (!playerId) {
       console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Player entity ID not found - cannot swap`);
@@ -337,26 +317,21 @@ export class XelorPassivesService {
     if (swapSuccess) {
       console.log(`[XELOR MECANISME_SPECIALISE] ✅ Swap successful!`);
 
-      // 🆕 Si le mécanisme est un cadran, mettre à jour les heures
       if (mechanismType === 'dial') {
-        this.dial.updateDialHoursAfterSwap(mechanismId, context);
+        this.dial.updateDialHoursAfterSwap(mechanismId);
       }
 
-      // 🔍 Vérifier que le mécanisme a bien bougé
       const mechanismAfterSwap = this.boardService.getMechanism(mechanismId);
       console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Mechanism position AFTER swap: (${mechanismAfterSwap?.position.x}, ${mechanismAfterSwap?.position.y})`);
       console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Expected mechanism position: (${playerPosition.x}, ${playerPosition.y})`);
 
-      // 🔍 Vérifier que le joueur a bien bougé
       const playerAfterSwap = this.boardService.player();
       console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Player position AFTER swap: (${playerAfterSwap?.position.x}, ${playerAfterSwap?.position.y})`);
       console.log(`[XELOR MECANISME_SPECIALISE] 🔍 Expected player position: (${actualMechanismPosition.x}, ${actualMechanismPosition.y})`);
 
-      // Mettre à jour le contexte avec la nouvelle position du joueur (= ancienne position du mécanisme)
       context.playerPosition = actualMechanismPosition;
       context.currentPosition = actualMechanismPosition;
 
-      // Mettre à jour aussi la position dans context.entities si nécessaire
       if (context.entities) {
         const playerEntityInContext = context.entities.find(e => e.type === 'player');
         if (playerEntityInContext) {
@@ -365,10 +340,8 @@ export class XelorPassivesService {
         }
       }
 
-      // 🆕 Appliquer le passif "Cours du temps" : +1 PA si Distorsion actif, sinon +1 PW
       this.applyCoursduTempsOnTransposition(context, 'mecanisme_specialise_swap');
 
-      // 🆕 Enregistrer le mouvement pour "Retour Spontané"
       this.xelorMovementService.recordMovement(
         context,
         'swap_mechanism',
@@ -377,7 +350,7 @@ export class XelorPassivesService {
         playerEntity?.name || 'Player',
         playerPosition,
         actualMechanismPosition,
-        sourceSpellId, // Pas de sort source spécifique
+        sourceSpellId,
         {
           id: mechanismId,
           type: 'mechanism',

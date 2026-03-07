@@ -4,9 +4,6 @@ import lombok.*;
 
 import java.util.List;
 
-/**
- * Simple DTO for Passive data - Frontend will handle all logic
- */
 @Data
 @Builder
 @NoArgsConstructor

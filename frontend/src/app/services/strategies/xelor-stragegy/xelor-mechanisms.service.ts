@@ -10,6 +10,7 @@ import {XelorCastValidatorService} from './xelor-cast-validator.service';
 import {getMechanismImagePath, getSpellMechanismType} from '../../../utils/mechanism-utils';
 import {XelorExecuteEffectService} from './xelor-execute-effect.service';
 import {XelorPassivesService} from './xelor-passives.service';
+import { getXelorState } from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
 
@@ -46,7 +47,6 @@ export class XelorMechanismsService {
   ): SimulationActionResult {
     console.log(`[XELOR MECHANISM] executeMechanismSpell for: ${spell.id} (${spell.name})`);
 
-    // 🆕 Traitement spécial pour "Retour Spontané"
     if (this.xelorCastValidator.isRetourSpontaneSpell(spell.id)) {
       console.log(`[XELOR] Executing Retour Spontané spell`);
       return this.xelorExecuteEffectService.executeRetourSpontane(spell, action, context);
@@ -76,7 +76,6 @@ export class XelorMechanismsService {
       imageUrl: imageUrl
     });
 
-    // Vérifier que la position cible est fournie
     if (!action.targetPosition) {
       console.error(`[XELOR] No target position for spell ${spell.name}`);
       return {
@@ -94,12 +93,10 @@ export class XelorMechanismsService {
 
     console.log(`[XELOR] Target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
-    // Gérer les mécanismes existants selon les règles
     this.handleExistingMechanisms(mechanismType, context);
 
     const sharedCharges = this.getInitialChargesForMechanismType(mechanismType, context);
 
-    // Créer le mécanisme
     const mechanism: Mechanism = {
       id: `${mechanismType}_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
       type: mechanismType,
@@ -110,23 +107,18 @@ export class XelorMechanismsService {
 
     console.log(`[XELOR] Mechanism object created:`, mechanism);
 
-    // Ajouter le mécanisme au plateau via le BoardService
     this.boardService.addMechanism(mechanism);
-    context.mechanismCharges?.set(mechanism.id, sharedCharges);
+    getXelorState(context, true).mechanismCharges?.set(mechanism.id, sharedCharges);
 
-    // Incrémenter le compteur de mécanismes posés ce tour
-    if (!context.mechanismsPlacedThisTurn) {
-      context.mechanismsPlacedThisTurn = new Map<string, number>();
+    if (!getXelorState(context, true).mechanismsPlacedThisTurn) {
+      getXelorState(context, true).mechanismsPlacedThisTurn = new Map<string, number>();
     }
-    const currentCount = context.mechanismsPlacedThisTurn.get(mechanismType) || 0;
-    context.mechanismsPlacedThisTurn.set(mechanismType, currentCount + 1);
+    const currentCount = getXelorState(context, true).mechanismsPlacedThisTurn.get(mechanismType) || 0;
+    getXelorState(context, true).mechanismsPlacedThisTurn.set(mechanismType, currentCount + 1);
     console.log(`[XELOR] 📊 ${mechanismType} posé ce tour: ${currentCount + 1}`);
 
     console.log(`[XELOR] Mechanism ${spell.name} placed at (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
-    // 🆕 Appliquer le passif "Mécanisme spécialisé" : échange de position avec le mécanisme
-    // IMPORTANT: Pour le cadran, le swap doit se faire APRÈS la téléportation sur l'heure 6
-    // Pour les autres mécanismes (rouage, sinistro, régulateur), le swap se fait immédiatement
     if (mechanismType !== 'dial') {
       this.xelorPassiveService.applyMecanismeSpecialiseSwap(
         mechanismType,
@@ -137,11 +129,8 @@ export class XelorMechanismsService {
       );
     }
 
-    // Si c'est un cadran, créer les 12 heures autour et téléporter le joueur sur l'heure 6
     if (mechanismType === 'dial') {
       const playerEntity = this.boardService.player();
-      // 🔧 Sauvegarder la position ORIGINALE du joueur avant toute manipulation
-      // Cette position sera utilisée pour calculer l'orientation du cadran (même après swap)
       const originalPlayerPosition = playerEntity?.position
         ? { x: playerEntity.position.x, y: playerEntity.position.y }
         : context.playerPosition
@@ -151,24 +140,19 @@ export class XelorMechanismsService {
       console.log(`[XELOR DIAL] 📍 Original player position (for dial orientation): (${originalPlayerPosition.x}, ${originalPlayerPosition.y})`);
       console.log(`[XELOR DIAL] 📍 Dial target position: (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
-      // Créer les 12 heures autour du cadran (position initiale de pose)
       this.dial.createDialHours(mechanism.id, action.targetPosition, originalPlayerPosition);
 
-      // Définir l'heure courante à 12 dans le BoardService
       this.boardService.setCurrentDialHour(12, mechanism.id);
 
-      // Téléporter le joueur sur l'heure 6
       const teleported = this.boardService.teleportPlayerToDialHour(6, mechanism.id);
       if (teleported) {
         console.log(`[XELOR] 🌀 Player automatically teleported to hour 6`);
 
-        // Mettre à jour le contexte avec la nouvelle position du joueur (heure 6)
         const hour6Position = this.boardService.getDialHourPosition(6, mechanism.id);
         if (hour6Position) {
           context.playerPosition = hour6Position;
           context.currentPosition = hour6Position;
 
-          // IMPORTANT: Mettre à jour aussi la position dans context.entities
           if (context.entities) {
             const playerEntityInContext = context.entities.find(e => e.type === 'player');
             if (playerEntityInContext) {
@@ -181,30 +165,23 @@ export class XelorMechanismsService {
         }
       }
 
-      // Initialiser l'heure courante dans le contexte
-      context.currentDialHour = 12;
-      context.dialId = mechanism.id;
-      context.dialFirstLoopCompleted = false; // Cadran fraîchement posé
+      getXelorState(context, true).currentDialHour = 12;
+      getXelorState(context, true).dialId = mechanism.id;
+      getXelorState(context, true).dialFirstLoopCompleted = false;
 
-      // 🆕 MAINTENANT appliquer le passif "Mécanisme spécialisé" pour le cadran
-      // Le joueur est sur l'heure 6, on échange avec le cadran (au centre)
-      // Le joueur va au centre, le cadran va à l'heure 6
       const swapApplied = this.xelorPassiveService.applyMecanismeSpecialiseSwapForDial(
         mechanism.id,
         context,
         spell.id
       );
 
-      // Si le swap a été appliqué, translater les heures vers la NOUVELLE position du cadran
       if (swapApplied) {
         const updatedMechanism = this.boardService.getMechanism(mechanism.id);
 
         if (updatedMechanism) {
           console.log(`[XELOR] 🔄 Swap applied - translating dial hours to new dial position: (${updatedMechanism.position.x}, ${updatedMechanism.position.y})`);
 
-          // 🔧 Utiliser updateDialHoursAfterSwap pour une simple translation
-          // Les heures gardent leur orientation originale et sont juste déplacées
-          this.dial.updateDialHoursAfterSwap(mechanism.id, context);
+          this.dial.updateDialHoursAfterSwap(mechanism.id);
 
           console.log(`[XELOR] ✅ Dial hours translated to new position (orientation preserved)`);
         }
@@ -236,7 +213,7 @@ export class XelorMechanismsService {
       return 0;
     }
 
-    return context.sharedMechanismCharges?.get(mechanismType) || 0;
+    return getXelorState(context, true).sharedMechanismCharges?.get(mechanismType) || 0;
   }
 
   /**
@@ -246,7 +223,7 @@ export class XelorMechanismsService {
     const rouages = this.boardService.getMechanismsByType('cog');
 
     rouages.forEach(rouage => {
-      const charges = context.mechanismCharges?.get(rouage.id) || 0;
+      const charges = getXelorState(context, true).mechanismCharges?.get(rouage.id) || 0;
       if (charges <= 0) {
         console.log(`[XELOR] ⚙️ Rouage (${rouage.id}) has 0 charge - no explosion`);
         return;
@@ -300,24 +277,17 @@ export class XelorMechanismsService {
           }
         };
 
-        if (!context.pendingTriggeredActions) {
-          context.pendingTriggeredActions = [];
-        }
-        context.pendingTriggeredActions.push(explosionResult);
-
-        // Le rouage explose puis perd toutes ses charges
-        context.mechanismCharges?.set(rouage.id, 0);
+        getXelorState(context, true).triggeredActions.push(explosionResult);
+        getXelorState(context, true).mechanismCharges?.set(rouage.id, 0);
         this.boardService.updateMechanismCharges(rouage.id, 0);
       }
     });
 
-    // Les charges de rouage sont partagées: après explosion elles reviennent à 0
-    context.sharedMechanismCharges?.set('cog', 0);
+    getXelorState(context, true).sharedMechanismCharges?.set('cog', 0);
   }
 
   /**
    * Vérifie si une position est dans la zone d'explosion du Rouage.
-   * Zone supportée aujourd'hui: CROSS2 (même ligne ou même colonne, distance <= 2)
    */
   private isPositionInRouageExplosionArea(target: { x: number; y: number }, rouagePosition: { x: number; y: number }): boolean {
     const deltaX = Math.abs(target.x - rouagePosition.x);
@@ -327,19 +297,18 @@ export class XelorMechanismsService {
       return (deltaX === 0 && deltaY <= 2) || (deltaY === 0 && deltaX <= 2);
     }
 
-    // Fallback "zone 2 autour" si d'autres aires sont ajoutées côté data
     return deltaX + deltaY <= 2;
   }
 
   /**
-   * Applique les soins du Sinistro (fin de tour)
+   * Applique les soins du Sinistro
    * Utilise le service centralisé ResourceRegenerationService pour la régénération de PA
    */
   public applySinistroHealing(context: SimulationContext): void {
     const sinistros = this.boardService.getMechanismsByType('sinistro');
 
     sinistros.forEach(sinistro => {
-      const charges = context.mechanismCharges?.get(sinistro.id) || 0;
+      const charges = getXelorState(context, true).mechanismCharges?.get(sinistro.id) || 0;
 
       if (charges > 0) {
         console.log(`[XELOR] 💚 Sinistro (${sinistro.id}) heals adjacent allies (${charges} charges)`);
@@ -348,7 +317,6 @@ export class XelorMechanismsService {
       }
     });
 
-    // Déléguer la régénération de PA au service centralisé
     this.regenerationService.applySinistroRegeneration(context);
   }
 
@@ -357,8 +325,8 @@ export class XelorMechanismsService {
    * Règles:
    * - Cadran: 1 seul max, remplace l'ancien (supprime aussi les heures du cadran)
    * - Régulateur: 1 seul max, remplace l'ancien
-   * - Rouage: 1 max par défaut, 2 max avec passif "Rémanence" (supprime le plus ancien si limite atteinte)
-   * - Sinistro: 1 max par défaut, 2 max avec passif "Rémanence" (supprime le plus ancien si limite atteinte)
+   * - Rouage: 1 max par défaut, 2 max avec passif
+   * - Sinistro: 1 max par défaut, 2 max avec passif
    */
   private handleExistingMechanisms(mechanismType: 'cog' | 'sinistro' | 'dial' | 'regulateur', context: SimulationContext): void {
     const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
@@ -367,27 +335,22 @@ export class XelorMechanismsService {
     console.log(`[XELOR] Handling existing ${mechanismType}s: ${existingMechanisms.length} existing, max allowed: ${maxAllowed}`);
 
     if (existingMechanisms.length >= maxAllowed) {
-      // Supprimer le(s) mécanisme(s) le(s) plus ancien(s) jusqu'à avoir de la place
       const toRemove = existingMechanisms.length - maxAllowed + 1;
 
       for (let i = 0; i < toRemove; i++) {
         const mechanismToRemove = existingMechanisms[i];
         console.log(`[XELOR] 🗑️ Removing old ${mechanismType}: ${mechanismToRemove.id}`);
 
-        // Si c'est un cadran, supprimer aussi les heures associées et réinitialiser l'état
         if (mechanismType === 'dial') {
           this.boardService.removeDialHoursForDial(mechanismToRemove.id);
           this.boardService.resetDialState();
-          context.dialId = undefined;
-          context.currentDialHour = undefined;
+          getXelorState(context, true).dialId = undefined;
+          getXelorState(context, true).currentDialHour = undefined;
           console.log(`[XELOR] 🗑️ Removed dial hours and reset dial state`);
         }
 
-        // Supprimer le mécanisme du plateau
         this.boardService.removeMechanism(mechanismToRemove.id);
-
-        // Supprimer les charges du contexte
-        context.mechanismCharges?.delete(mechanismToRemove.id);
+        getXelorState(context, true).mechanismCharges?.delete(mechanismToRemove.id);
       }
     }
   }
@@ -402,13 +365,13 @@ export class XelorMechanismsService {
 
     switch (mechanismType) {
       case 'dial':
-        return 1; // Toujours 1 seul cadran
+        return 1;
       case 'regulateur':
-        return 1; // Toujours 1 seul régulateur
+        return 1;
       case 'cog':
-        return hasRemanence ? 2 : 1; // 2 rouages avec Rémanence, sinon 1
+        return hasRemanence ? 2 : 1;
       case 'sinistro':
-        return hasRemanence ? 2 : 1; // 2 sinistros avec Rémanence, sinon 1
+        return hasRemanence ? 2 : 1;
       default:
         return 1;
     }

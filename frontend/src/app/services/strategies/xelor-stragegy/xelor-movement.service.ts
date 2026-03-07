@@ -27,6 +27,7 @@ export class XelorMovementService {
    * @param toPosition Position après le mouvement
    * @param sourceSpellId ID du sort source (optionnel)
    * @param swapPartner Informations sur le partenaire de swap (optionnel)
+   * @param sourceActionId id de l'action source
    */
   public recordMovement(
     context: SimulationContext,
@@ -104,9 +105,7 @@ export class XelorMovementService {
    * Initialise l'historique des mouvements si nécessaire
    */
   private initMovementHistory(context: SimulationContext): void {
-    if (!context.movementHistory) {
-      context.movementHistory = [];
-    }
+    context.movementHistory ??= [];
   }
 
   /**
@@ -132,7 +131,6 @@ export class XelorMovementService {
 
     const partner = movement.swapPartner;
 
-    // Cas 1: Swap entre deux entités
     if (movement.targetType === 'entity' && partner.type === 'entity') {
       const entity1 = this.boardService.getEntity(movement.targetId);
       const entity2 = this.boardService.getEntity(partner.id);
@@ -142,10 +140,8 @@ export class XelorMovementService {
         return false;
       }
 
-      // Ré-échanger les positions
       this.boardService.swapEntityPositions(movement.targetId, partner.id);
 
-      // Mettre à jour le contexte si l'un est le joueur
       if (entity1.type === 'player') {
         context.playerPosition = { ...movement.fromPosition };
         context.currentPosition = { ...movement.fromPosition };
@@ -155,7 +151,6 @@ export class XelorMovementService {
         context.currentPosition = { ...partner.fromPosition };
       }
 
-      // Mettre à jour context.entities
       this.updateEntityPositionInContext(context, movement.targetId, movement.fromPosition);
       this.updateEntityPositionInContext(context, partner.id, partner.fromPosition);
 
@@ -163,7 +158,6 @@ export class XelorMovementService {
       return true;
     }
 
-    // Cas 2: Swap entre entité et mécanisme
     if ((movement.targetType === 'entity' && partner.type === 'mechanism') ||
       (movement.targetType === 'mechanism' && partner.type === 'entity')) {
 
@@ -178,31 +172,25 @@ export class XelorMovementService {
         return false;
       }
 
-      // Ré-échanger les positions
       this.boardService.swapEntityWithMechanism(entityId, mechanismId);
 
-      // Si c'est un cadran, mettre à jour les heures
       if (mechanism.type === 'dial') {
-        this.dial.updateDialHoursAfterSwap(mechanismId, context);
+        this.dial.updateDialHoursAfterSwap(mechanismId);
       }
 
-      // Déterminer les positions d'origine
       const entityOriginalPos = movement.targetType === 'entity' ? movement.fromPosition : partner.fromPosition;
 
-      // Mettre à jour le contexte si c'est le joueur
       if (entity.type === 'player') {
         context.playerPosition = { ...entityOriginalPos };
         context.currentPosition = { ...entityOriginalPos };
       }
 
-      // Mettre à jour context.entities
       this.updateEntityPositionInContext(context, entityId, entityOriginalPos);
 
       console.log(`[XELOR RETOUR_SPONTANE] ✅ Entity/Mechanism swap reverted: ${entity.name} ↔ ${mechanism.type}`);
       return true;
     }
 
-    // Cas 3: Swap entre deux mécanismes
     if (movement.targetType === 'mechanism' && partner.type === 'mechanism') {
       const mechanism1 = this.boardService.getMechanism(movement.targetId);
       const mechanism2 = this.boardService.getMechanism(partner.id);
@@ -212,15 +200,13 @@ export class XelorMovementService {
         return false;
       }
 
-      // Ré-échanger les positions
       this.boardService.swapMechanismPositions(movement.targetId, partner.id);
 
-      // Mettre à jour les heures des cadrans si nécessaire
       if (mechanism1.type === 'dial') {
-        this.dial.updateDialHoursAfterSwap(movement.targetId, context);
+        this.dial.updateDialHoursAfterSwap(movement.targetId);
       }
       if (mechanism2.type === 'dial') {
-        this.dial.updateDialHoursAfterSwap(partner.id, context);
+        this.dial.updateDialHoursAfterSwap(partner.id);
       }
 
       console.log(`[XELOR RETOUR_SPONTANE] ✅ Mechanism swap reverted: ${mechanism1.type} ↔ ${mechanism2.type}`);
@@ -237,48 +223,39 @@ export class XelorMovementService {
     console.log(`[XELOR RETOUR_SPONTANE] 🔄 Reverting simple ${movement.type} movement`);
 
     if (movement.targetType === 'entity') {
-      // Trouver l'entité
       const entity = this.boardService.getEntity(movement.targetId);
       if (!entity) {
         console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Entity ${movement.targetId} not found`);
         return false;
       }
 
-      // Vérifier que l'entité est bien à la position "toPosition"
       if (entity.position.x !== movement.toPosition.x || entity.position.y !== movement.toPosition.y) {
         console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Entity position mismatch: expected (${movement.toPosition.x}, ${movement.toPosition.y}), found (${entity.position.x}, ${entity.position.y})`);
-        // On continue quand même, l'entité a peut-être bougé entre temps
       }
 
-      // Remettre l'entité à sa position d'origine
       this.boardService.updateEntityPosition(movement.targetId, movement.fromPosition);
 
-      // Mettre à jour le contexte si c'est le joueur
       if (entity.type === 'player') {
         context.playerPosition = { ...movement.fromPosition };
         context.currentPosition = { ...movement.fromPosition };
       }
 
-      // Mettre à jour context.entities
       this.updateEntityPositionInContext(context, movement.targetId, movement.fromPosition);
 
       console.log(`[XELOR RETOUR_SPONTANE] ✅ Entity ${entity.name} returned to (${movement.fromPosition.x}, ${movement.fromPosition.y})`);
       return true;
 
     } else if (movement.targetType === 'mechanism') {
-      // Trouver le mécanisme
       const mechanism = this.boardService.getMechanism(movement.targetId);
       if (!mechanism) {
         console.warn(`[XELOR RETOUR_SPONTANE] ⚠️ Mechanism ${movement.targetId} not found`);
         return false;
       }
 
-      // Remettre le mécanisme à sa position d'origine
       this.boardService.updateMechanismPosition(movement.targetId, movement.fromPosition);
 
-      // Si c'est un cadran, mettre à jour les heures
       if (mechanism.type === 'dial') {
-        this.dial.updateDialHoursAfterSwap(movement.targetId, context);
+        this.dial.updateDialHoursAfterSwap(movement.targetId);
       }
 
       console.log(`[XELOR RETOUR_SPONTANE] ✅ Mechanism ${mechanism.type} returned to (${movement.fromPosition.x}, ${movement.fromPosition.y})`);
