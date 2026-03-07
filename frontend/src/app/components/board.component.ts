@@ -1265,48 +1265,15 @@ export class BoardComponent {
       this.logFinalSimulationSummaryFromCache(timeline.steps.length);
     }
 
-    // Afficher les résultats
     const stepResult = this.simulationService.getStepResult(realStepIndex);
     if (stepResult) {
-      const actionResults = stepResult.actions.filter((a: any) => a.success);
-      if (actionResults.length > 0) {
-        const paUsed = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
-        const wpUsed = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
-        const paRegenerated = actionResults.reduce((sum: number, a: any) => sum + (a.paRegenerated || 0), 0);
-        const wpRegenerated = actionResults.reduce((sum: number, a: any) => sum + (a.wpRegenerated || 0), 0);
-
-        console.log('📊 Résultats du step:', {
-          actionsReussies: actionResults.length,
-          paUtilises: paUsed,
-          wpUtilises: wpUsed,
-          degats: actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0)
+      const contextAfter = stepResult.contextAfter;
+      if (contextAfter) {
+        console.log('📈 Ressources restantes:', {
+          PA: contextAfter.availablePa,
+          WP: contextAfter.availablePw,
+          MP: contextAfter.availableMp
         });
-
-        // 🆕 Logs détaillés pour la régénération de PA/PW
-        if (paRegenerated > 0 || wpRegenerated > 0) {
-          console.log('');
-          console.log('💫 ═══════════════════════════════════════════════════');
-          console.log('💫 RÉGÉNÉRATION DE RESSOURCES');
-          console.log('💫 ═══════════════════════════════════════════════════');
-          if (paRegenerated > 0) {
-            console.log(`💫 ⚡ PA régénérés: +${paRegenerated}`);
-          }
-          if (wpRegenerated > 0) {
-            console.log(`💫 🔮 PW régénérés: +${wpRegenerated}`);
-          }
-          console.log('💫 ═══════════════════════════════════════════════════');
-        }
-
-        // Log du contexte après le step (ressources restantes)
-        const contextAfter = stepResult.contextAfter;
-        if (contextAfter) {
-          console.log('');
-          console.log('📈 État des ressources après le step:', {
-            paRestants: contextAfter.availablePa,
-            wpRestants: contextAfter.availablePw,
-            mpRestants: contextAfter.availableMp
-          });
-        }
       }
     }
 
@@ -1319,57 +1286,23 @@ export class BoardComponent {
    * Utilisé pour le mode étape par étape lorsqu'on atteint le dernier step
    */
   private logFinalSimulationSummaryFromCache(totalSteps: number): void {
-    let totalDamage = 0;
-    let totalPaUsed = 0;
-    let totalWpUsed = 0;
-    let totalMpUsed = 0;
-    let stepsExecuted = 0;
-
-    for (let stepIndex = 0; stepIndex < totalSteps; stepIndex++) {
-      const stepResult = this.simulationService.getStepResult(stepIndex);
-      if (!stepResult?.success) {
-        continue;
-      }
-
-      stepsExecuted++;
-      const actionResults = stepResult.actions.filter((a: any) => a.success);
-      totalDamage += actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0);
-      totalPaUsed += actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
-      totalWpUsed += actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
-      totalMpUsed += actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
-    }
+    const stats = this.simulationService.getCacheStats();
+    if (!stats) return;
 
     console.log('');
     console.log('═══════════════════════════════════════════════════════');
     console.log('🎉 SIMULATION ÉTAPE PAR ÉTAPE TERMINÉE');
     console.log('═══════════════════════════════════════════════════════');
     console.log('📊 Résultats finaux:');
-    console.log(`  ✅ Steps exécutés: ${stepsExecuted}/${totalSteps}`);
-    console.log(`  💥 Dégâts totaux: ${totalDamage}`);
-    console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
-    console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
-    console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
+    console.log(`  ✅ Steps exécutés: ${stats.stepsExecuted}/${totalSteps}`);
+    console.log(`  💥 Dégâts totaux: ${stats.totalDamage}`);
+    if (stats.totalHeal > 0)   console.log(`  💚 Soins totaux: ${stats.totalHeal}`);
+    if (stats.totalShield > 0) console.log(`  🛡️ Armure totale: ${stats.totalShield}`);
+    console.log(`  ⚡ PA utilisés: ${stats.totalPaUsed}`);
+    console.log(`  🔮 WP utilisés: ${stats.totalPwUsed}`);
+    console.log(`  🏃 MP utilisés: ${stats.totalMpUsed}`);
 
-    const regenSummary = this.regenerationService.getRegenerationSummary();
-    if (regenSummary.totalPaRegenerated > 0 || regenSummary.totalPwRegenerated > 0) {
-      console.log('');
-      console.log('💫 RÉGÉNÉRATION TOTALE (service centralisé):');
-      console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
-      console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
-      console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
-      console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
-
-      if (regenSummary.bySource.size > 0) {
-        console.log('');
-        console.log('💫 Détail par source:');
-        regenSummary.bySource.forEach((stats, source) => {
-          const parts = [];
-          if (stats.pa > 0) parts.push(`+${stats.pa} PA`);
-          if (stats.pw > 0) parts.push(`+${stats.pw} PW`);
-          console.log(`  💫   • ${source}: ${parts.join(', ')}`);
-        });
-      }
-    }
+    this.logRegenerationSummary(stats.totalPaUsed, stats.totalPwUsed);
 
     console.log('═══════════════════════════════════════════════════════');
     console.log('');
@@ -1559,15 +1492,6 @@ export class BoardComponent {
     // Réinitialiser le service de simulation
     this.simulationService.clearSimulation();
 
-    // Variables pour suivre la simulation
-    let totalDamage = 0;
-    let totalPaUsed = 0;
-    let totalWpUsed = 0;
-    let totalMpUsed = 0;
-    let totalPaRegenerated = 0;
-    let totalWpRegenerated = 0;
-    let stepsExecuted = 0;
-
     // Exécuter chaque step un par un
     for (let stepIndex = 0; stepIndex < timeline.steps.length; stepIndex++) {
       const step = timeline.steps[stepIndex];
@@ -1580,75 +1504,28 @@ export class BoardComponent {
       const success = await this.simulationService.executeStep(build, timeline, stepIndex);
 
       if (!success) {
-        // ❌ Le step a échoué : NE PAS mettre à jour le board
-        console.error(`❌ Step ${stepIndex + 1} échoué`);
-
-        // Récupérer le message d'erreur
         const stepResult = this.simulationService.getStepResult(stepIndex);
         const failedAction = stepResult?.actions.find((a: any) => !a.success);
         const errorMessage = failedAction?.message || 'Action impossible à exécuter';
 
-        console.log('🚫 Board non mis à jour pour ce step');
-        console.log('═══════════════════════════════════════════════════════');
+        console.error(`❌ Step ${stepIndex + 1} échoué`);
         console.log(`❌ Simulation arrêtée au step ${stepIndex + 1}`);
-        console.log('═══════════════════════════════════════════════════════');
 
         alert(`⚠️ Simulation arrêtée au step ${stepIndex + 1}:\n${errorMessage}`);
         return;
       }
 
-      // ✅ Le step a réussi : mettre à jour le board
       console.log(`✅ Step ${stepIndex + 1} exécuté avec succès`);
 
-      // Récupérer les résultats du step
+      // Log du contexte après le step (ressources restantes)
       const stepResult = this.simulationService.getStepResult(stepIndex);
       if (stepResult) {
-        const actionResults = stepResult.actions.filter((a: any) => a.success);
-
-        // Calculer les totaux
-        const stepDamage = actionResults.reduce((sum: number, a: any) => sum + (a.damage || 0), 0);
-        const stepPa = actionResults.reduce((sum: number, a: any) => sum + (a.paCost || 0), 0);
-        const stepWp = actionResults.reduce((sum: number, a: any) => sum + (a.pwCost || 0), 0);
-        const stepMp = actionResults.reduce((sum: number, a: any) => sum + (a.mpCost || 0), 0);
-        const stepPaRegen = actionResults.reduce((sum: number, a: any) => sum + (a.paRegenerated || 0), 0);
-        const stepWpRegen = actionResults.reduce((sum: number, a: any) => sum + (a.wpRegenerated || 0), 0);
-
-        totalDamage += stepDamage;
-        totalPaUsed += stepPa;
-        totalWpUsed += stepWp;
-        totalMpUsed += stepMp;
-        totalPaRegenerated += stepPaRegen;
-        totalWpRegenerated += stepWpRegen;
-
-        console.log('📊 Résultats du step:', {
-          degats: stepDamage,
-          PA: stepPa,
-          WP: stepWp,
-          MP: stepMp
-        });
-
-        // 🆕 Logs détaillés pour la régénération de PA/PW
-        if (stepPaRegen > 0 || stepWpRegen > 0) {
-          console.log('');
-          console.log('💫 ═══════════════════════════════════════════════════');
-          console.log(`💫 RÉGÉNÉRATION AU STEP ${stepIndex + 1}`);
-          console.log('💫 ═══════════════════════════════════════════════════');
-          if (stepPaRegen > 0) {
-            console.log(`💫 ⚡ PA régénérés: +${stepPaRegen}`);
-          }
-          if (stepWpRegen > 0) {
-            console.log(`💫 🔮 PW régénérés: +${stepWpRegen}`);
-          }
-          console.log('💫 ═══════════════════════════════════════════════════');
-        }
-
-        // Log du contexte après le step (ressources restantes)
         const contextAfter = stepResult.contextAfter;
         if (contextAfter) {
-          console.log('📈 État des ressources après le step:', {
-            paRestants: contextAfter.availablePa,
-            wpRestants: contextAfter.availablePw,
-            mpRestants: contextAfter.availableMp
+          console.log('📈 Ressources restantes:', {
+            PA: contextAfter.availablePa,
+            WP: contextAfter.availablePw,
+            MP: contextAfter.availableMp
           });
         }
       }
@@ -1663,61 +1540,57 @@ export class BoardComponent {
 
       // Sauvegarder l'état du board après ce step
       this.boardService.pushState();
-      console.log('💾 Board mis à jour et état sauvegardé');
-
-      stepsExecuted++;
 
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    console.log('');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🎉 SIMULATION COMPLÈTE TERMINÉE AVEC SUCCÈS');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('📊 Résultats finaux:');
-    console.log(`  ✅ Steps exécutés: ${stepsExecuted}/${timeline.steps.length}`);
-    console.log(`  💥 Dégâts totaux: ${totalDamage}`);
-    console.log(`  ⚡ PA utilisés: ${totalPaUsed}`);
-    console.log(`  🔮 WP utilisés: ${totalWpUsed}`);
-    console.log(`  🏃 MP utilisés: ${totalMpUsed}`);
-
-    // 🆕 Afficher le résumé de régénération depuis le service centralisé
-    const regenSummary = this.regenerationService.getRegenerationSummary();
-    if (regenSummary.totalPaRegenerated > 0 || regenSummary.totalPwRegenerated > 0) {
+    // Récapitulatif final via le cache centralisé
+    const stats = this.simulationService.getCacheStats();
+    if (stats) {
       console.log('');
-      console.log('💫 RÉGÉNÉRATION TOTALE (service centralisé):');
-      console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
-      console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
-      console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
-      console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('🎉 SIMULATION COMPLÈTE TERMINÉE AVEC SUCCÈS');
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('📊 Résultats finaux:');
+      console.log(`  ✅ Steps exécutés: ${stats.stepsExecuted}/${timeline.steps.length}`);
+      console.log(`  💥 Dégâts totaux: ${stats.totalDamage}`);
+      if (stats.totalHeal > 0)   console.log(`  💚 Soins totaux: ${stats.totalHeal}`);
+      if (stats.totalShield > 0) console.log(`  🛡️ Armure totale: ${stats.totalShield}`);
+      console.log(`  ⚡ PA utilisés: ${stats.totalPaUsed}`);
+      console.log(`  🔮 WP utilisés: ${stats.totalPwUsed}`);
+      console.log(`  🏃 MP utilisés: ${stats.totalMpUsed}`);
 
-      // Détail par source
-      if (regenSummary.bySource.size > 0) {
-        console.log('');
-        console.log('💫 Détail par source:');
-        regenSummary.bySource.forEach((stats, source) => {
-          const parts = [];
-          if (stats.pa > 0) parts.push(`+${stats.pa} PA`);
-          if (stats.pw > 0) parts.push(`+${stats.pw} PW`);
-          console.log(`  💫   • ${source}: ${parts.join(', ')}`);
-        });
-      }
-    } else if (totalPaRegenerated > 0 || totalWpRegenerated > 0) {
-      // Fallback sur les compteurs locaux si le service n'a pas d'événements
+      this.logRegenerationSummary(stats.totalPaUsed, stats.totalPwUsed);
+
+      console.log('═══════════════════════════════════════════════════════');
       console.log('');
-      console.log('💫 RÉGÉNÉRATION TOTALE:');
-      if (totalPaRegenerated > 0) {
-        console.log(`  💫 ⚡ PA régénérés: +${totalPaRegenerated}`);
-      }
-      if (totalWpRegenerated > 0) {
-        console.log(`  💫 🔮 PW régénérés: +${totalWpRegenerated}`);
-      }
-      console.log(`  📈 Bilan net PA: ${totalPaRegenerated - totalPaUsed}`);
-      console.log(`  📈 Bilan net PW: ${totalWpRegenerated - totalWpUsed}`);
     }
+  }
 
-    console.log('═══════════════════════════════════════════════════════');
+  /**
+   * Affiche le résumé de régénération de ressources depuis le service centralisé
+   */
+  private logRegenerationSummary(totalPaUsed: number, totalWpUsed: number): void {
+    const regenSummary = this.regenerationService.getRegenerationSummary();
+    if (regenSummary.totalPaRegenerated <= 0 && regenSummary.totalPwRegenerated <= 0) return;
+
     console.log('');
+    console.log('💫 RÉGÉNÉRATION TOTALE:');
+    console.log(`  💫 ⚡ PA régénérés: +${regenSummary.totalPaRegenerated}`);
+    console.log(`  💫 🔮 PW régénérés: +${regenSummary.totalPwRegenerated}`);
+    console.log(`  📈 Bilan net PA: ${regenSummary.totalPaRegenerated - totalPaUsed}`);
+    console.log(`  📈 Bilan net PW: ${regenSummary.totalPwRegenerated - totalWpUsed}`);
+
+    if (regenSummary.bySource.size > 0) {
+      console.log('');
+      console.log('💫 Détail par source:');
+      regenSummary.bySource.forEach((sourceStats, source) => {
+        const parts: string[] = [];
+        if (sourceStats.pa > 0) parts.push(`+${sourceStats.pa} PA`);
+        if (sourceStats.pw > 0) parts.push(`+${sourceStats.pw} PW`);
+        console.log(`  💫   • ${source}: ${parts.join(', ')}`);
+      });
+    }
   }
 
   /**

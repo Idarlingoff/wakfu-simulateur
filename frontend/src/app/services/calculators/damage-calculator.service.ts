@@ -1,10 +1,10 @@
-/**
- * Damage Calculator Service
- * Calcule les dégâts basés sur les stats du build et les effets des sorts
- * Toute la logique de calcul est gérée côté frontend
- */
-
 import { Injectable } from '@angular/core';
+import {
+  HealComputationResult,
+  Orientation,
+  ShieldComputationResult,
+  WakfuCombatCalculator
+} from '../../domain/combat-resolution';
 
 export interface DamageCalculationParams {
   baseDamage: number;
@@ -18,6 +18,35 @@ export interface DamageCalculationParams {
   isCritical?: boolean;
   isBackAttack?: boolean;
   elementalMultiplier?: number;
+  masteryApplicableSum?: number;
+  orientation?: Orientation;
+  fixedDamage?: number;
+  barrier?: number;
+  isParried?: boolean;
+  resistanceBrut?: number;
+}
+
+export interface HealCalculationParams {
+  baseHeal: number;
+  masteryApplicableSum: number;
+  healPerformedBonusSum?: number;
+  healReceivedBonusSum?: number;
+  healResistancePercent?: number;
+  incurablePercent?: number;
+  critRate?: number;
+  isCritical?: boolean;
+}
+
+export interface ShieldCalculationParams {
+  baseShield: number;
+  armorGivenBonusSum?: number;
+  armorReceivedBonusSum?: number;
+  friablePercent?: number;
+  critRate?: number;
+  isCritical?: boolean;
+  currentArmor?: number;
+  maxHp?: number;
+  isInvocation?: boolean;
 }
 
 export interface DamageResult {
@@ -41,130 +70,134 @@ export interface DamageResult {
 })
 export class DamageCalculatorService {
 
-  constructor() {}
+  private readonly calculator = new WakfuCombatCalculator();
 
-  /**
-   * Calcule les dégâts d'un sort
-   */
   calculateDamage(params: DamageCalculationParams): DamageResult {
-    // 1. Dégâts de base
-    const baseDamage = params.baseDamage;
-
-    // 2. Bonus de maîtrise
-    let mastery = params.masteryPrimary;
-    if (params.isBackAttack && params.backMastery) {
-      mastery += params.backMastery;
-    } else if (params.masterySecondary) {
-      mastery += params.masterySecondary * 0.5; // Maîtrise secondaire compte pour 50%
-    }
-    const masteryBonus = this.calculateMasteryBonus(baseDamage, mastery);
-
-    // 3. Bonus de dommages infligés
-    const damageInflictBonus = this.calculateInflictBonus(baseDamage + masteryBonus, params.dommageInflict);
-
-    // 4. Dégâts normaux (avant crit)
-    const normalDamage = baseDamage + masteryBonus + damageInflictBonus;
-
-    // 5. Dégâts critiques
-    const critBonus = this.calculateCritBonus(normalDamage, params.critMastery);
-    const criticalDamage = normalDamage + critBonus;
-
-    // 6. Déterminer si c'est un coup critique
     const isCritical = params.isCritical ?? this.rollCritical(params.critRate);
 
-    // 7. Bonus d'attaque de dos
-    const backAttackBonus = params.isBackAttack ? normalDamage * 0.25 : 0;
+    const normalComputation = this.computeDamage(params, false);
+    const criticalComputation = this.computeDamage(params, true);
+    const finalComputation = isCritical ? criticalComputation : normalComputation;
 
-    // 8. Bonus élémentaire
-    const elementalBonus = params.elementalMultiplier
-      ? normalDamage * (params.elementalMultiplier - 1)
-      : 0;
-
-    // 9. Réduction par résistance
-    const totalDamage = isCritical ? criticalDamage : normalDamage;
-    const resistanceReduction = this.calculateResistanceReduction(totalDamage, params.resistance);
-
-    // 10. Dégâts finaux
-    const finalDamage = Math.max(1, Math.round(totalDamage + backAttackBonus + elementalBonus - resistanceReduction));
+    const baseDamage = params.baseDamage;
+    const masteryBonus = Math.max(0, Math.round(baseDamage * (finalComputation.breakdown.masteryMultiplier - 1)));
+    const damageInflictBonus = Math.max(
+      0,
+      Math.round(
+        baseDamage *
+        finalComputation.breakdown.masteryMultiplier *
+        (finalComputation.breakdown.inflictedDamageMultiplier - 1)
+      )
+    );
+    const critBonus = Math.max(
+      0,
+      Math.round(
+        baseDamage *
+        finalComputation.breakdown.masteryMultiplier *
+        finalComputation.breakdown.inflictedDamageMultiplier *
+        (finalComputation.breakdown.criticalMultiplier - 1)
+      )
+    );
 
     return {
-      normalDamage: Math.round(normalDamage),
-      criticalDamage: Math.round(criticalDamage),
-      finalDamage,
+      normalDamage: normalComputation.value,
+      criticalDamage: criticalComputation.value,
+      finalDamage: finalComputation.value,
       isCritical,
       breakdown: {
         baseDamage: Math.round(baseDamage),
-        masteryBonus: Math.round(masteryBonus),
-        damageInflictBonus: Math.round(damageInflictBonus),
-        critBonus: Math.round(critBonus),
-        backAttackBonus: Math.round(backAttackBonus),
-        elementalBonus: Math.round(elementalBonus),
-        resistanceReduction: Math.round(resistanceReduction)
+        masteryBonus,
+        damageInflictBonus,
+        critBonus,
+        backAttackBonus: finalComputation.breakdown.orientationBonus > 1 ? Math.round(baseDamage * (finalComputation.breakdown.orientationBonus - 1)) : 0,
+        elementalBonus: 0,
+        resistanceReduction: Math.round(
+          baseDamage *
+          finalComputation.breakdown.masteryMultiplier *
+          finalComputation.breakdown.inflictedDamageMultiplier *
+          (1 - finalComputation.breakdown.resistanceMultiplier)
+        )
       }
     };
   }
 
-  /**
-   * Calcule le bonus de maîtrise
-   * Formule Wakfu: Mastery / 100 * BaseDamage
-   */
-  private calculateMasteryBonus(baseDamage: number, mastery: number): number {
-    return (mastery / 100) * baseDamage;
+  calculateDirectHeal(params: HealCalculationParams): HealComputationResult {
+    const isCritical = params.isCritical ?? this.rollCritical(params.critRate ?? 0);
+
+    return this.calculator.calculateDirectHeal({
+      baseValue: params.baseHeal,
+      applicableMasterySum: params.masteryApplicableSum,
+      healPerformedBonusSum: params.healPerformedBonusSum ?? 0,
+      healReceivedBonusSum: params.healReceivedBonusSum ?? 0,
+      healResistancePercent: params.healResistancePercent ?? 0,
+      incurablePercent: params.incurablePercent ?? 0,
+      isCritical
+    });
   }
 
-  /**
-   * Calcule le bonus de dommages infligés
-   * Formule: (DamageInflict / 100) * CurrentDamage
-   */
-  private calculateInflictBonus(currentDamage: number, damageInflict: number): number {
-    return (damageInflict / 100) * currentDamage;
+  calculateShield(params: ShieldCalculationParams): ShieldComputationResult {
+    const isCritical = params.isCritical ?? this.rollCritical(params.critRate ?? 0);
+    return this.calculator.calculateShield({
+      baseValue: params.baseShield,
+      armorGivenBonusSum: params.armorGivenBonusSum ?? 0,
+      armorReceivedBonusSum: params.armorReceivedBonusSum ?? 0,
+      friablePercent: params.friablePercent ?? 0,
+      isCritical,
+      currentArmor: params.currentArmor,
+      maxHp: params.maxHp,
+      isInvocation: params.isInvocation
+    });
   }
 
-  /**
-   * Calcule le bonus de coup critique
-   * Formule: (CritMastery / 100) * CurrentDamage
-   */
-  private calculateCritBonus(currentDamage: number, critMastery: number): number {
-    return (critMastery / 100) * currentDamage;
+  calculateNextHealResistance(previousHealResistancePercent: number, receivedHealValue: number, targetMaxHp: number): number {
+    return this.calculator.calculateNextHealResistance(previousHealResistancePercent, receivedHealValue, targetMaxHp);
   }
 
-  /**
-   * Calcule la réduction par résistance
-   * Formule: (Resistance / 100) * CurrentDamage
-   */
-  private calculateResistanceReduction(currentDamage: number, resistance: number): number {
-    return (resistance / 100) * currentDamage;
-  }
-
-  /**
-   * Tire un coup critique basé sur le taux de critique
-   */
-  private rollCritical(critRate: number): boolean {
-    return Math.random() * 100 < critRate;
-  }
-
-  /**
-   * Calcule les dégâts moyens (sans RNG de critique)
-   */
   calculateAverageDamage(params: DamageCalculationParams): number {
     const normalResult = this.calculateDamage({ ...params, isCritical: false });
     const critResult = this.calculateDamage({ ...params, isCritical: true });
 
-    const critChance = params.critRate / 100;
-    return Math.round(
-      normalResult.finalDamage * (1 - critChance) +
-      critResult.finalDamage * critChance
-    );
+    const critChance = (params.critRate ?? 0) / 100;
+    return Math.round(normalResult.finalDamage * (1 - critChance) + critResult.finalDamage * critChance);
   }
 
-  /**
-   * Calcule le DPS (Damage Per Second) basé sur les PA et le cooldown
-   */
-  calculateDPS(damage: number, paCost: number, cooldown: number = 0): number {
-    // Assume 1 turn = 1 second pour simplification
-    // DPS = Damage / (PA_Cost + Cooldown)
-    const turnsPerCast = paCost + cooldown;
-    return turnsPerCast > 0 ? damage / turnsPerCast : 0;
+  private computeDamage(params: DamageCalculationParams, isCritical: boolean) {
+    const masteryApplicableSum =
+      params.masteryApplicableSum ??
+      this.deriveLegacyMastery(params, isCritical);
+
+    const orientation = params.orientation ?? (params.isBackAttack ? 'back' : 'front');
+
+    return this.calculator.calculateDirectDamage({
+      baseValue: params.baseDamage,
+      applicableMasterySum: masteryApplicableSum,
+      damageInflictedBonusSum: params.dommageInflict,
+      resistancePercent: params.resistance,
+      resistanceBrut: params.resistanceBrut,
+      isCritical,
+      orientation,
+      fixedDamage: params.fixedDamage,
+      barrier: params.barrier,
+      isParried: params.isParried
+    });
+  }
+
+  private deriveLegacyMastery(params: DamageCalculationParams, isCritical: boolean): number {
+    let mastery = params.masteryPrimary + (params.masterySecondary ?? 0);
+
+    if (params.isBackAttack) {
+      mastery += params.backMastery ?? 0;
+    }
+
+    if (isCritical) {
+      mastery += params.critMastery ?? 0;
+    }
+
+    return mastery;
+  }
+
+  private rollCritical(critRate: number): boolean {
+    return Math.random() * 100 < critRate;
   }
 }
 

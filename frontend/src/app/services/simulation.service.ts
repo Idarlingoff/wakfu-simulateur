@@ -8,6 +8,23 @@ import { TimelineService } from './timeline.service';
 import { Build } from '../models/build.model';
 import { Timeline } from '../models/timeline.model';
 
+export interface SimulationStats {
+  totalActions: number;
+  successfulActions: number;
+  failedActions: number;
+  totalPaUsed: number;
+  totalPwUsed: number;
+  totalMpUsed: number;
+  totalDamage: number;
+  totalHeal: number;
+  totalShield: number;
+  remainingPa: number;
+  remainingPw: number;
+  remainingMp: number;
+  stepsExecuted: number;
+  hasFailure: boolean;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -69,13 +86,15 @@ export class SimulationService {
   }
 
   /**
-   * Recalcule les totaux agrégés (dégâts/coûts) à partir d'une liste de steps
+   * Recalcule les totaux agrégés (dégâts/soins/armure/coûts) à partir d'une liste de steps
    */
-  private aggregateStepTotals(steps: SimulationStepResult[]): Pick<SimulationResult, 'totalDamage' | 'totalPaUsed' | 'totalPwUsed' | 'totalMpUsed'> {
+  private aggregateStepTotals(steps: SimulationStepResult[]): Pick<SimulationResult, 'totalDamage' | 'totalHeal' | 'totalShield' | 'totalPaUsed' | 'totalPwUsed' | 'totalMpUsed'> {
     return steps.reduce(
       (totals, step) => {
         for (const action of step.actions) {
           totals.totalDamage += action.damage || 0;
+          totals.totalHeal += action.heal || 0;
+          totals.totalShield += action.shield || 0;
           totals.totalPaUsed += action.paCost || 0;
           totals.totalPwUsed += action.pwCost || 0;
           totals.totalMpUsed += action.mpCost || 0;
@@ -85,6 +104,8 @@ export class SimulationService {
       },
       {
         totalDamage: 0,
+        totalHeal: 0,
+        totalShield: 0,
         totalPaUsed: 0,
         totalPwUsed: 0,
         totalMpUsed: 0
@@ -158,6 +179,8 @@ export class SimulationService {
 
     const totals = this.aggregateStepTotals([stepResult]);
     this.simulationResultsCache!.totalDamage += totals.totalDamage;
+    this.simulationResultsCache!.totalHeal += totals.totalHeal;
+    this.simulationResultsCache!.totalShield += totals.totalShield;
     this.simulationResultsCache!.totalPaUsed += totals.totalPaUsed;
     this.simulationResultsCache!.totalPwUsed += totals.totalPwUsed;
     this.simulationResultsCache!.totalMpUsed += totals.totalMpUsed;
@@ -240,30 +263,74 @@ export class SimulationService {
     }
   }
 
-  getSimulationStats() {
-    const sim = this.currentSimulation();
-    if (!sim) return null;
+  /**
+   * Construit les stats agrégées à partir d'une liste de steps et d'un contexte final
+   */
+  private buildStatsFromSteps(steps: SimulationStepResult[], finalContext: { availablePa: number; availablePw: number; availableMp: number }): SimulationStats {
+    let totalDamage = 0;
+    let totalHeal = 0;
+    let totalShield = 0;
+    let totalPaUsed = 0;
+    let totalPwUsed = 0;
+    let totalMpUsed = 0;
+    let totalActions = 0;
+    let successfulActions = 0;
+    let stepsExecuted = 0;
 
-    const totalActions = sim.steps.reduce((acc, step) => acc + step.actions.length, 0);
-    const successfulActions = sim.steps.reduce(
-      (acc, step) => acc + step.actions.filter(a => a.success).length,
-      0
-    );
-    const failedActions = totalActions - successfulActions;
+    for (const step of steps) {
+      if (step.success) stepsExecuted++;
+      for (const action of step.actions) {
+        totalActions++;
+        if (action.success) {
+          successfulActions++;
+          totalDamage += action.damage || 0;
+          totalHeal += action.heal || 0;
+          totalShield += action.shield || 0;
+          totalPaUsed += action.paCost || 0;
+          totalPwUsed += action.pwCost || 0;
+          totalMpUsed += action.mpCost || 0;
+        }
+      }
+    }
 
     return {
       totalActions,
       successfulActions,
-      failedActions,
-      totalPaUsed: sim.totalPaUsed,
-      totalPwUsed: sim.totalPwUsed,
-      totalMpUsed: sim.totalMpUsed,
-      totalDamage: sim.totalDamage,
-      remainingPa: sim.finalContext.availablePa,
-      remainingPw: sim.finalContext.availablePw,
-      remainingMp: sim.finalContext.availableMp,
-      hasFailure: !sim.success
+      failedActions: totalActions - successfulActions,
+      totalDamage,
+      totalHeal,
+      totalShield,
+      totalPaUsed,
+      totalPwUsed,
+      totalMpUsed,
+      remainingPa: finalContext.availablePa,
+      remainingPw: finalContext.availablePw,
+      remainingMp: finalContext.availableMp,
+      stepsExecuted,
+      hasFailure: successfulActions < totalActions
     };
+  }
+
+  /**
+   * Stats agrégées depuis le signal currentSimulation (mode simulation complète)
+   */
+  getSimulationStats(): SimulationStats | null {
+    const sim = this.currentSimulation();
+    if (!sim) return null;
+
+    return this.buildStatsFromSteps(sim.steps, sim.finalContext);
+  }
+
+  /**
+   * Stats agrégées depuis le cache incrémental (mode step-by-step)
+   */
+  getCacheStats(): SimulationStats | null {
+    if (!this.simulationResultsCache) return null;
+
+    return this.buildStatsFromSteps(
+      this.simulationResultsCache.steps,
+      this.simulationResultsCache.finalContext
+    );
   }
 }
 

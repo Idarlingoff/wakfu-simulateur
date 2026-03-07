@@ -1,11 +1,11 @@
 import { Injectable, inject } from '@angular/core';
-import { DamageCalculatorService, DamageCalculationParams } from './damage-calculator.service';
+import { DamageCalculatorService } from './damage-calculator.service';
 import { StatsCalculatorService, TotalStats } from './stats-calculator.service';
 import { BoardService } from '../board.service';
 import { WakfuApiService } from '../wakfu-api.service';
 import { Build } from '../../models/build.model';
 import { Timeline, TimelineStep, TimelineAction, Position } from '../../models/timeline.model';
-import { Spell } from '../../models/spell.model';
+import { Spell, SpellEffect } from '../../models/spell.model';
 import { BoardEntity, Mechanism } from '../../models/board.model';
 import { SpellCastingValidatorService } from '../validators/spell-casting-validator.service';
 import { MovementValidatorService } from '../validators/movement-validator.service';
@@ -98,6 +98,16 @@ export interface SimulationContext {
   movementHistory?: MovementRecord[];
 }
 
+export interface SpellEffectResult {
+  effectType: string;
+  element?: string;
+  damage?: number;
+  heal?: number;
+  shield?: number;
+  isCritical?: boolean;
+  breakdown?: any;
+}
+
 export interface SimulationActionResult {
   success: boolean;
   actionId: string;
@@ -105,10 +115,13 @@ export interface SimulationActionResult {
   spellId?: string;
   spellName?: string;
   damage?: number;
+  heal?: number;
+  shield?: number;
   paCost: number;
   pwCost: number;
   mpCost: number;
   message: string;
+  effects?: SpellEffectResult[];
   details?: any;
 }
 
@@ -128,6 +141,8 @@ export interface SimulationResult {
   steps: SimulationStepResult[];
   finalContext: SimulationContext;
   totalDamage: number;
+  totalHeal: number;
+  totalShield: number;
   totalPaUsed: number;
   totalPwUsed: number;
   totalMpUsed: number;
@@ -283,6 +298,8 @@ export class SimulationEngineService {
     const errors: string[] = [];
     let currentContext = this.cloneContext(initialContext);
     let totalDamage = 0;
+    let totalHeal = 0;
+    let totalShield = 0;
 
     for (let i = 0; i < timeline.steps.length; i++) {
       const step = timeline.steps[i];
@@ -298,9 +315,9 @@ export class SimulationEngineService {
       currentContext = this.cloneContext(stepResult.contextAfter);
 
       for (const action of stepResult.actions) {
-        if (action.damage) {
-          totalDamage += action.damage;
-        }
+        if (action.damage) totalDamage += action.damage;
+        if (action.heal) totalHeal += action.heal;
+        if (action.shield) totalShield += action.shield;
       }
 
       if (!stepResult.success) {
@@ -316,6 +333,8 @@ export class SimulationEngineService {
     console.log('📊 Résultat:');
     console.log('  ✅ Succès:', errors.length === 0);
     console.log('  💥 Dégâts totaux:', totalDamage);
+    console.log('  💚 Soins totaux:', totalHeal);
+    console.log('  🛡️ Armure totale:', totalShield);
     console.log('  ⚡ PA utilisés:', initialContext.availablePa - currentContext.availablePa);
     console.log('  🔮 WP utilisés:', initialContext.availablePw - currentContext.availablePw);
     console.log('  🏃 MP utilisés:', initialContext.availableMp - currentContext.availableMp);
@@ -334,6 +353,8 @@ export class SimulationEngineService {
       steps,
       finalContext: this.cloneContext(currentContext),
       totalDamage,
+      totalHeal,
+      totalShield,
       totalPaUsed: initialContext.availablePa - currentContext.availablePa,
       totalPwUsed: initialContext.availablePw - currentContext.availablePw,
       totalMpUsed: initialContext.availableMp - currentContext.availableMp,
@@ -643,20 +664,40 @@ export class SimulationEngineService {
 
     const contextualStats = buildStats;
 
-    const baseDamage = this.extractBaseDamageFromSpell(spell);
-
-    const damageParams: DamageCalculationParams = {
-      baseDamage,
+    const isCritical = this.damageCalculator.calculateDamage({
+      baseDamage: 0,
       masteryPrimary: contextualStats.masteryPrimary,
-      masterySecondary: contextualStats.masterySecondary,
-      backMastery: contextualStats.backMastery,
       dommageInflict: contextualStats.dommageInflict,
       critRate: contextualStats.critRate,
       critMastery: contextualStats.critMastery,
       resistance: 0
-    };
+    }).isCritical;
 
-    const damageResult = this.damageCalculator.calculateDamage(damageParams);
+    const variantKind = isCritical ? 'CRIT' : 'NORMAL';
+    const spellEffects = this.extractSpellEffects(spell, variantKind);
+
+    const effectResults: SpellEffectResult[] = [];
+    let totalDamage = 0;
+    let totalHeal = 0;
+    let totalShield = 0;
+
+    const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
+    const orientation = this.resolveOrientation(targetEntity?.facing?.direction);
+
+    for (const effect of spellEffects) {
+      const effectResult = this.computeSpellEffect(effect, contextualStats, isCritical, orientation);
+      effectResults.push(effectResult);
+
+      if (effectResult.damage) totalDamage += effectResult.damage;
+      if (effectResult.heal) totalHeal += effectResult.heal;
+      if (effectResult.shield) totalShield += effectResult.shield;
+    }
+
+    const messageParts: string[] = [];
+    if (totalDamage > 0) messageParts.push(`${totalDamage} dégâts`);
+    if (totalHeal > 0) messageParts.push(`${totalHeal} soins`);
+    if (totalShield > 0) messageParts.push(`${totalShield} armure`);
+    const effectsSummary = messageParts.length > 0 ? messageParts.join(', ') : 'aucun effet';
 
     const result: SimulationActionResult = {
       success: true,
@@ -664,15 +705,19 @@ export class SimulationEngineService {
       actionType: 'CastSpell',
       spellId: spell.id,
       spellName: spell.name,
-      damage: damageResult.finalDamage,
+      damage: totalDamage,
+      heal: totalHeal,
+      shield: totalShield,
       paCost,
       pwCost,
       mpCost: 0,
-      message: `Cast ${spell.name} for ${damageResult.finalDamage} damage${damageResult.isCritical ? ' (CRITICAL!)' : ''}`,
+      message: `${spell.name}: ${effectsSummary}${isCritical ? ' (CRITIQUE !)' : ''}`,
+      effects: effectResults,
       details: {
-        damageBreakdown: damageResult.breakdown,
-        isCritical: damageResult.isCritical,
-        lineOfSight: spell.lineOfSight
+        isCritical,
+        lineOfSight: spell.lineOfSight,
+        variantUsed: variantKind,
+        effectCount: spellEffects.length
       }
     };
 
@@ -725,67 +770,149 @@ export class SimulationEngineService {
 
 
   /**
-   * Extrait les dégâts de base d'un sort depuis ses effets
+   * Structure représentant un effet brut extrait d'un sort
    */
-  private extractBaseDamageFromSpell(spell: Spell): number {
-    console.log('🔍 [DAMAGE EXTRACTION] Extraction des dégâts du sort:', spell.name);
-
-    const normalVariant = spell.variants.find(v => v.kind === 'NORMAL');
-
-    if (!normalVariant) {
-      console.warn('⚠️ Aucune variante NORMAL trouvée, retour à 0 dégâts');
-      return 0;
+  private extractBaseValue(effect: SpellEffect): number {
+    if (effect.minValue !== undefined && effect.minValue !== null &&
+        effect.maxValue !== undefined && effect.maxValue !== null) {
+      return (effect.minValue + effect.maxValue) / 2;
     }
 
-    console.log('📦 Variante NORMAL trouvée avec', normalVariant.effects.length, 'effets');
+    if (effect.extendedData) {
+      const params = effect.extendedData;
+      if (params.amount !== undefined) {
+        return params.amount;
+      }
+      if (params.minValue !== undefined && params.maxValue !== undefined) {
+        return (params.minValue + params.maxValue) / 2;
+      }
+    }
 
-    let totalBaseDamage = 0;
+    return 0;
+  }
 
-    for (const effect of normalVariant.effects) {
-      console.log('  🔹 Effet:', {
-        effect: effect.effect,
-        element: effect.element,
-        minValue: effect.minValue,
-        maxValue: effect.maxValue,
-        targetScope: effect.targetScope,
-        extendedData: effect.extendedData
-      });
+  /**
+   * Extrait tous les effets calculables (DEAL_DAMAGE, HEAL, GIVE_ARMOR) d'un sort
+   * pour une variante donnée (NORMAL ou CRIT)
+   */
+  private extractSpellEffects(spell: Spell, variantKind: string): { type: string; baseValue: number; element?: string }[] {
+    const variant = spell.variants.find(v => v.kind === variantKind)
+      ?? spell.variants.find(v => v.kind === 'NORMAL');
 
-      const isDamageEffect = effect.effect === 'DEAL_DAMAGE';
+    if (!variant) {
+      console.warn(`⚠️ Aucune variante ${variantKind} trouvée pour ${spell.name}`);
+      return [];
+    }
 
-      if (isDamageEffect) {
-        let damage = 0;
+    const computableEffects: { type: string; baseValue: number; element?: string }[] = [];
 
-        if (effect.minValue !== undefined && effect.minValue !== null &&
-            effect.maxValue !== undefined && effect.maxValue !== null) {
-          damage = (effect.minValue + effect.maxValue) / 2;
-          console.log(`  ✅ Dégâts trouvés (min/max): ${effect.minValue}-${effect.maxValue} (moyenne: ${damage})`);
-        }
-        else if (effect.extendedData) {
-          const params = effect.extendedData;
-          if (params.amount !== undefined) {
-            damage = params.amount;
-            console.log(`  ✅ Dégâts trouvés (extendedData.amount): ${damage}`);
-          } else if (params.minValue !== undefined && params.maxValue !== undefined) {
-            damage = (params.minValue + params.maxValue) / 2;
-            console.log(`  ✅ Dégâts trouvés (extendedData min/max): ${params.minValue}-${params.maxValue} (moyenne: ${damage})`);
-          }
-        }
+    for (const effect of variant.effects) {
+      const effectType = effect.effect;
 
-        if (damage > 0) {
-          totalBaseDamage += damage;
+      if (effectType === 'DEAL_DAMAGE' || effectType === 'HEAL' || effectType === 'GIVE_ARMOR') {
+        const baseValue = this.extractBaseValue(effect);
+
+        if (baseValue > 0) {
+          computableEffects.push({
+            type: effectType,
+            baseValue,
+            element: effect.element
+          });
         }
       }
     }
 
-    if (totalBaseDamage === 0) {
-      console.warn('⚠️ Aucun effet de dégâts trouvé dans le sort, retour à 0');
-      console.log('  💡 Ce sort ne fait peut-être pas de dégâts (mécanisme, buff, etc.)');
-    } else {
-      console.log(`💥 Total des dégâts de base extraits: ${totalBaseDamage}`);
-    }
+    console.log(`🔍 [EFFECTS] ${spell.name} (${variantKind}): ${computableEffects.length} effet(s) calculable(s) extraits`);
+    return computableEffects;
+  }
 
-    return totalBaseDamage;
+  /**
+   * Calcule un effet de sort individuel en utilisant les formules du WakfuCombatCalculator
+   * via le DamageCalculatorService
+   */
+  private computeSpellEffect(
+    effect: { type: string; baseValue: number; element?: string },
+    stats: TotalStats,
+    isCritical: boolean,
+    orientation: string
+  ): SpellEffectResult {
+    switch (effect.type) {
+      case 'DEAL_DAMAGE': {
+        const damageResult = this.damageCalculator.calculateDamage({
+          baseDamage: effect.baseValue,
+          masteryPrimary: stats.masteryPrimary,
+          masterySecondary: stats.masterySecondary,
+          backMastery: stats.backMastery,
+          dommageInflict: stats.dommageInflict,
+          critRate: stats.critRate,
+          critMastery: stats.critMastery,
+          resistance: 0,
+          isCritical,
+          orientation: (orientation as any) ?? 'front'
+        });
+
+        console.log(`  ⚔️ DEAL_DAMAGE (${effect.element ?? 'neutre'}): base=${effect.baseValue} → final=${damageResult.finalDamage}`);
+
+        return {
+          effectType: 'DEAL_DAMAGE',
+          element: effect.element,
+          damage: damageResult.finalDamage,
+          isCritical: damageResult.isCritical,
+          breakdown: damageResult.breakdown
+        };
+      }
+
+      case 'HEAL': {
+        const healResult = this.damageCalculator.calculateDirectHeal({
+          baseHeal: effect.baseValue,
+          masteryApplicableSum: stats.masteryPrimary + (stats.healingMastery ?? 0),
+          healPerformedBonusSum: 0,
+          healReceivedBonusSum: 0,
+          healResistancePercent: 0,
+          incurablePercent: 0,
+          isCritical
+        });
+
+        console.log(`  💚 HEAL: base=${effect.baseValue} → final=${healResult.value}`);
+
+        return {
+          effectType: 'HEAL',
+          element: effect.element,
+          heal: healResult.value,
+          isCritical,
+          breakdown: healResult.breakdown
+        };
+      }
+
+      case 'GIVE_ARMOR': {
+        const shieldResult = this.damageCalculator.calculateShield({
+          baseShield: effect.baseValue,
+          armorGivenBonusSum: 0,
+          armorReceivedBonusSum: 0,
+          friablePercent: 0,
+          isCritical,
+          maxHp: stats.hp,
+          currentArmor: stats.armor
+        });
+
+        console.log(`  🛡️ GIVE_ARMOR: base=${effect.baseValue} → final=${shieldResult.value}`);
+
+        return {
+          effectType: 'GIVE_ARMOR',
+          element: effect.element,
+          shield: shieldResult.value,
+          isCritical,
+          breakdown: shieldResult.breakdown
+        };
+      }
+
+      default:
+        console.warn(`  ⚠️ Type d'effet non calculable: ${effect.type}`);
+        return {
+          effectType: effect.type,
+          element: effect.element
+        };
+    }
   }
 
 
@@ -953,5 +1080,11 @@ export class SimulationEngineService {
         playerEntity.position = newPosition;
       }
     }
+  }
+
+  private resolveOrientation(facingDirection?: string): string {
+    if (facingDirection === 'back') return 'back';
+    if (facingDirection === 'side') return 'side';
+    return 'front';
   }
 }
