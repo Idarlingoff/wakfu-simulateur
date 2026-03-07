@@ -7,7 +7,6 @@ import {BoardEntity, Mechanism} from '../../../models/board.model';
 import {ResourceRegenerationService} from '../../processors/resource-regeneration.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorMovementService} from './xelor-movement.service';
-import {XelorDialService} from './xelor-dial.service';
 import {getXelorState} from './xelor-state.utils';
 
 type TeleportUnit =
