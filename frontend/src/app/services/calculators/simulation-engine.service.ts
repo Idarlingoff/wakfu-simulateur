@@ -14,6 +14,7 @@ import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy
 import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
 import { firstValueFrom } from 'rxjs';
 import {buildSpellReferencesWithInnates, canonicalizeInnateSpellId} from '../../utils/innate-spells.utils';
+import { resolveElementalMastery, getHighestElementalMastery } from '../../utils/mastery-utils';
 
 /**
  * Phases d'exécution des effets de sorts
@@ -46,7 +47,10 @@ export interface DelayedEffect {
   params: Record<string, any>;
   registeredOnTurn: number;
   contextSnapshot?: {
-    masteryPrimary?: number;
+    masteryFire?: number;
+    masteryWater?: number;
+    masteryEarth?: number;
+    masteryAir?: number;
     masterySecondary?: number;
     critRate?: number;
     critMastery?: number;
@@ -54,10 +58,6 @@ export interface DelayedEffect {
   };
 }
 
-/**
- * Enregistrement d'un mouvement non-PM (pour le sort "Retour Spontané")
- * Permet de tracker les téléportations, poussées, attirances et échanges de position
- */
 export interface MovementRecord {
   id: string;
   type: 'teleport' | 'push' | 'pull' | 'swap' | 'swap_mechanism';
@@ -251,7 +251,10 @@ export class SimulationEngineService {
       WP: buildStats.wp,
       MP: buildStats.mp,
       HP: buildStats.hp,
-      'Maitrise Primaire': buildStats.masteryPrimary
+      'Maitrise Feu': buildStats.masteryFire,
+      'Maitrise Eau': buildStats.masteryWater,
+      'Maitrise Terre': buildStats.masteryEarth,
+      'Maitrise Air': buildStats.masteryAir
     });
     console.log('');
 
@@ -289,7 +292,10 @@ export class SimulationEngineService {
       buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, initialContext);
       console.log('📊 Stats après passifs de classe:', {
         AP: buildStats.ap,
-        'Maitrise Primaire': buildStats.masteryPrimary
+        'Maitrise Feu': buildStats.masteryFire,
+        'Maitrise Eau': buildStats.masteryWater,
+        'Maitrise Terre': buildStats.masteryEarth,
+        'Maitrise Air': buildStats.masteryAir
       });
       console.log('');
     }
@@ -666,7 +672,7 @@ export class SimulationEngineService {
 
     const isCritical = this.damageCalculator.calculateDamage({
       baseDamage: 0,
-      masteryPrimary: contextualStats.masteryPrimary,
+      masteryElemental: getHighestElementalMastery(contextualStats),
       dommageInflict: contextualStats.dommageInflict,
       critRate: contextualStats.critRate,
       critMastery: contextualStats.critMastery,
@@ -840,7 +846,7 @@ export class SimulationEngineService {
       case 'DEAL_DAMAGE': {
         const damageResult = this.damageCalculator.calculateDamage({
           baseDamage: effect.baseValue,
-          masteryPrimary: stats.masteryPrimary,
+          masteryElemental: resolveElementalMastery(stats, effect.element),
           masterySecondary: stats.masterySecondary,
           backMastery: stats.backMastery,
           dommageInflict: stats.dommageInflict,
@@ -865,7 +871,7 @@ export class SimulationEngineService {
       case 'HEAL': {
         const healResult = this.damageCalculator.calculateDirectHeal({
           baseHeal: effect.baseValue,
-          masteryApplicableSum: stats.masteryPrimary + (stats.healingMastery ?? 0),
+          masteryApplicableSum: resolveElementalMastery(stats, effect.element) + (stats.healingMastery ?? 0),
           healPerformedBonusSum: 0,
           healReceivedBonusSum: 0,
           healResistancePercent: 0,

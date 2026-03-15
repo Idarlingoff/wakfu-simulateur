@@ -270,11 +270,17 @@ export class BuildValidatorService {
       }
     }
 
-    if (stats.masteryPrimary !== undefined && stats.masteryPrimary < 100) {
+    const highestMastery = Math.max(
+      stats.masteryFire ?? 0,
+      stats.masteryWater ?? 0,
+      stats.masteryEarth ?? 0,
+      stats.masteryAir ?? 0
+    );
+    if (highestMastery < 100) {
       warnings.push({
-        field: 'stats.masteryPrimary',
-        message: 'La maîtrise primaire est faible, considérez améliorer votre équipement',
-        code: 'LOW_MASTERY_PRIMARY'
+        field: 'stats.mastery',
+        message: 'La maîtrise élémentaire la plus haute est faible, considérez améliorer votre équipement',
+        code: 'LOW_MASTERY_ELEMENTAL'
       });
     }
 

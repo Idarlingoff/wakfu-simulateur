@@ -103,8 +103,20 @@ import {SimulationService} from '../services/simulation.service';
                 <span>{{ build.characterLevel }}</span>
               </div>
               <div class="info-item">
-                <label>Primary Mastery:</label>
-                <span>{{ build.stats.masteryPrimary }}</span>
+                <label>🔥 Maîtrise Feu:</label>
+                <span>{{ build.stats.masteryFire }}</span>
+              </div>
+              <div class="info-item">
+                <label>💧 Maîtrise Eau:</label>
+                <span>{{ build.stats.masteryWater }}</span>
+              </div>
+              <div class="info-item">
+                <label>🌿 Maîtrise Terre:</label>
+                <span>{{ build.stats.masteryEarth }}</span>
+              </div>
+              <div class="info-item">
+                <label>🌀 Maîtrise Air:</label>
+                <span>{{ build.stats.masteryAir }}</span>
               </div>
               <div class="info-item">
                 <label>Secondary Mastery:</label>
@@ -194,9 +206,6 @@ import {SimulationService} from '../services/simulation.service';
           <div class="actions">
             <button (click)="onValidateTimeline()" class="btn-primary">
               ✓ Validate Timeline
-            </button>
-            <button (click)="onAddStep()" class="btn-secondary">
-              ➕ Add Step
             </button>
             <button (click)="onExportBuild()" class="btn-secondary">
               📤 Export Build

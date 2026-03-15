@@ -8,7 +8,7 @@ import {
 
 export interface DamageCalculationParams {
   baseDamage: number;
-  masteryPrimary: number;
+  masteryElemental: number;
   masterySecondary?: number;
   backMastery?: number;
   dommageInflict: number;
@@ -183,7 +183,7 @@ export class DamageCalculatorService {
   }
 
   private deriveLegacyMastery(params: DamageCalculationParams, isCritical: boolean): number {
-    let mastery = params.masteryPrimary + (params.masterySecondary ?? 0);
+    let mastery = params.masteryElemental + (params.masterySecondary ?? 0);
 
     if (params.isBackAttack) {
       mastery += params.backMastery ?? 0;
