@@ -117,11 +117,41 @@ interface FormBuild {
 
               <div class="stats-grid">
                 <div class="form-group">
-                  <label>Maîtrise Principale</label>
+                  <label>🔥 Maîtrise Feu</label>
                   <input
                     type="number"
-                    [(ngModel)]="form.stats.masteryPrimary"
-                    name="masteryPrimary"
+                    [(ngModel)]="form.stats.masteryFire"
+                    name="masteryFire"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>💧 Maîtrise Eau</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.masteryWater"
+                    name="masteryWater"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>🌿 Maîtrise Terre</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.masteryEarth"
+                    name="masteryEarth"
+                    min="0"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label>🌀 Maîtrise Air</label>
+                  <input
+                    type="number"
+                    [(ngModel)]="form.stats.masteryAir"
+                    name="masteryAir"
                     min="0"
                   />
                 </div>
@@ -418,7 +448,10 @@ export class BuildFormComponent {
     description: '',
     stats: {
       level: 185,
-      masteryPrimary: 0,
+      masteryFire: 0,
+      masteryWater: 0,
+      masteryEarth: 0,
+      masteryAir: 0,
       masterySecondary: 0,
       backMastery: 0,
       dommageInflict: 0,
@@ -447,7 +480,10 @@ export class BuildFormComponent {
       description: '',
       stats: {
         level: 185,
-        masteryPrimary: 0,
+        masteryFire: 0,
+        masteryWater: 0,
+        masteryEarth: 0,
+        masteryAir: 0,
         masterySecondary: 0,
         backMastery: 0,
         dommageInflict: 0,

@@ -1,5 +1,3 @@
-
-// Simple references for build (full data comes from spell.model and passive.model)
 export interface SpellReference {
   spellId: string;
   level?: number;
@@ -22,43 +20,40 @@ export interface Sublimation {
 }
 
 export interface SpellBar {
-  spells: (SpellReference | null)[]; // 12 slots
+  spells: (SpellReference | null)[];
 }
 
 export interface PassiveBar {
-  passives: (PassiveReference | null)[]; // 6 slots with level locks
+  passives: (PassiveReference | null)[];
 }
 
 export interface SublimationBar {
-  sublimations: (Sublimation | null)[]; // 12 slots: 10 classic + 1 epic + 1 relic
+  sublimations: (Sublimation | null)[];
 }
 
 export interface BuildStats {
-  // Character Level
   level: number;
 
-  // Masteries
-  masteryPrimary: number;      // Maîtrise principale (ex: Feu)
-  masterySecondary: number;    // Maîtrise secondaire (ex: Eau)
-  backMastery: number;         // Maîtrise dos
+  masteryFire: number;
+  masteryWater: number;
+  masteryEarth: number;
+  masteryAir: number;
 
-  // Damage
-  dommageInflict: number;      // Dégâts infligés
-  critRate: number;            // Taux de critique (%)
-  critMastery: number;         // Maîtrise critique
+  masterySecondary: number;
+  backMastery: number;
 
-  // Defense
-  resistance: number;          // Résistance générale
+  dommageInflict: number;
+  critRate: number;
+  critMastery: number;
 
-  // Resources
-  ap: number;                  // Action Points
-  mp: number;                  // Movement Points
-  wp: number;                  // Power Points (PW/Puissance)
+  resistance: number;
 
-  // Combat
-  range: number;               // Portée
+  ap: number;
+  mp: number;
+  wp: number;
 
-  // Allow additional dynamic stats
+  range: number;
+
   [key: string]: number | string;
 }
 
@@ -66,7 +61,7 @@ export interface Build {
   id: string;
   name: string;
   classId: string;
-  characterClass?: string; // Nom de la classe (ex: 'Xelor', 'Iop', 'Eniripsa', etc.)
+  characterClass?: string;
   characterLevel: number;
   spellBar: SpellBar;
   passiveBar: PassiveBar;

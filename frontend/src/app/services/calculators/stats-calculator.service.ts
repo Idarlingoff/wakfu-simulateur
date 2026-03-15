@@ -5,10 +5,14 @@
 
 import { Injectable } from '@angular/core';
 import { Build } from '../../models/build.model';
+import { getHighestElementalMastery } from '../../utils/mastery-utils';
 
 export interface TotalStats {
   level: number;
-  masteryPrimary: number;
+  masteryFire: number;
+  masteryWater: number;
+  masteryEarth: number;
+  masteryAir: number;
   masterySecondary: number;
   backMastery: number;
   dommageInflict: number;
@@ -19,7 +23,6 @@ export interface TotalStats {
   mp: number;
   wp: number;
   range: number;
-  // Stats additionnelles
   hp?: number;
   armor?: number;
   dodge?: number;
@@ -27,19 +30,12 @@ export interface TotalStats {
   initiative?: number;
   control?: number;
   block?: number;
-  // Maîtrises élémentaires
-  masteryFire?: number;
-  masteryWater?: number;
-  masteryEarth?: number;
-  masteryAir?: number;
-  // Maîtrises spécifiques
   healingMastery?: number;
   berserkMastery?: number;
   meleeMastery?: number;
   distanceMastery?: number;
   singleTargetMastery?: number;
   areaMastery?: number;
-  // Résistances
   resistanceFire?: number;
   resistanceWater?: number;
   resistanceEarth?: number;
@@ -60,22 +56,19 @@ export class StatsCalculatorService {
   calculateTotalStats(build: Build): TotalStats {
     const baseStats = build.stats || this.getDefaultStats();
 
-    // Commence avec les stats de base
     const total: TotalStats = { ...baseStats };
 
-    // Ajoute les bonus des passifs (filtrer les valeurs null)
     if (build.passiveBar?.passives) {
       for (const passive of build.passiveBar.passives) {
-        if (passive) { // ✅ Vérifier que le passif n'est pas null
+        if (passive) {
           this.applyPassiveStats(total, passive);
         }
       }
     }
 
-    // Ajoute les bonus des sublimations (filtrer les valeurs null)
     if (build.sublimationBar?.sublimations) {
       for (const sublimation of build.sublimationBar.sublimations) {
-        if (sublimation) { // ✅ Vérifier que la sublimation n'est pas null
+        if (sublimation) {
           this.applySublimationStats(total, sublimation);
         }
       }
@@ -84,29 +77,18 @@ export class StatsCalculatorService {
     return total;
   }
 
-  /**
-   * Applique les bonus d'un passif aux stats totales
-   */
   private applyPassiveStats(total: TotalStats, passive: any): void {
-    // Les passifs peuvent donner des bonus fixes ou des pourcentages
-    // Pour l'instant, on suppose que les passifs ont une propriété 'stats'
     if (passive.stats) {
       this.mergeStats(total, passive.stats);
     }
   }
 
-  /**
-   * Applique les bonus d'une sublimation aux stats totales
-   */
   private applySublimationStats(total: TotalStats, sublimation: any): void {
     if (sublimation.stats) {
       this.mergeStats(total, sublimation.stats);
     }
   }
 
-  /**
-   * Fusionne des stats additionnelles dans les stats totales
-   */
   private mergeStats(total: TotalStats, additionalStats: Record<string, number>): void {
     for (const [key, value] of Object.entries(additionalStats)) {
       if (key in total) {
@@ -115,13 +97,13 @@ export class StatsCalculatorService {
     }
   }
 
-  /**
-   * Retourne les stats par défaut
-   */
   private getDefaultStats(): TotalStats {
     return {
       level: 1,
-      masteryPrimary: 0,
+      masteryFire: 0,
+      masteryWater: 0,
+      masteryEarth: 0,
+      masteryAir: 0,
       masterySecondary: 0,
       backMastery: 0,
       dommageInflict: 0,
@@ -150,9 +132,6 @@ export class StatsCalculatorService {
     return effective;
   }
 
-  /**
-   * Valide qu'un build respecte les contraintes de stats
-   */
   validateStats(stats: TotalStats): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
 
@@ -190,10 +169,8 @@ export class StatsCalculatorService {
    * Calcule un score global du build (pour comparaison)
    */
   calculateBuildScore(stats: TotalStats): number {
-    // Formule arbitraire pour scorer un build
-    // Peut être ajustée selon les préférences
     return (
-      stats.masteryPrimary * 1.0 +
+      getHighestElementalMastery(stats) * 1.0 +
       stats.masterySecondary * 0.5 +
       stats.dommageInflict * 0.8 +
       stats.critRate * 0.5 +
