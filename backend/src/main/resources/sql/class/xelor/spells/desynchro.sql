@@ -11,7 +11,7 @@ DELETE FROM spell              WHERE id='XEL_DESYNCHRO';
 INSERT INTO spell  VALUES (
                               'XEL_DESYNCHRO', 'XEL', 'Désynchronisation', 'WATER', 'ELEMENTAL',
                               4, 0, 3, 6, TRUE, TRUE,
-                              0, 2, 0, 'AREA', 'STEP'
+                              0, 2, 0, 'AREA', 'STEP', 1417
                           );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)

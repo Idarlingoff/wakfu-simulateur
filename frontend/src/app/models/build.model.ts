@@ -1,13 +1,13 @@
 export interface SpellReference {
   spellId: string;
   level?: number;
-  icon?: string;
+  iconId?: number;
 }
 
 export interface PassiveReference {
   passiveId: string;
   unlockedAtLevel?: number;
-  icon?: string;
+  iconId?: number;
 }
 
 export interface Sublimation {

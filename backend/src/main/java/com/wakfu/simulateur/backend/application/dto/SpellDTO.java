@@ -25,6 +25,7 @@ public class SpellDTO {
     private int usePerTarget;
     private String direction;
     private String ratioEvalMode;
+    private Integer iconId;
     private List<SpellVariantDTO> variants;
     private List<SpellRatioBreakpointDTO> breakpoints;
 
@@ -54,7 +55,7 @@ public class SpellDTO {
         private Integer cooldown;
         private Double minValue;
         private Double maxValue;
-        private Object extendedData; // JsonNode
+        private Object extendedData;
         private EffectConditionGroupDTO condGroup;
     }
 
@@ -75,7 +76,7 @@ public class SpellDTO {
     public static class EffectConditionDTO {
         private Long id;
         private String code;
-        private Object data; // JsonNode
+        private Object data;
     }
 
     @Data

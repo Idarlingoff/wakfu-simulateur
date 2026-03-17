@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS passive (
                                        id          VARCHAR(64) PRIMARY KEY,
     class_id    VARCHAR(32) NOT NULL,      -- 'XEL'
     name        VARCHAR(128) NOT NULL,
-    description CLOB
+    description CLOB,
+    icon_id     INT
     );
 
 CREATE TABLE IF NOT EXISTS passive_effect (

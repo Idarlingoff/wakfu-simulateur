@@ -16,7 +16,7 @@ export interface Passive {
   name: string;
   description: string;
   effects: PassiveEffect[];
-  icon?: string;
+  iconId?: number;
   unlockedAtLevel?: number;
 }
 

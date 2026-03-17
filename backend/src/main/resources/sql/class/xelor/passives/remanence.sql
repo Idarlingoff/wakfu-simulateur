@@ -6,9 +6,9 @@
 DELETE FROM passive_effect WHERE passive_id = 'XEL_REMANENCE';
 DELETE FROM passive WHERE id = 'XEL_REMANENCE';
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_REMANENCE','XEL','Rémanence',
-     'Les invocations ne bloquent plus la ligne de vue. +1 Sinistro max et +1 Rouage max.');
+     'Les invocations ne bloquent plus la ligne de vue. +1 Sinistro max et +1 Rouage max.', 7190);
 
 -- LOS : les invocations du lanceur ne bloquent plus
 INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)

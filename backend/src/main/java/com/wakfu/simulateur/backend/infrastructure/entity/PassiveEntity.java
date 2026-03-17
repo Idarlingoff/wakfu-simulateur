@@ -25,6 +25,9 @@ public class PassiveEntity {
     @Lob
     private String description;
 
+    @Column(name = "icon_id")
+    private Integer iconId;
+
     @OneToMany(mappedBy = "passive", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PassiveEffectEntity> effects = new ArrayList<>();
 }

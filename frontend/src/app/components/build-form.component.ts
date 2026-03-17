@@ -117,7 +117,7 @@ interface FormBuild {
 
               <div class="stats-grid">
                 <div class="form-group">
-                  <label>🔥 Maîtrise Feu</label>
+                  <label><img src="assets/images/characteristics/DMG_FIRE_PERCENT.png" class="stat-icon" alt="Feu"/>Maîtrise Feu</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.masteryFire"
@@ -127,7 +127,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>💧 Maîtrise Eau</label>
+                  <label><img src="assets/images/characteristics/DMG_WATER_PERCENT.png" class="stat-icon" alt="Eau"/>Maîtrise Eau</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.masteryWater"
@@ -137,7 +137,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>🌿 Maîtrise Terre</label>
+                  <label><img src="assets/images/characteristics/DMG_EARTH_PERCENT.png" class="stat-icon" alt="Terre"/>Maîtrise Terre</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.masteryEarth"
@@ -147,7 +147,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>🌀 Maîtrise Air</label>
+                  <label><img src="assets/images/characteristics/DMG_AIR_PERCENT.png" class="stat-icon" alt="Air"/>Maîtrise Air</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.masteryAir"
@@ -167,7 +167,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>Maîtrise Dos</label>
+                  <label><img src="assets/images/characteristics/BACKSTAB_BONUS.png" class="stat-icon" alt="Dos"/>Maîtrise Dos</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.backMastery"
@@ -177,7 +177,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>Dégâts Infligés</label>
+                  <label><img src="assets/images/characteristics/FINAL_DMG_IN_PERCENT.png" class="stat-icon" alt="Dommages infligés"/>Dégâts Infligés</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.dommageInflict"
@@ -187,7 +187,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>Taux de Critique (%)</label>
+                  <label><img src="assets/images/characteristics/FEROCITY.png" class="stat-icon" alt="Coup critique"/>Taux de Critique (%)</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.critRate"
@@ -198,7 +198,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>Maîtrise Critique</label>
+                  <label><img src="assets/images/characteristics/CRITICAL_BONUS.png" class="stat-icon" alt="Critique"/>Maîtrise Critique</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.critMastery"
@@ -218,7 +218,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>AP (Action Points)</label>
+                  <label><img src="assets/images/characteristics/AP.png" class="stat-icon" alt="PA"/>PA</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.ap"
@@ -228,7 +228,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>MP (Movement Points)</label>
+                  <label><img src="assets/images/characteristics/MP.png" class="stat-icon" alt="PM"/>PM</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.mp"
@@ -238,7 +238,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>WP (Power Points)</label>
+                  <label><img src="assets/images/characteristics/WP.png" class="stat-icon" alt="PW"/>PW</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.wp"
@@ -248,7 +248,7 @@ interface FormBuild {
                 </div>
 
                 <div class="form-group">
-                  <label>Portée</label>
+                  <label><img src="assets/images/characteristics/RANGE.png" class="stat-icon" alt="Portée"/>Portée</label>
                   <input
                     type="number"
                     [(ngModel)]="form.stats.range"
@@ -374,6 +374,14 @@ interface FormBuild {
       outline: none;
       border-color: var(--accent);
       box-shadow: 0 0 8px rgba(76, 201, 240, 0.2);
+    }
+
+    .stat-icon {
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+      margin-right: 4px;
+      object-fit: contain;
     }
 
     .stats-grid {

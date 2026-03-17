@@ -12,11 +12,11 @@ DELETE FROM spell              WHERE id='XEL_RALENTISSEMENT';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_RALENTISSEMENT', 'XEL', 'Ralentissement', 'WATER', 'ELEMENTAL',
              1, 1, 1, 3, TRUE, TRUE,
-             0, 3, 2, 'NONE', 'STEP'
+             0, 3, 2, 'NONE', 'STEP', 775
          );
 
 -- Ratio (palier 185) — valeur de base (non-crit)

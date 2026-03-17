@@ -129,11 +129,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_DIAL', 'XEL', 'Dial', 'NONE', 'INNATE',
              2, 0, 1, 3, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP'
+             0, 1, 1, 'NONE', 'STEP', null
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -256,11 +256,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_CLM', 'XEL', 'Contre la montre', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, TRUE,
-             0, 1, 1, 'NONE', 'STEP'
+             0, 1, 1, 'NONE', 'STEP', 776
          );
 
 -- Ratio (aucun dégât)
@@ -299,7 +299,7 @@ DELETE FROM spell              WHERE id='XEL_DESYNCHRO';
 INSERT INTO spell  VALUES (
                               'XEL_DESYNCHRO', 'XEL', 'Désynchronisation', 'WATER', 'ELEMENTAL',
                               4, 0, 3, 6, TRUE, TRUE,
-                              0, 2, 0, 'AREA', 'STEP'
+                              0, 2, 0, 'AREA', 'STEP', 1417
                           );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -392,11 +392,11 @@ DELETE FROM spell              WHERE id='XEL_DEVOUEMENT';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_DEVOUEMENT', 'XEL', 'Dévouement', 'NONE', 'NEUTRAL',
              0, 4, 0, 3, TRUE, TRUE,
-             0, 99, 99, 'NONE', 'STEP'
+             0, 99, 99, 'NONE', 'STEP', 2839
          );
 
 -- Ratio
@@ -485,11 +485,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
              0, 4, 0, 1, FALSE, FALSE,
-             0, 99, 99, 'NONE', 'STEP'
+             0, 99, 99, 'NONE', 'STEP', null
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -548,7 +548,7 @@ DELETE FROM status_def         WHERE id IN ('HORLOGE_BANK','HORLOGE_MARK');
 INSERT INTO spell VALUES (
                              'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
                              5,0,1,3,TRUE,TRUE,
-                             0,2,1,'LINE','STEP'
+                             0,2,1,'LINE','STEP', 763
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
@@ -611,7 +611,7 @@ DELETE FROM spell              WHERE id='XEL_PARADOXE';
 INSERT INTO spell VALUES (
                              'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
                              4,0,1,3,TRUE,FALSE,
-                             0,2,1,'NONE','STEP'
+                             0,2,1,'NONE','STEP', 1418
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
@@ -652,11 +652,11 @@ DELETE FROM spell              WHERE id='XEL_POINTE_HEURE';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_POINTE_HEURE', 'XEL', 'Pointe-heure', 'AIR', 'ELEMENTAL',
              2, 0, 2, 4, TRUE, TRUE,
-             0, 2, 1, 'LINE', 'STEP'
+             0, 2, 1, 'LINE', 'STEP', 767
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -714,11 +714,11 @@ DELETE FROM spell              WHERE id='XEL_RALENTISSEMENT';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_RALENTISSEMENT', 'XEL', 'Ralentissement', 'WATER', 'ELEMENTAL',
              1, 1, 1, 3, TRUE, TRUE,
-             0, 3, 2, 'NONE', 'STEP'
+             0, 3, 2, 'NONE', 'STEP', 775
          );
 
 -- Ratio (palier 185) — valeur de base (non-crit)
@@ -808,11 +808,11 @@ VALUES (
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_REGULATEUR', 'XEL', 'Régulateur', 'NONE', 'NEUTRAL',
              0, 3, 1, 2, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP'
+             0, 1, 1, 'NONE', 'STEP', 5344
          );
 
 -- Ratio (aucun dégât) pour cohérence
@@ -865,7 +865,7 @@ DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
 INSERT INTO spell VALUES (
                              'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
                              3,0,1,3,TRUE,TRUE,
-                             0,3,2,'NONE','STEP'
+                             0,3,2,'NONE','STEP', 771
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
@@ -958,11 +958,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_ROUAGE', 'XEL', 'Rouage', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, FALSE,
-             0, 1, 1, 'LINE', 'STEP'
+             0, 1, 1, 'LINE', 'STEP', 766
          );
 
 -- Ratio (aucun dégât direct au cast)
@@ -1033,11 +1033,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_SABLIER', 'XEL', 'Sablier', 'WATER', 'ELEMENTAL',
              3, 0, 1, 2, TRUE, FALSE,
-             0, 4, 1, 'NONE', 'STEP'
+             0, 4, 1, 'NONE', 'STEP', 783
          );
 
 -- Ratio niveau 185 (aucun crit car dégâts indirects)
@@ -1146,11 +1146,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_SINISTRO', 'XEL', 'Sinistro', 'NONE', 'NEUTRAL',
              2, 0, 2, 5, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP'
+             0, 1, 1, 'NONE', 'STEP', 777
          );
 
 -- ratio (pas de dégâts directs)
@@ -1224,11 +1224,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
              0, 1, 0, 1, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP'
+             0, 1, 1, 'NONE', 'STEP', null
          );
 
 -- Ratio (aucun dégât)
@@ -1287,10 +1287,10 @@ WHERE v.spell_id='XEL_VDT' AND v.kind='NORMAL';
 DELETE FROM passive_effect WHERE passive_id IN ('XEL_CONNAISSANCE_PASSE', 'XEL_COURS_TEMPS', 'XEL_MAITRE_CADRAN', 'XEL_REMANENCE', 'XEL_MECANISME_SPECIALISE');
 DELETE FROM passive WHERE id IN ('XEL_CONNAISSANCE_PASSE', 'XEL_COURS_TEMPS', 'XEL_MAITRE_CADRAN', 'XEL_REMANENCE', 'XEL_MECANISME_SPECIALISE');
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_CONNAISSANCE_PASSE','XEL','Connaissance du passé',
      'À chaque tour de cadran : +2 PW. Gagnera +2 PA en début de tour. '
-         'Le Cadran coûte +2 PW et son temps de relance augmente de 1.');
+         'Le Cadran coûte +2 PW et son temps de relance augmente de 1.', 7186);
 
 -- +2 PW à chaque tour de cadran
 INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
@@ -1315,9 +1315,9 @@ VALUES
      '{"spellId":"XEL_CADRAN","delta":1}');
 
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_COURS_TEMPS','XEL','Cours du temps',
-     'À chaque transposition causée par le Xélor : +1 PA si Distorsion actif, sinon +1 PW. Distorsion a 3 tours de relance.');
+     'À chaque transposition causée par le Xélor : +1 PA si Distorsion actif, sinon +1 PW. Distorsion a 3 tours de relance.', 785);
 
 INSERT INTO effect_condition_group (op) VALUES ('AND');
 INSERT INTO effect_condition_group (op) VALUES ('AND');
@@ -1354,18 +1354,18 @@ INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, targe
 VALUES ('XEL_COURS_TEMPS','ON_PASSIVE_EQUIPPED',10,'SET_SPELL_BASE_COOLDOWN','SELF',
         '{"spellId":"XEL_DISTO","cooldown":3}');
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_MAITRE_CADRAN','XEL','Maître du Cadran',
-     'Quand l''heure courante fait un tour complet du cadran, les effets délayés se résolvent immédiatement.');
+     'Quand l''heure courante fait un tour complet du cadran, les effets délayés se résolvent immédiatement.', 758);
 
 INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
 VALUES
     ('XEL_MAITRE_CADRAN','ON_HOUR_WRAPPED',0,'RESOLVE_DELAYED_EFFECTS','GLOBAL',
      '{"owner":"CASTER"}');
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_REMANENCE','XEL','Rémanence',
-     'Les invocations ne bloquent plus la ligne de vue. +1 Sinistro max et +1 Rouage max.');
+     'Les invocations ne bloquent plus la ligne de vue. +1 Sinistro max et +1 Rouage max.', 7190);
 
 -- LOS : les invocations du lanceur ne bloquent plus
 INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
@@ -1384,9 +1384,9 @@ VALUES
     ('XEL_REMANENCE','ON_PASSIVE_EQUIPPED',2,'INCREASE_MECHANISM_LIMIT','SELF',
      '{"kind":"ROUAGE","delta":1}');
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_MECANISMES_SPECIALISES','XEL','Mécanisme spécialisé',
-     'À l''invocation d''un Rouage, Sinistro, Cadran ou Régulateur : échange immédiatement de position avec (6 cases max).');
+     'À l''invocation d''un Rouage, Sinistro, Cadran ou Régulateur : échange immédiatement de position avec (6 cases max).', 7191);
 
 -- À l'invocation de l'un des mécanismes → swap immédiat si ≤ 6 cases
 INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
@@ -1407,7 +1407,7 @@ DELETE FROM spell              WHERE id='XEL_SYMETRIE';
 INSERT INTO spell VALUES (
                              'XEL_SYMETRIE','XEL','Symétrie','AIR','ELEMENTAL',
                              3,0,1,3,FALSE,TRUE,
-                             0,3,1,'NONE','STEP'
+                             0,3,1,'NONE','STEP', 772
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES

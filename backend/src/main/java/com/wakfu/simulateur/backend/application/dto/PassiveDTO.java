@@ -13,6 +13,7 @@ public class PassiveDTO {
     private String classId;
     private String name;
     private String description;
+    private Integer iconId;
     private List<PassiveEffectDTO> effects;
 
     @Data

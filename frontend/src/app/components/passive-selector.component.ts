@@ -47,7 +47,11 @@ import { DataCacheService } from '../services/data-cache.service';
                       </div>
                     } @else if (passive) {
                       <div class="passive-card" (click)="removePassive(i)">
-                        <span class="passive-icon">🔮</span>
+                        @if (getPassiveIconId(passive.passiveId)) {
+                          <img class="passive-icon" [src]="'assets/images/spells/' + getPassiveIconId(passive.passiveId) + '.png'" [alt]="getPassiveName(passive.passiveId)" (error)="onImgError($event)" />
+                        } @else {
+                          <span class="passive-icon">🔮</span>
+                        }
                         <span class="passive-name">{{ getPassiveName(passive.passiveId) }}</span>
                         <button class="remove-btn" title="Retirer">✕</button>
                       </div>
@@ -91,7 +95,11 @@ import { DataCacheService } from '../services/data-cache.service';
                         [class.selected]="isSelected(passive.id)"
                         (click)="selectPassive(passive)"
                       >
-                        <div class="passive-icon-large">🔮</div>
+                        @if (passive.iconId) {
+                          <img class="passive-icon-large" [src]="'assets/images/spells/' + passive.iconId + '.png'" [alt]="passive.name" (error)="onImgError($event)" />
+                        } @else {
+                          <div class="passive-icon-large">🔮</div>
+                        }
                         <div class="passive-info">
                           <div class="passive-title">
                             {{ passive.name }}
@@ -252,6 +260,10 @@ import { DataCacheService } from '../services/data-cache.service';
 
     .passive-icon {
       font-size: 28px;
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      border-radius: 4px;
     }
 
     .passive-name {
@@ -441,6 +453,8 @@ import { DataCacheService } from '../services/data-cache.service';
       justify-content: center;
       background: var(--panel);
       border-radius: 8px;
+      object-fit: contain;
+      flex-shrink: 0;
     }
 
     .passive-info {
@@ -675,7 +689,7 @@ export class PassiveSelectorComponent implements OnChanges {
     newPassives[targetIndex] = {
       passiveId: passive.id,
       unlockedAtLevel: passive.unlockedAtLevel || 20,
-      icon: ''
+      iconId: passive.iconId
     };
     this.passivesChange.emit(newPassives);
     this.currentSlotIndex.set(-1);
@@ -698,6 +712,16 @@ export class PassiveSelectorComponent implements OnChanges {
   getPassiveName(passiveId: string): string {
     const passive = this.allPassives().find(p => p.id === passiveId);
     return passive?.name || passiveId;
+  }
+
+  getPassiveIconId(passiveId: string): number | undefined {
+    const passive = this.allPassives().find(p => p.id === passiveId);
+    return passive?.iconId;
+  }
+
+  onImgError(event: Event): void {
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
   }
 
   getLevelForSlot(index: number): number {

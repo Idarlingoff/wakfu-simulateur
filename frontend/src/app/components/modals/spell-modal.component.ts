@@ -36,7 +36,13 @@ import { Spell } from '../../models/spell.model';
               (dragstart)="onDragStart($event, spell)"
               [class.selected]="isSelected(spell.id)"
             >
-              <div class="spell-icon">{{ spell.name.charAt(0) }}</div>
+              <div class="spell-icon">
+                @if (spell.iconId) {
+                  <img [src]="'assets/images/spells/' + spell.iconId + '.png'" [alt]="spell.name" (error)="onImgError($event)" />
+                } @else {
+                  {{ spell.name.charAt(0) }}
+                }
+              </div>
               <div class="spell-info">
                 <b>{{ spell.name }}</b>
                 <span class="spell-meta">
@@ -143,6 +149,18 @@ export class SpellModalComponent {
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'copy';
       event.dataTransfer.setData('application/json', JSON.stringify(spell));
+    }
+  }
+
+  onImgError(event: Event): void {
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
+    const parent = img.parentElement;
+    if (parent && !parent.querySelector('.fallback-icon')) {
+      const fallback = document.createElement('span');
+      fallback.className = 'fallback-icon';
+      fallback.textContent = '✨';
+      parent.appendChild(fallback);
     }
   }
 

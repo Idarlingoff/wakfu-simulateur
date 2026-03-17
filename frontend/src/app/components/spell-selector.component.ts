@@ -50,7 +50,11 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
                   >
                     @if (spell) {
                       <div class="spell-card" (click)="removeSpell(i)">
-                        <span class="spell-icon">✨</span>
+                        @if (getSpellIconId(spell.spellId)) {
+                          <img class="spell-icon" [src]="'assets/images/spells/' + getSpellIconId(spell.spellId) + '.png'" [alt]="getSpellName(spell.spellId)" (error)="onImgError($event)" />
+                        } @else {
+                          <span class="spell-icon">✨</span>
+                        }
                         <span class="spell-name">{{ getSpellName(spell.spellId) }}</span>
                         <button class="remove-btn" title="Retirer">✕</button>
                       </div>
@@ -89,7 +93,11 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
                         [class.already-selected]="isSpellSelected(spell.id)"
                         (click)="selectSpell(spell)"
                       >
-                        <div class="spell-icon-large">✨</div>
+                        @if (spell.iconId) {
+                          <img class="spell-icon-large" [src]="'assets/images/spells/' + spell.iconId + '.png'" [alt]="spell.name" (error)="onImgError($event)" />
+                        } @else {
+                          <div class="spell-icon-large">✨</div>
+                        }
                         <div class="spell-info">
                           <div class="spell-title">
                             {{ spell.name }}
@@ -224,6 +232,10 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .spell-icon {
       font-size: 24px;
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      border-radius: 4px;
     }
 
     .spell-name {
@@ -401,6 +413,8 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       justify-content: center;
       background: var(--panel);
       border-radius: 8px;
+      object-fit: contain;
+      flex-shrink: 0;
     }
 
     .spell-info {
@@ -570,7 +584,7 @@ export class SpellSelectorComponent implements OnChanges {
       newSpells[targetIndex] = {
         spellId: spell.id,
         level: spell.level,
-        icon: spell.icon
+        iconId: spell.iconId
       };
       this.spellsChange.emit(newSpells);
       this.currentSlotIndex.set(-1);
@@ -594,6 +608,16 @@ export class SpellSelectorComponent implements OnChanges {
   getSpellName(spellId: string): string {
     const spell = this.allSpells().find(s => s.id === spellId);
     return spell?.name || spellId;
+  }
+
+  getSpellIconId(spellId: string): number | undefined {
+    const spell = this.allSpells().find(s => s.id === spellId);
+    return spell?.iconId;
+  }
+
+  onImgError(event: Event): void {
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
   }
 
   isSpellSelected(spellId: string): boolean {
