@@ -63,7 +63,10 @@ public class SpellEntity {
     private SpellDirection direction;
 
     @Column(name = "ratio_eval_mode", nullable = false, length = 16)
-    private String ratioEvalMode; 
+    private String ratioEvalMode;
+
+    @Column(name = "icon_id")
+    private Integer iconId;
 
     @OneToMany(mappedBy = "spell", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SpellVariantEntity> variants = new ArrayList<>();

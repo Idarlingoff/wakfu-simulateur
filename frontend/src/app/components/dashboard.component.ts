@@ -103,76 +103,72 @@ import {SimulationService} from '../services/simulation.service';
                 <span>{{ build.characterLevel }}</span>
               </div>
               <div class="info-item">
-                <label>🔥 Maîtrise Feu:</label>
+                <label><img src="assets/images/characteristics/DMG_FIRE_PERCENT.png" class="stat-icon" alt="Feu"/>Maîtrise Feu</label>
                 <span>{{ build.stats.masteryFire }}</span>
               </div>
               <div class="info-item">
-                <label>💧 Maîtrise Eau:</label>
+                <label><img src="assets/images/characteristics/DMG_WATER_PERCENT.png" class="stat-icon" alt="Eau"/>Maîtrise Eau</label>
                 <span>{{ build.stats.masteryWater }}</span>
               </div>
               <div class="info-item">
-                <label>🌿 Maîtrise Terre:</label>
+                <label><img src="assets/images/characteristics/DMG_EARTH_PERCENT.png" class="stat-icon" alt="Terre"/>Maîtrise Terre</label>
                 <span>{{ build.stats.masteryEarth }}</span>
               </div>
               <div class="info-item">
-                <label>🌀 Maîtrise Air:</label>
+                <label><img src="assets/images/characteristics/DMG_AIR_PERCENT.png" class="stat-icon" alt="Air"/>Maîtrise Air</label>
                 <span>{{ build.stats.masteryAir }}</span>
               </div>
               <div class="info-item">
-                <label>Secondary Mastery:</label>
+                <label>Maîtrise secondaire:</label>
                 <span>{{ build.stats.masterySecondary }}</span>
               </div>
               <div class="info-item">
-                <label>Back Mastery:</label>
+                <label><img src="assets/images/characteristics/BACKSTAB_BONUS.png" class="stat-icon" alt="Dos"/>Maîtrise Dos</label>
                 <span>{{ build.stats.backMastery }}</span>
               </div>
               <div class="info-item">
-                <label>Damage Inflict:</label>
+                <label><img src="assets/images/characteristics/FINAL_DMG_IN_PERCENT.png" class="stat-icon" alt="Dommages infligés"/>Dégats Infligés</label>
                 <span>{{ build.stats.dommageInflict }}</span>
               </div>
               <div class="info-item">
-                <label>Crit Rate:</label>
+                <label><img src="assets/images/characteristics/FEROCITY.png" class="stat-icon" alt="Coup critique"/>Taux de Critique (%)</label>
                 <span>{{ build.stats.critRate }}%</span>
               </div>
               <div class="info-item">
-                <label>Crit Mastery:</label>
+                <label><img src="assets/images/characteristics/CRITICAL_BONUS.png" class="stat-icon" alt="Critique"/>Maîtrise Critique</label>
                 <span>{{ build.stats.critMastery }}</span>
               </div>
               <div class="info-item">
-                <label>Resistance:</label>
+                <label>Résistances:</label>
                 <span>{{ build.stats.resistance }}</span>
               </div>
               <div class="info-item">
-                <label>AP:</label>
+                <label><img src="assets/images/characteristics/AP.png" class="stat-icon" alt="PA"/>PA</label>
                 <span>{{ build.stats.ap }}</span>
               </div>
               <div class="info-item">
-                <label>MP:</label>
+                <label><img src="assets/images/characteristics/MP.png" class="stat-icon" alt="PM"/>PM</label>
                 <span>{{ build.stats.mp }}</span>
               </div>
               <div class="info-item">
-                <label>WP:</label>
+                <label><img src="assets/images/characteristics/WP.png" class="stat-icon" alt="PW"/>PW</label>
                 <span>{{ build.stats.wp }}</span>
               </div>
               <div class="info-item">
-                <label>Range:</label>
+                <label><img src="assets/images/characteristics/RANGE.png" class="stat-icon" alt="Portée"/>Portée</label>
                 <span>{{ build.stats.range }}</span>
               </div>
               <div class="info-item">
-                <label>Spells:</label>
+                <label>Sorts :</label>
                 <span>{{ countNonNull(build.spellBar.spells) }}/12</span>
               </div>
               <div class="info-item">
-                <label>Passives:</label>
+                <label>Passifs :</label>
                 <span>{{ countNonNull(build.passiveBar.passives) }}/6</span>
               </div>
               <div class="info-item">
                 <label>Sublimations:</label>
                 <span>{{ countNonNull(build.sublimationBar.sublimations) }}/12</span>
-              </div>
-              <div class="info-item">
-                <label>Crit Rate:</label>
-                <span>{{ build.stats.critRate }}%</span>
               </div>
             </div>
             <div class="no-data" *ngIf="!buildService.selectedBuildA()">
@@ -637,6 +633,14 @@ import {SimulationService} from '../services/simulation.service';
       box-shadow: 0 4px 12px rgba(76, 201, 240, 0.25);
       width: fit-content;
       transition: all 0.3s ease;
+    }
+
+    .stat-icon {
+      width: 14px;
+      height: 14px;
+      vertical-align: middle;
+      margin-right: 3px;
+      object-fit: contain;
     }
 
     .info-item:hover label {

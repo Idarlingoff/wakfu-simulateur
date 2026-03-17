@@ -14,7 +14,7 @@ DELETE FROM status_def         WHERE id IN ('HORLOGE_BANK','HORLOGE_MARK');
 INSERT INTO spell VALUES (
                              'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
                              5,0,1,3,TRUE,TRUE,
-                             0,2,1,'LINE','STEP'
+                             0,2,1,'LINE','STEP', 763
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES

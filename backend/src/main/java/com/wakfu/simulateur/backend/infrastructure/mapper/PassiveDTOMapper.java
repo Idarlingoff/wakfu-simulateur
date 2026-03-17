@@ -19,6 +19,7 @@ public class PassiveDTOMapper {
                 .classId(entity.getCharacterClass() != null ? entity.getCharacterClass().getId() : null)
                 .name(entity.getName())
                 .description(entity.getDescription())
+                .iconId(entity.getIconId())
                 .effects(toEffectDTOs(entity.getEffects()))
                 .build();
     }

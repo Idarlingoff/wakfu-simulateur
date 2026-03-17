@@ -6,9 +6,9 @@
 DELETE FROM passive_effect WHERE passive_id = 'XEL_COURS_TEMPS';
 DELETE FROM passive WHERE id = 'XEL_COURS_TEMPS';
 
-INSERT INTO passive (id, class_id, name, description) VALUES
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_COURS_TEMPS','XEL','Cours du temps',
-     'À chaque transposition causée par le Xélor : +1 PA si Distorsion actif, sinon +1 PW. Distorsion a 3 tours de relance.');
+     'À chaque transposition causée par le Xélor : +1 PA si Distorsion actif, sinon +1 PW. Distorsion a 3 tours de relance.', 785);
 
 INSERT INTO effect_condition_group (op) VALUES ('AND');
 INSERT INTO effect_condition_group (op) VALUES ('AND');

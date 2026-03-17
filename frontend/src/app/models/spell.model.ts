@@ -62,7 +62,7 @@ export interface Spell {
   ratioEvalMode: string;
   variants: SpellVariant[];
   breakpoints: SpellRatioBreakpoint[];
-  icon?: string;
+  iconId?: number;
   description?: string;
 }
 

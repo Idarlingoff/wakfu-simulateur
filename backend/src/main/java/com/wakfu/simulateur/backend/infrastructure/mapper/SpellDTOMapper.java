@@ -30,6 +30,7 @@ public class SpellDTOMapper {
                 .usePerTarget(entity.getUsePerTarget())
                 .direction(entity.getDirection() != null ? entity.getDirection().name() : null)
                 .ratioEvalMode(entity.getRatioEvalMode())
+                .iconId(entity.getIconId())
                 .variants(toVariantDTOs(entity.getVariants()))
                 .breakpoints(toBreakpointDTOs(entity.getBreakpoints()))
                 .build();
