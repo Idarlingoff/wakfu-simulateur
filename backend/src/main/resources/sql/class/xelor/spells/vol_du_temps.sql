@@ -38,7 +38,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
              0, 0, 1, 1, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', null
+             0, 1, 1, 'NONE', 'STEP', 3909
          );
 
 -- Ratio (aucun dégât)

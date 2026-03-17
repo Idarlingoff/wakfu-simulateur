@@ -133,7 +133,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DIAL', 'XEL', 'Dial', 'NONE', 'INNATE',
              2, 0, 1, 3, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', null
+             0, 1, 1, 'NONE', 'STEP', 5345
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -489,7 +489,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
              0, 4, 0, 1, FALSE, FALSE,
-             0, 99, 99, 'NONE', 'STEP', null
+             0, 99, 99, 'NONE', 'STEP', 7794
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -1228,7 +1228,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
              0, 1, 0, 1, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', null
+             0, 1, 1, 'NONE', 'STEP', 3909
          );
 
 -- Ratio (aucun dégât)

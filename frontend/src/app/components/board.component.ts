@@ -10,6 +10,7 @@ import { Build } from '../models/build.model';
 import { Spell } from '../models/spell.model';
 import { DataCacheService } from '../services/data-cache.service';
 import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
+import { getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
 
 interface BoardCell {
   x: number;
@@ -72,25 +73,6 @@ interface BoardCell {
 
       <div class="placement-help" *ngIf="placementMode() !== 'none'">
         📍 {{ getPlacementHelpText() }}
-      </div>
-
-      <!-- Legend -->
-      <div class="legend">
-        <div class="legend-item">
-          <span class="legend-color player"></span> Joueur Xélor
-        </div>
-        <div class="legend-item">
-          <span class="legend-color enemy"></span> Ennemi
-        </div>
-        <div class="legend-item">
-          <span class="legend-color mechanism"></span> Mécanisme
-        </div>
-        <div class="legend-item">
-          <span class="legend-color action-spell"></span> Lancer de sort
-        </div>
-        <div class="legend-item">
-          <span class="legend-color mechanism-explode"></span> Explosion Rouage
-        </div>
       </div>
 
       <!-- Map + Panneau sorts côte à côte -->
@@ -189,6 +171,35 @@ interface BoardCell {
                 </span>
               </div>
               <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+            </div>
+          </div>
+
+          <!-- Sorts innés de la classe -->
+          <div class="innate-spells-section" *ngIf="innateSpells().length > 0">
+            <div class="innate-spells-label">Sorts innés</div>
+            <div class="spell-grid innate-spell-grid">
+              <div
+                *ngFor="let spell of innateSpells()"
+                class="spell-icon-card innate-spell-card"
+                [class.selected]="selectedSpellId() === spell.id"
+                (click)="onSelectSpell(spell)"
+                (mouseenter)="showTooltip(spell, $event)"
+                (mouseleave)="hideTooltip()"
+              >
+                <div class="spell-icon-wrapper">
+                  <img *ngIf="spell.iconId" [src]="'assets/images/spells/' + spell.iconId + '.png'" [alt]="spell.name" class="spell-icon-img" (error)="onSpellImgError($event)" />
+                  <div *ngIf="!spell.iconId" class="spell-icon-fallback">⚙️</div>
+                </div>
+                <div class="spell-cost-band">
+                  <span *ngIf="spell.paCost > 0" class="cost-item">
+                    {{ spell.paCost }}<img src="assets/images/characteristics/AP.png" alt="PA" class="cost-icon" />
+                  </span>
+                  <span *ngIf="spell.pwCost > 0" class="cost-item">
+                    {{ spell.pwCost }}<img src="assets/images/characteristics/WP.png" alt="PW" class="cost-icon" />
+                  </span>
+                </div>
+                <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+              </div>
             </div>
           </div>
 
@@ -918,6 +929,55 @@ interface BoardCell {
       font-size: 13px;
     }
 
+    /* Section sorts innés */
+    .innate-spells-section {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--stroke);
+    }
+
+    .innate-spells-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #ffd166;
+      margin-bottom: 8px;
+      padding: 0 2px;
+    }
+
+    .innate-spell-card .spell-icon-wrapper {
+      border-color: rgba(255, 209, 102, 0.25);
+    }
+
+    .innate-spell-card:hover .spell-icon-wrapper {
+      border-color: #ffd166;
+      box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
+    }
+
+    .innate-spell-card.selected .spell-icon-wrapper {
+      border-color: #ffd166;
+      box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.4);
+    }
+
+    .innate-spell-card:hover .spell-cost-band {
+      border-color: #ffd166;
+    }
+
+    .innate-spell-card.selected .spell-cost-band {
+      border-color: #ffd166;
+    }
+
+    .innate-spell-card.selected .selected-ring {
+      border-color: #ffd166;
+      animation: ringPulseGold 1.5s ease-in-out infinite;
+    }
+
+    @keyframes ringPulseGold {
+      0%, 100% { box-shadow: 0 0 6px rgba(255, 209, 102, 0.4); }
+      50% { box-shadow: 0 0 14px rgba(255, 209, 102, 0.8); }
+    }
+
     .cell {
       background: linear-gradient(135deg, #141a24, #0f151f);
       border: 1px solid var(--stroke);
@@ -1502,6 +1562,16 @@ export class BoardComponent {
       .filter((s): s is Spell => !!s);
   });
 
+  innateSpells = computed(() => {
+    const build = this.buildService.selectedBuildA();
+    const cache = this.spellsCache();
+    if (!build?.classId) return [] as Spell[];
+    const innateIds = getInnateSpellIdsForClass(build.classId);
+    return innateIds
+      .map(id => cache.get(id))
+      .filter((s): s is Spell => !!s);
+  });
+
   currentStep = computed(() => {
     const timeline = this.currentTimeline();
     if (!timeline) return null;
@@ -1599,6 +1669,18 @@ export class BoardComponent {
     const spells = await this.dataCacheService.getSpells(classId);
     const cache = new Map<string, Spell>();
     spells.forEach(spell => cache.set(spell.id, spell));
+
+    // Charger aussi les sorts innés de la classe
+    const innateIds = getInnateSpellIdsForClass(classId);
+    for (const innateId of innateIds) {
+      if (!cache.has(innateId)) {
+        const innateSpell = await this.dataCacheService.getSpellById(innateId);
+        if (innateSpell) {
+          cache.set(innateSpell.id, innateSpell);
+        }
+      }
+    }
+
     this.spellsCache.set(cache);
   }
 

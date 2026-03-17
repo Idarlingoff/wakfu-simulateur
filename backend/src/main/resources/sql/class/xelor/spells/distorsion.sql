@@ -71,7 +71,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
              0, 4, 0, 1, FALSE, FALSE,
-             0, 99, 99, 'NONE', 'STEP', null
+             0, 99, 99, 'NONE', 'STEP', 7794
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
