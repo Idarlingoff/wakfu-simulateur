@@ -27,7 +27,20 @@ import {SimulationService} from '../services/simulation.service';
       <!-- Header -->
       <header class="header">
         <h1>🎮 Wakfu Simulator - Dashboard</h1>
+        <button class="btn-secondary" (click)="toggleActionsMenu()">⚙️ Action</button>
       </header>
+
+      <section class="header-actions" *ngIf="showActionsMenu()">
+        <div class="actions">
+          <button (click)="onValidateTimeline()" class="btn-primary">✓ Validate Timeline</button>
+          <button (click)="onExportBuild()" class="btn-secondary">📤 Export Build</button>
+          <button (click)="onAddPlayer()" class="btn-secondary">🦸 Add Ally</button>
+          <button (click)="onAddEnemy()" class="btn-secondary">👿 Add Enemy</button>
+          <button (click)="onAddCog()" class="btn-secondary">⚙️ Add Cog</button>
+          <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">💾 Save Board Setup in Timeline</button>
+          <button (click)="onClearBoard()" class="btn-danger">🗑️ Clear Board</button>
+        </div>
+      </section>
 
       <div class="container">
         <!-- Left Panel: Builds -->
@@ -46,13 +59,14 @@ import {SimulationService} from '../services/simulation.service';
                 {{ build.classId }} • Lvl.{{ build.characterLevel }}
               </div>
               <div class="build-actions">
+                <button (click)="onOpenBuildStats($event, build)" class="btn-edit">📊</button>
                 <button (click)="onEditBuild($event, build)" class="btn-edit">✏️</button>
                 <button (click)="onDeleteBuild($event, build)" class="btn-delete">🗑️</button>
               </div>
             </div>
           </div>
 
-          <hr />
+          <hr/>
 
           <h2>📋 Timelines ({{ timelineService.allTimelines().length }})</h2>
           <button (click)="onCreateTimeline()" class="btn-add">➕ Nouvelle Timeline</button>
@@ -80,106 +94,6 @@ import {SimulationService} from '../services/simulation.service';
 
         <!-- Main Content -->
         <main class="content">
-          <!-- Builds Section -->
-          <section class="section">
-            <div class="section-header">
-              <h2>📊 Selected Build</h2>
-              <button (click)="toggleBuildSection()" class="btn-toggle-section" [class.collapsed]="!buildSectionExpanded()">
-                {{ buildSectionExpanded() ? '▼' : '▶' }}
-              </button>
-            </div>
-            <div class="section-content" [class.collapsed]="!buildSectionExpanded()">
-              <div class="info-grid" *ngIf="buildService.selectedBuildA() as build">
-              <div class="info-item">
-                <label>Name:</label>
-                <span>{{ build.name }}</span>
-              </div>
-              <div class="info-item">
-                <label>Class:</label>
-                <span>{{ build.classId }}</span>
-              </div>
-              <div class="info-item">
-                <label>Level:</label>
-                <span>{{ build.characterLevel }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/DMG_FIRE_PERCENT.png" class="stat-icon" alt="Feu"/>Maîtrise Feu</label>
-                <span>{{ build.stats.masteryFire }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/DMG_WATER_PERCENT.png" class="stat-icon" alt="Eau"/>Maîtrise Eau</label>
-                <span>{{ build.stats.masteryWater }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/DMG_EARTH_PERCENT.png" class="stat-icon" alt="Terre"/>Maîtrise Terre</label>
-                <span>{{ build.stats.masteryEarth }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/DMG_AIR_PERCENT.png" class="stat-icon" alt="Air"/>Maîtrise Air</label>
-                <span>{{ build.stats.masteryAir }}</span>
-              </div>
-              <div class="info-item">
-                <label>Maîtrise secondaire:</label>
-                <span>{{ build.stats.masterySecondary }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/BACKSTAB_BONUS.png" class="stat-icon" alt="Dos"/>Maîtrise Dos</label>
-                <span>{{ build.stats.backMastery }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/FINAL_DMG_IN_PERCENT.png" class="stat-icon" alt="Dommages infligés"/>Dégats Infligés</label>
-                <span>{{ build.stats.dommageInflict }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/FEROCITY.png" class="stat-icon" alt="Coup critique"/>Taux de Critique (%)</label>
-                <span>{{ build.stats.critRate }}%</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/CRITICAL_BONUS.png" class="stat-icon" alt="Critique"/>Maîtrise Critique</label>
-                <span>{{ build.stats.critMastery }}</span>
-              </div>
-              <div class="info-item">
-                <label>Résistances:</label>
-                <span>{{ build.stats.resistance }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/AP.png" class="stat-icon" alt="PA"/>PA</label>
-                <span>{{ build.stats.ap }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/MP.png" class="stat-icon" alt="PM"/>PM</label>
-                <span>{{ build.stats.mp }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/WP.png" class="stat-icon" alt="PW"/>PW</label>
-                <span>{{ build.stats.wp }}</span>
-              </div>
-              <div class="info-item">
-                <label><img src="assets/images/characteristics/RANGE.png" class="stat-icon" alt="Portée"/>Portée</label>
-                <span>{{ build.stats.range }}</span>
-              </div>
-              <div class="info-item">
-                <label>Sorts :</label>
-                <span>{{ countNonNull(build.spellBar.spells) }}/12</span>
-              </div>
-              <div class="info-item">
-                <label>Passifs :</label>
-                <span>{{ countNonNull(build.passiveBar.passives) }}/6</span>
-              </div>
-              <div class="info-item">
-                <label>Sublimations:</label>
-                <span>{{ countNonNull(build.sublimationBar.sublimations) }}/12</span>
-              </div>
-            </div>
-            <div class="no-data" *ngIf="!buildService.selectedBuildA()">
-              No build selected
-            </div>
-            </div>
-          </section>
-
-          <!-- Timeline Section -->
-          <!-- Now handled by BoardComponent above -->
-
           <!-- Board Component - Interactive Map -->
           <section class="section board-section">
             <app-board
@@ -195,49 +109,25 @@ import {SimulationService} from '../services/simulation.service';
             <app-timeline-summary></app-timeline-summary>
           </section>
         </main>
-
-        <!-- Right Panel: Actions -->
-        <aside class="panel">
-          <h2>⚙️ Actions</h2>
-          <div class="actions">
-            <button (click)="onValidateTimeline()" class="btn-primary">
-              ✓ Validate Timeline
-            </button>
-            <button (click)="onExportBuild()" class="btn-secondary">
-              📤 Export Build
-            </button>
-            <button (click)="onAddPlayer()" class="btn-secondary">
-              🦸 Add Ally
-            </button>
-            <button (click)="onAddEnemy()" class="btn-secondary">
-              👿 Add Enemy
-            </button>
-            <button (click)="onAddCog()" class="btn-secondary">
-              ⚙️ Add Cog
-            </button>
-            <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">
-              💾 Save Board Setup in Timeline
-            </button>
-            <button (click)="onClearBoard()" class="btn-danger">
-              🗑️ Clear Board
-            </button>
-          </div>
-
-          <h2>📊 Stats</h2>
-          <div class="stats">
-            <div *ngIf="buildService.selectedBuildA() as build">
-              <strong>Total Damage:</strong> {{ calculateTotalDamage(build) }}
-            </div>
-            <div>
-              <strong>Timeline Valid:</strong>
-              <span class="badge" [class.valid]="isTimelineValid()">
-                {{ isTimelineValid() ? '✓ Yes' : '✗ No' }}
-              </span>
-            </div>
-          </div>
-        </aside>
       </div>
-    </div>
+        <div class="build-stats-modal" *ngIf="statsBuildModal() as build" (click)="closeBuildStats()">
+          <div class="build-stats-content" (click)="$event.stopPropagation()">
+            <h2>{{ build.name }} — Stats</h2>
+            <div class="info-grid">
+              <div class="info-item"><label>Classe</label><span>{{ build.classId }}</span></div>
+              <div class="info-item"><label>Niveau</label><span>{{ build.characterLevel }}</span></div>
+              <div class="info-item"><label>PA / PM / PW</label><span>{{ build.stats.ap }} / {{ build.stats.mp }} / {{ build.stats.wp }}</span></div>
+              <div class="info-item"><label>Portée</label><span>{{ build.stats.range }}</span></div>
+              <div class="info-item"><label>Maîtrise Feu</label><span>{{ build.stats.masteryFire }}</span></div>
+              <div class="info-item"><label>Maîtrise Eau</label><span>{{ build.stats.masteryWater }}</span></div>
+              <div class="info-item"><label>Maîtrise Terre</label><span>{{ build.stats.masteryEarth }}</span></div>
+              <div class="info-item"><label>Maîtrise Air</label><span>{{ build.stats.masteryAir }}</span></div>
+              <div class="info-item"><label>Critique</label><span>{{ build.stats.critRate }}%</span></div>
+              <div class="info-item"><label>Maîtrise crit.</label><span>{{ build.stats.critMastery }}</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
     <!-- Build Form Modal -->
     <app-build-form #buildForm></app-build-form>
@@ -324,10 +214,24 @@ import {SimulationService} from '../services/simulation.service';
 
     .container {
       display: grid;
-      grid-template-columns: 300px 1fr 250px;
+      grid-template-columns: 300px 1fr;
       gap: 12px;
       padding: 12px;
       min-height: calc(100vh - 72px);
+    }
+
+    .header-actions {
+      margin: 12px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .header-actions .actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
     }
 
     .panel {
@@ -738,6 +642,27 @@ import {SimulationService} from '../services/simulation.service';
         grid-template-columns: 1fr;
       }
     }
+
+    .build-stats-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      padding: 24px;
+    }
+
+    .build-stats-content {
+      width: min(900px, 95vw);
+      max-height: 80vh;
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      padding: 16px;
+    }
   `]
 })
 export class DashboardComponent {
@@ -746,17 +671,29 @@ export class DashboardComponent {
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
 
-  buildSectionExpanded = signal<boolean>(true);
+  showActionsMenu = signal<boolean>(false);
+  statsBuildModal = signal<any | null>(null);
   placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
-  /**
-   * Helper: Count non-null items in array
-   */
+
   countNonNull(items: any[]): number {
     return items.filter(item => item !== null).length;
   }
 
   onSelectBuild(build: any): void {
     this.buildService.selectBuildA(build);
+  }
+
+  toggleActionsMenu(): void {
+    this.showActionsMenu.update(v => !v);
+  }
+
+  onOpenBuildStats(event: Event, build: any): void {
+    event.stopPropagation();
+    this.statsBuildModal.set(build);
+  }
+
+  closeBuildStats(): void {
+    this.statsBuildModal.set(null);
   }
 
   onSelectTimeline(timeline: Timeline): void {
@@ -1004,9 +941,4 @@ export class DashboardComponent {
     const result = this.timelineService.validateTimeline();
     return result.valid;
   }
-
-  toggleBuildSection(): void {
-    this.buildSectionExpanded.update(expanded => !expanded);
-  }
 }
-
