@@ -19,7 +19,7 @@ import { DataCacheService } from '../services/data-cache.service';
       <div class="selector-header">
         <h4>Passifs ({{ countSelected() }}/{{ getAvailableSlots().length }})</h4>
         <button type="button" class="btn-open" (click)="openModal()">
-          📋 Gérer les passifs
+          Gérer les passifs
         </button>
       </div>
 

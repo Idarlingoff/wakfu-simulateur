@@ -232,12 +232,12 @@ export class SimulationEngineService {
 
     console.log('');
     console.log('╔═══════════════════════════════════════════════════════╗');
-    console.log('║  🎮 DÉMARRAGE DE LA SIMULATION                       ║');
+    console.log('║  DÉMARRAGE DE LA SIMULATION                       ║');
     console.log('╚═══════════════════════════════════════════════════════╝');
-    console.log('📦 Build:', build.name);
-    console.log('🎭 Classe:', build.classId || 'Default');
-    console.log('📋 Timeline:', timeline.name);
-    console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
+    console.log('Build:', build.name);
+    console.log('Classe:', build.classId || 'Default');
+    console.log('Timeline:', timeline.name);
+    console.log('Nombre d\'étapes:', timeline.steps.length);
     console.log('');
 
     this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
@@ -494,7 +494,7 @@ export class SimulationEngineService {
     console.log('═══════════════════════════════════════════════════════');
     console.log('🎯 [CAST SPELL] Tentative de lancement de sort');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('📦 Spell ID:', action.spellId);
+    console.log('Spell ID:', action.spellId);
     console.log('📍 Position cible:', action.targetPosition);
     console.log('⚡ Ressources disponibles:', {
       AP: context.availablePa,

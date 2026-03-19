@@ -15,81 +15,89 @@ import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
 import {TimelineSummaryComponent} from './timeline-summary.component';
+import {DamageSummaryComponent} from './damage-summary.component';
 import { Timeline } from '../models/timeline.model';
 import {SimulationService} from '../services/simulation.service';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent],
+  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
       <header class="header">
-        <h1>🎮 Wakfu Simulator - Dashboard</h1>
-        <button class="btn-secondary" (click)="toggleActionsMenu()">⚙️ Action</button>
+        <h1>Wakfu Simulator</h1>
+        <div class="header-selectors">
+          <!-- Build selector -->
+          <div class="selector-group">
+            <label class="selector-label">Build</label>
+            <div class="selector-dropdown" (click)="toggleBuildDropdown()">
+              <span class="selector-value">{{ buildService.selectedBuildA()?.name || 'Aucun build' }}</span>
+              <span class="selector-arrow" [class.open]="showBuildDropdown()">▾</span>
+            </div>
+            <div class="dropdown-menu" *ngIf="showBuildDropdown()">
+              <div class="dropdown-item"
+                   *ngFor="let build of buildService.allBuilds()"
+                   [class.active]="build.id === buildService.selectedBuildA()?.id"
+                   (click)="onSelectBuild(build); closeBuildDropdown()">
+                <span class="dropdown-item-name">{{ build.name }}</span>
+                <span class="dropdown-item-meta">{{ build.classId }} • Lvl.{{ build.characterLevel }}</span>
+                <div class="dropdown-item-actions" (click)="$event.stopPropagation()">
+                  <button (click)="onOpenBuildStats($event, build)" class="btn-mini" title="Stats">📊</button>
+                  <button (click)="onEditBuild($event, build)" class="btn-mini" title="Modifier">✏️</button>
+                  <button (click)="onDeleteBuild($event, build)" class="btn-mini btn-mini-danger" title="Supprimer">🗑️</button>
+                </div>
+              </div>
+              <button class="dropdown-add" (click)="onCreateBuild(); closeBuildDropdown()">➕ Nouveau Build</button>
+            </div>
+          </div>
+
+          <!-- Timeline selector -->
+          <div class="selector-group">
+            <label class="selector-label">Timeline</label>
+            <div class="selector-dropdown" (click)="toggleTimelineDropdown()">
+              <span class="selector-value">{{ getSelectedTimelineName() }}</span>
+              <span class="selector-arrow" [class.open]="showTimelineDropdown()">▾</span>
+            </div>
+            <div class="dropdown-menu" *ngIf="showTimelineDropdown()">
+              <div class="dropdown-item"
+                   *ngFor="let timeline of timelineService.allTimelines()"
+                   [class.active]="timelineService.currentTimelineId() === timeline.id"
+                   (click)="onSelectTimeline(timeline); closeTimelineDropdown()">
+                <span class="dropdown-item-name">{{ timeline.name }}</span>
+                <span class="dropdown-item-meta">{{ timeline.steps.length }} étapes</span>
+                <div class="dropdown-item-actions" (click)="$event.stopPropagation()">
+                  <button (click)="onEditTimeline($event, timeline)" class="btn-mini" title="Modifier">✏️</button>
+                  <button (click)="onDeleteTimeline($event, timeline)" class="btn-mini btn-mini-danger" title="Supprimer">🗑️</button>
+                </div>
+              </div>
+              <button class="dropdown-add" (click)="onCreateTimeline(); closeTimelineDropdown()">➕ Nouvelle Timeline</button>
+            </div>
+          </div>
+        </div>
+        <button class="btn-secondary" (click)="toggleActionsMenu()">Action</button>
       </header>
+
+      <!-- Backdrop to close dropdowns -->
+      <div class="dropdown-backdrop" *ngIf="showBuildDropdown() || showTimelineDropdown()" (click)="closeAllDropdowns()"></div>
 
       <section class="header-actions" *ngIf="showActionsMenu()">
         <div class="actions">
-          <button (click)="onValidateTimeline()" class="btn-primary">✓ Validate Timeline</button>
-          <button (click)="onExportBuild()" class="btn-secondary">📤 Export Build</button>
-          <button (click)="onAddPlayer()" class="btn-secondary">🦸 Add Ally</button>
-          <button (click)="onAddEnemy()" class="btn-secondary">👿 Add Enemy</button>
-          <button (click)="onAddCog()" class="btn-secondary">⚙️ Add Cog</button>
-          <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">💾 Save Board Setup in Timeline</button>
-          <button (click)="onClearBoard()" class="btn-danger">🗑️ Clear Board</button>
+          <button (click)="onValidateTimeline()" class="btn-primary">Validater la timeline</button>
+          <button (click)="onExportBuild()" class="btn-secondary">Export build</button>
+          <button (click)="onAddPlayer()" class="btn-secondary">Ajout allié</button>
+          <button (click)="onAddEnemy()" class="btn-secondary">Ajout ennemie</button>
+          <button (click)="onAddCog()" class="btn-secondary">Ajout rouage</button>
+          <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">Sauvegarder la map dans la timeline</button>
+          <button (click)="onClearBoard()" class="btn-danger">Effacer la map</button>
         </div>
       </section>
 
       <div class="container">
-        <!-- Left Panel: Builds -->
+        <!-- Left Panel: Damage Summary -->
         <aside class="panel">
-          <h2>📦 Builds ({{ buildService.allBuilds().length }})</h2>
-          <button (click)="onCreateBuild()" class="btn-add">➕ Nouveau Build</button>
-          <div class="builds-list">
-            <div
-              *ngFor="let build of buildService.allBuilds()"
-              class="build-item"
-              [class.active]="build.id === buildService.selectedBuildA()?.id"
-              (click)="onSelectBuild(build)"
-            >
-              <div class="build-name">{{ build.name }}</div>
-              <div class="build-meta">
-                {{ build.classId }} • Lvl.{{ build.characterLevel }}
-              </div>
-              <div class="build-actions">
-                <button (click)="onOpenBuildStats($event, build)" class="btn-edit">📊</button>
-                <button (click)="onEditBuild($event, build)" class="btn-edit">✏️</button>
-                <button (click)="onDeleteBuild($event, build)" class="btn-delete">🗑️</button>
-              </div>
-            </div>
-          </div>
-
-          <hr/>
-
-          <h2>📋 Timelines ({{ timelineService.allTimelines().length }})</h2>
-          <button (click)="onCreateTimeline()" class="btn-add">➕ Nouvelle Timeline</button>
-          <div class="timelines-list">
-            <div
-              *ngFor="let timeline of timelineService.allTimelines()"
-              class="timeline-item"
-              [class.active]="timelineService.currentTimelineId() === timeline.id"
-              (click)="onSelectTimeline(timeline)"
-            >
-              <div class="timeline-info">
-                <div class="timeline-name">
-                  {{ timeline.name }}
-                  <span class="active-badge" *ngIf="timelineService.currentTimelineId() === timeline.id">●</span>
-                </div>
-                <div class="timeline-meta">{{ timeline.steps.length }} étapes</div>
-              </div>
-              <div class="timeline-actions">
-                <button (click)="onEditTimeline($event, timeline)" class="btn-edit">✏️</button>
-                <button (click)="onDeleteTimeline($event, timeline)" class="btn-delete">🗑️</button>
-              </div>
-            </div>
-          </div>
+          <app-damage-summary></app-damage-summary>
         </aside>
 
         <!-- Main Content -->
@@ -171,15 +179,193 @@ import {SimulationService} from '../services/simulation.service';
     .header {
       background: var(--panel);
       border-bottom: 1px solid var(--stroke);
-      padding: 20px;
+      padding: 12px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
     }
 
     .header h1 {
       margin: 0;
-      font-size: 24px;
+      font-size: 20px;
+      white-space: nowrap;
+    }
+
+    /* ── Header selectors ── */
+    .header-selectors {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .selector-group {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .selector-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .selector-dropdown {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--panel-2);
+      border: 1px solid var(--stroke);
+      border-radius: 6px;
+      padding: 6px 12px;
+      cursor: pointer;
+      min-width: 140px;
+      max-width: 220px;
+      transition: all 0.2s;
+    }
+
+    .selector-dropdown:hover {
+      border-color: var(--accent);
+      background: #252f3d;
+    }
+
+    .selector-value {
+      flex: 1;
+      font-size: 12px;
+      font-weight: 600;
+      color: #e8ecf3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .selector-arrow {
+      font-size: 10px;
+      color: var(--muted);
+      transition: transform 0.2s;
+    }
+
+    .selector-arrow.open {
+      transform: rotate(180deg);
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 4px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 4px;
+      z-index: 1000;
+      max-height: 300px;
+      overflow-y: auto;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      min-width: 240px;
+    }
+
+    .dropdown-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+
+    .dropdown-item:hover {
+      background: #252f3d;
+    }
+
+    .dropdown-item.active {
+      background: rgba(76, 201, 240, 0.15);
+      border-left: 3px solid var(--accent);
+    }
+
+    .dropdown-item-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #e8ecf3;
+    }
+
+    .dropdown-item-meta {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .dropdown-item-actions {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 2px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .dropdown-item:hover .dropdown-item-actions {
+      opacity: 1;
+    }
+
+    .btn-mini {
+      background: transparent;
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      border-radius: 4px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 10px;
+      transition: all 0.15s;
+    }
+
+    .btn-mini:hover {
+      background: var(--accent);
+      color: #0b1220;
+      border-color: var(--accent);
+    }
+
+    .btn-mini-danger:hover {
+      background: var(--bad);
+      border-color: var(--bad);
+      color: white;
+    }
+
+    .dropdown-add {
+      width: 100%;
+      background: transparent;
+      border: 1px dashed var(--stroke);
+      color: var(--accent);
+      border-radius: 6px;
+      padding: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      margin-top: 4px;
+      transition: all 0.15s;
+    }
+
+    .dropdown-add:hover {
+      background: rgba(76, 201, 240, 0.1);
+      border-color: var(--accent);
+    }
+
+    .dropdown-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
     }
 
     button {
@@ -672,8 +858,40 @@ export class DashboardComponent {
   simulationService = inject(SimulationService);
 
   showActionsMenu = signal<boolean>(false);
+  showBuildDropdown = signal<boolean>(false);
+  showTimelineDropdown = signal<boolean>(false);
   statsBuildModal = signal<any | null>(null);
   placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
+
+  toggleBuildDropdown(): void {
+    this.showBuildDropdown.update(v => !v);
+    this.showTimelineDropdown.set(false);
+  }
+
+  closeBuildDropdown(): void {
+    this.showBuildDropdown.set(false);
+  }
+
+  toggleTimelineDropdown(): void {
+    this.showTimelineDropdown.update(v => !v);
+    this.showBuildDropdown.set(false);
+  }
+
+  closeTimelineDropdown(): void {
+    this.showTimelineDropdown.set(false);
+  }
+
+  getSelectedTimelineName(): string {
+    const currentId = this.timelineService.currentTimelineId();
+    if (!currentId) return 'Aucune timeline';
+    const tl = this.timelineService.allTimelines().find(t => t.id === currentId);
+    return tl?.name || 'Aucune timeline';
+  }
+
+  closeAllDropdowns(): void {
+    this.showBuildDropdown.set(false);
+    this.showTimelineDropdown.set(false);
+  }
 
   countNonNull(items: any[]): number {
     return items.filter(item => item !== null).length;

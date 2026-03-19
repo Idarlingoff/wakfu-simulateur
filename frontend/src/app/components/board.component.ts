@@ -31,7 +31,7 @@ interface BoardCell {
         <div class="header-left">
           <h2>🗺️ Carte de Combat</h2>
           <div class="timeline-indicator" *ngIf="currentTimeline()">
-            <span class="timeline-badge">📋 {{ currentTimeline()!.name }}</span>
+            <span class="timeline-badge">{{ currentTimeline()!.name }}</span>
           </div>
         </div>
         <div class="board-controls">
@@ -63,7 +63,7 @@ interface BoardCell {
 
           <div class="divider"></div>
 
-          <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">🔄 Réinitialiser</button>
+          <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">Réinitialiser</button>
         </div>
       </div>
 
@@ -139,15 +139,6 @@ interface BoardCell {
 
         <!-- PANNEAU SORTS -->
         <aside class="spells-panel">
-          <div class="spells-actions">
-            <button class="btn-nav" [class.active]="selectedInteractionMode() === 'move'" (click)="selectMoveMode('move')" [disabled]="buildSpells().length === 0">
-              <img src="assets/images/characteristics/MP.png" alt="PM" class="btn-icon" /> PM
-            </button>
-            <button class="btn-nav" [class.active]="selectedInteractionMode() === 'pwMove'" (click)="selectMoveMode('pwMove')" [disabled]="buildSpells().length === 0">
-              <img src="assets/images/characteristics/WP.png" alt="PW" class="btn-icon" /> PW
-            </button>
-            <button class="btn-reset cancel-btn" (click)="clearSelectedInteraction()">✕</button>
-          </div>
 
           <div class="spell-grid" *ngIf="buildSpells().length > 0; else noSpells">
             <div
@@ -276,33 +267,14 @@ interface BoardCell {
         </div>
       </div>
 
-      <!-- Timeline Actions Display -->
-      <div class="timeline-display" *ngIf="currentStep()">
-        <h3>📍 Actions à cette étape</h3>
-        <div class="actions-list">
-          <div *ngFor="let action of currentStep()?.actions || []" class="action-item">
-            <span class="action-type" [class]="action.type">{{ action.type }}</span>
-            <span *ngIf="action.spellId" class="spell-info">
-              Sort: {{ getSpellName(action.spellId) }}
-            </span>
-            <span class="pos-info">
-              Cible: ({{ action.targetPosition?.x }}, {{ action.targetPosition?.y }})
-            </span>
-            <span class="facing-info" *ngIf="action.targetFacing">
-              Direction: {{ action.targetFacing.direction }}
-            </span>
-          </div>
-        </div>
-      </div>
-
       <!-- Entities Info -->
       <div class="entities-info">
-        <h3>👥 Entités</h3>
+        <h3>Entités</h3>
         <div class="info-grid">
           <div class="entity-info" *ngFor="let entity of boardService.state().entities">
             <div class="entity-header">
               <div class="entity-type" [class]="entity.type">
-                {{ entity.type === 'player' ? '🧙 Joueur' : '👹 Ennemi' }}
+                {{ entity.type === 'player' ? 'Joueur' : 'Ennemi' }}
               </div>
               <div class="entity-actions">
                 <button (click)="onEditEntity(entity)" class="btn-edit" title="Modifier">✏️</button>
@@ -560,23 +532,25 @@ interface BoardCell {
       width: 100%;
     }
 
-    /* MAP */
+    /* MAP — 58% de la largeur */
     .board-wrapper {
       display: flex;
-      flex: 0 0 auto;
+      flex: 0 0 58%;
+      width: 58%;
       justify-content: center;
-      padding: 16px;
+      padding: 10px;
       background: var(--panel);
       border-radius: 12px;
       border: 1px solid var(--stroke);
       overflow: auto;
-      min-height: 490px;
+      min-height: 420px;
+      box-sizing: border-box;
     }
 
-    /* PANNEAU SORTS — sticky, s'aligne avec le haut de la map */
+    /* PANNEAU SORTS — prend le reste (≈33%) — sticky, s'aligne avec le haut de la map */
     .spells-panel {
-      flex: 0 0 260px;
-      width: 260px;
+      flex: 1 1 0;
+      min-width: 0;
       background: var(--panel);
       border: 1px solid var(--stroke);
       border-radius: 10px;
@@ -587,6 +561,7 @@ interface BoardCell {
       max-height: calc(100vh - 120px);
       overflow-y: auto;
       overflow-x: visible;
+      box-sizing: border-box;
     }
 
     .spells-actions {
@@ -607,10 +582,10 @@ interface BoardCell {
       margin-right: 2px;
     }
 
-    /* Grille des sorts — icônes 3 par ligne */
+    /* Grille des sorts — icônes 4 par ligne */
     .spell-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       padding: 4px 0;
     }
@@ -635,8 +610,8 @@ interface BoardCell {
 
     /* Grille des icônes de sorts */
     .spell-grid {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       padding: 4px 0;
     }
@@ -645,7 +620,6 @@ interface BoardCell {
     .spell-icon-card {
       position: relative;
       cursor: pointer;
-      flex: 0 0 auto;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -654,48 +628,37 @@ interface BoardCell {
 
     .spell-icon-wrapper {
       position: relative;
-      width: 68px;
-      height: 68px;
+      width: 46px;
+      height: 46px;
       border-radius: 8px 8px 0 0;
-      border: 2px solid transparent;
-      border-bottom: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
       overflow: hidden;
     }
 
     .spell-icon-card:hover .spell-icon-wrapper {
-      border-color: var(--accent);
       box-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
     }
 
-    .spell-icon-card.selected .spell-icon-wrapper {
-      border-color: #7aa2f7;
-      box-shadow: 0 0 0 3px rgba(122, 162, 247, 0.4);
-    }
-
     .spell-icon-img {
-      width: 62px;
-      height: 62px;
+      width: 46px;
+      height: 46px;
       display: block;
       object-fit: cover;
     }
 
     .spell-icon-fallback {
-      width: 62px;
-      height: 62px;
+      width: 46px;
+      height: 46px;
       background: #1f2838;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
+      font-size: 22px;
     }
 
     /* Bandeau coût SOUS l'image */
     .spell-cost-band {
-      width: 62px;
+      width: 46px;
       background: rgba(0, 0, 0, 0.88);
-      border: 2px solid transparent;
-      border-top: none;
       border-radius: 0 0 6px 6px;
       display: flex;
       justify-content: center;
@@ -707,15 +670,6 @@ interface BoardCell {
       color: #fff;
       line-height: 1;
       box-sizing: border-box;
-      transition: border-color 0.15s;
-    }
-
-    .spell-icon-card:hover .spell-cost-band {
-      border-color: var(--accent);
-    }
-
-    .spell-icon-card.selected .spell-cost-band {
-      border-color: #7aa2f7;
     }
 
     .cost-item {
@@ -859,17 +813,6 @@ interface BoardCell {
       box-shadow: 0 0 0 2px rgba(122, 162, 247, 0.35);
     }
 
-    .board-wrapper {
-      display: flex;
-      flex: 0 0 auto;
-      justify-content: center;
-      padding: 16px;
-      background: var(--panel);
-      border-radius: 12px;
-      border: 1px solid var(--stroke);
-      overflow: auto;
-      min-height: 490px;
-    }
 
     .no-timeline {
       display: flex;
@@ -946,27 +889,10 @@ interface BoardCell {
       padding: 0 2px;
     }
 
-    .innate-spell-card .spell-icon-wrapper {
-      border-color: rgba(255, 209, 102, 0.25);
-    }
-
     .innate-spell-card:hover .spell-icon-wrapper {
-      border-color: #ffd166;
       box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
     }
 
-    .innate-spell-card.selected .spell-icon-wrapper {
-      border-color: #ffd166;
-      box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.4);
-    }
-
-    .innate-spell-card:hover .spell-cost-band {
-      border-color: #ffd166;
-    }
-
-    .innate-spell-card.selected .spell-cost-band {
-      border-color: #ffd166;
-    }
 
     .innate-spell-card.selected .selected-ring {
       border-color: #ffd166;
@@ -1773,10 +1699,76 @@ export class BoardComponent {
     const spell = this.selectedSpellId() ? this.spellsCache().get(this.selectedSpellId()!) : null;
     const player = this.boardService.state().entities.find(e => e.type === 'player');
     if (!spell || !player) return false;
+
     const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
     if (dist < spell.poMin || dist > spell.poMax) return false;
-    if (!spell.lineOfSight) return true;
-    return player.position.x === x || player.position.y === y;
+
+    const dx = x - player.position.x;
+    const dy = y - player.position.y;
+
+    switch ((spell.direction || 'NONE').toUpperCase()) {
+      case 'LINE':
+        if (dx !== 0 && dy !== 0) return false;
+        break;
+      case 'CROSS':
+        if (dx !== 0 && dy !== 0 && Math.abs(dx) !== Math.abs(dy)) return false;
+        break;
+      default:
+        break;
+    }
+
+    if (spell.lineOfSight) {
+      return this.hasLineOfSightOnBoard(player.position, { x, y });
+    }
+
+    return true;
+  }
+
+  /**
+   * Vérifie la ligne de vue entre deux positions via Bresenham
+   * sur l'état courant du board (entités + mécanismes comme obstacles)
+   */
+  private hasLineOfSightOnBoard(
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ): boolean {
+    if (from.x === to.x && from.y === to.y) return true;
+
+    const state = this.boardService.state();
+
+    const build = this.buildService.selectedBuildA();
+    const hasRemanence = build?.passiveBar.passives.some(p =>
+      p && p.passiveId.toLowerCase().replace(/é/g, 'e').includes('remanence')
+    ) ?? false;
+
+    const blockers = new Set<string>();
+
+    for (const entity of state.entities) {
+      if (entity.position.x !== from.x || entity.position.y !== from.y) {
+        blockers.add(`${entity.position.x},${entity.position.y}`);
+      }
+    }
+    if (!hasRemanence) {
+      for (const mech of state.mechanisms) {
+        blockers.add(`${mech.position.x},${mech.position.y}`);
+      }
+    }
+
+    let x0 = from.x, y0 = from.y;
+    const x1 = to.x, y1 = to.y;
+    const adx = Math.abs(x1 - x0), ady = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = adx - ady;
+
+    while (true) {
+      const e2 = 2 * err;
+      if (e2 > -ady) { err -= ady; x0 += sx; }
+      if (e2 < adx)  { err += adx; y0 += sy; }
+      if (x0 === x1 && y0 === y1) break;
+      if (blockers.has(`${x0},${y0}`)) return false;
+    }
+
+    return true;
   }
 
   isCellInMoveRange(x: number, y: number): boolean {

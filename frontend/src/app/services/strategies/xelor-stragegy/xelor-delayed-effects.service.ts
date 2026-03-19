@@ -42,7 +42,7 @@ export class XelorDelayedEffectsService {
       return;
     }
 
-    console.log(`[XELOR DELAYED] 📦 Found ${delayedEffects.length} delayed effect(s) for spell ${spell.name}`);
+    console.log(`[XELOR DELAYED] Found ${delayedEffects.length} delayed effect(s) for spell ${spell.name}`);
 
     const playerEntity = this.boardService.player();
     const casterPosition = playerEntity?.position || context.playerPosition || { x: 0, y: 0 };

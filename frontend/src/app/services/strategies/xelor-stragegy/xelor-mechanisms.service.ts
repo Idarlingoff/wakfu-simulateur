@@ -317,7 +317,35 @@ export class XelorMechanismsService {
       }
     });
 
-    this.regenerationService.applySinistroRegeneration(context);
+    const regenEvents = this.regenerationService.applySinistroRegeneration(context);
+
+    regenEvents.forEach(event => {
+      const mechanismId = event.details?.['mechanismId'];
+      const sinistroMech = mechanismId ? this.boardService.getMechanism(mechanismId) : sinistros[0];
+      const actualSpellId = sinistroMech?.spellId || 'XEL_SINISTRO';
+
+      const sinistroResult: SimulationActionResult = {
+        success: true,
+        actionId: `trigger_sinistro_${mechanismId || 'unknown'}_${Date.now()}`,
+        actionType: 'TriggerExplosion',
+        spellId: actualSpellId,
+        spellName: 'Sinistro',
+        heal: 0,
+        damage: 0,
+        paCost: -(event.amount || 0),
+        pwCost: 0,
+        mpCost: 0,
+        message: event.description || `Sinistro: régénération PA`,
+        details: {
+          mechanismId: event.details?.['mechanismId'],
+          mechanismType: 'sinistro',
+          paRegenerated: event.amount || 0,
+          charges: event.details?.['charges'] || 0
+        }
+      };
+
+      getXelorState(context, true).triggeredActions.push(sinistroResult);
+    });
   }
 
   /**
