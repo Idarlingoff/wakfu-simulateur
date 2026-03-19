@@ -75,8 +75,8 @@ interface BoardCell {
         📍 {{ getPlacementHelpText() }}
       </div>
 
-      <!-- Map + Panneau sorts côte à côte -->
-      <div class="board-and-spells" *ngIf="currentTimeline()">
+      <!-- Map + Panneau sorts côte à côte — toujours affiché -->
+      <div class="board-and-spells">
 
         <!-- MAP -->
         <div class="board-wrapper">
@@ -195,16 +195,12 @@ interface BoardCell {
           </div>
 
           <ng-template #noSpells>
-            <div class="no-spells-hint">Sélectionnez un build.</div>
+            <div class="no-spells-hint">Aucun sort disponible.</div>
           </ng-template>
         </aside>
 
       </div><!-- fin .board-and-spells -->
 
-      <div class="no-timeline" *ngIf="!currentTimeline()">
-        <h3>Aucune timeline chargée</h3>
-        <p>Veuillez sélectionner ou créer une timeline pour voir la carte de combat.</p>
-      </div>
       <div
         class="spell-tooltip-portal"
         *ngIf="tooltipSpell()"
@@ -1474,25 +1470,45 @@ export class BoardComponent {
       const build = this.buildService.selectedBuildA();
       if (build?.classId) {
         this.loadSpells(build.classId);
+      } else {
+        // Pas de build : utiliser la classe du joueur par défaut sur le board
+        const player = this.boardService.player();
+        if (player?.classId) {
+          this.loadSpells(player.classId);
+        }
       }
     });
+  }
+
+  /** Classe effective : build sélectionné ou joueur par défaut sur le board */
+  private get effectiveClassId(): string | undefined {
+    return this.buildService.selectedBuildA()?.classId
+      ?? this.boardService.player()?.classId;
   }
 
   buildSpells = computed(() => {
     const build = this.buildService.selectedBuildA();
     const cache = this.spellsCache();
-    if (!build) return [] as Spell[];
-    return build.spellBar.spells
-      .filter((s): s is NonNullable<typeof s> => !!s)
-      .map(s => cache.get(s.spellId))
-      .filter((s): s is Spell => !!s);
+
+    // Si un build est sélectionné → afficher uniquement les sorts de la barre de sorts
+    if (build) {
+      return build.spellBar.spells
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map(s => cache.get(s.spellId))
+        .filter((s): s is Spell => !!s);
+    }
+
+    // Pas de build → afficher tous les sorts chargés (toute la classe)
+    return Array.from(cache.values())
+      .filter(s => !getInnateSpellIdsForClass(this.boardService.player()?.classId ?? '').includes(s.id));
   });
 
   innateSpells = computed(() => {
     const build = this.buildService.selectedBuildA();
     const cache = this.spellsCache();
-    if (!build?.classId) return [] as Spell[];
-    const innateIds = getInnateSpellIdsForClass(build.classId);
+    const classId = build?.classId ?? this.boardService.player()?.classId ?? '';
+    if (!classId) return [] as Spell[];
+    const innateIds = getInnateSpellIdsForClass(classId);
     return innateIds
       .map(id => cache.get(id))
       .filter((s): s is Spell => !!s);
@@ -1611,8 +1627,13 @@ export class BoardComponent {
   }
 
   onSelectSpell(spell: Spell): void {
-    this.selectedSpellId.set(spell.id);
-    this.selectedInteractionMode.set('spell');
+    if (this.selectedSpellId() === spell.id) {
+      this.selectedSpellId.set(null);
+      this.selectedInteractionMode.set('none');
+    } else {
+      this.selectedSpellId.set(spell.id);
+      this.selectedInteractionMode.set('spell');
+    }
   }
 
   onSpellImgError(event: Event): void {
