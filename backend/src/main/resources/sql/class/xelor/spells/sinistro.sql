@@ -80,7 +80,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_SINISTRO', 'XEL', 'Sinistro', 'NONE', 'NEUTRAL',
              2, 0, 2, 5, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 777
+             0, 1, 1, 'AREA', 'STEP', 777
          );
 
 -- ratio (pas de dégâts directs)

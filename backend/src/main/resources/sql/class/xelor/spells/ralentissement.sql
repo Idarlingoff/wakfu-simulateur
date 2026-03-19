@@ -16,7 +16,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_RALENTISSEMENT', 'XEL', 'Ralentissement', 'WATER', 'ELEMENTAL',
              1, 1, 1, 3, TRUE, TRUE,
-             0, 3, 2, 'NONE', 'STEP', 775
+             0, 3, 2, 'AREA', 'STEP', 775
          );
 
 -- Ratio (palier 185) — valeur de base (non-crit)

@@ -56,7 +56,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_CLM', 'XEL', 'Contre la montre', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 776
+             0, 1, 1, 'AREA', 'STEP', 776
          );
 
 -- Ratio (aucun dégât)

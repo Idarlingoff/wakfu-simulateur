@@ -16,7 +16,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DEVOUEMENT', 'XEL', 'Dévouement', 'NONE', 'NEUTRAL',
              0, 4, 1, 3, TRUE, TRUE,
-             0, 99, 99, 'NONE', 'STEP', 2839
+             0, 99, 99, 'AREA', 'STEP', 2839
          );
 
 -- Ratio

@@ -126,7 +126,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DIAL', 'XEL', 'Dial', 'NONE', 'INNATE',
              2, 0, 1, 3, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 5345
+             0, 1, 1, 'LINE', 'STEP', 5345
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)

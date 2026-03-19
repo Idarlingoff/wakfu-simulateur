@@ -11,7 +11,7 @@ DELETE FROM spell              WHERE id='XEL_PARADOXE';
 INSERT INTO spell VALUES (
                              'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
                              4,0,1,3,TRUE,TRUE,
-                             0,2,1,'NONE','STEP', 1418
+                             0,2,1,'AREA','STEP', 1418
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES

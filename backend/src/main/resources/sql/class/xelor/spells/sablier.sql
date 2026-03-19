@@ -34,7 +34,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_SABLIER', 'XEL', 'Sablier', 'WATER', 'ELEMENTAL',
              3, 0, 1, 2, TRUE, FALSE,
-             0, 4, 1, 'NONE', 'STEP', 783
+             0, 4, 1, 'AREA', 'STEP', 783
          );
 
 -- Ratio niveau 185 (aucun crit car dégâts indirects)

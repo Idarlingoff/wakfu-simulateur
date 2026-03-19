@@ -11,7 +11,7 @@ DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
 INSERT INTO spell VALUES (
                              'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
                              3,0,1,3,TRUE,TRUE,
-                             0,3,2,'NONE','STEP', 771
+                             0,3,2,'AREA','STEP', 771
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES

@@ -133,7 +133,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DIAL', 'XEL', 'Dial', 'NONE', 'INNATE',
              2, 0, 1, 3, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 5345
+             0, 1, 1, 'LINE', 'STEP', 5345
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
@@ -260,7 +260,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_CLM', 'XEL', 'Contre la montre', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 776
+             0, 1, 1, 'AREA', 'STEP', 776
          );
 
 -- Ratio (aucun dégât)
@@ -396,7 +396,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_DEVOUEMENT', 'XEL', 'Dévouement', 'NONE', 'NEUTRAL',
              0, 4, 0, 3, TRUE, TRUE,
-             0, 99, 99, 'NONE', 'STEP', 2839
+             0, 99, 99, 'AREA', 'STEP', 2839
          );
 
 -- Ratio
@@ -611,7 +611,7 @@ DELETE FROM spell              WHERE id='XEL_PARADOXE';
 INSERT INTO spell VALUES (
                              'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
                              4,0,1,3,TRUE,FALSE,
-                             0,2,1,'NONE','STEP', 1418
+                             0,2,1,'AREA','STEP', 1418
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
@@ -718,7 +718,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_RALENTISSEMENT', 'XEL', 'Ralentissement', 'WATER', 'ELEMENTAL',
              1, 1, 1, 3, TRUE, TRUE,
-             0, 3, 2, 'NONE', 'STEP', 775
+             0, 3, 2, 'AREA', 'STEP', 775
          );
 
 -- Ratio (palier 185) — valeur de base (non-crit)
@@ -812,7 +812,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_REGULATEUR', 'XEL', 'Régulateur', 'NONE', 'NEUTRAL',
              0, 3, 1, 2, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', 5344
+             0, 1, 1, 'AREA', 'STEP', 5344
          );
 
 -- Ratio (aucun dégât) pour cohérence
@@ -865,7 +865,7 @@ DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
 INSERT INTO spell VALUES (
                              'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
                              3,0,1,3,TRUE,TRUE,
-                             0,3,2,'NONE','STEP', 771
+                             0,3,2,'AREA','STEP', 771
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
@@ -1037,7 +1037,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_SABLIER', 'XEL', 'Sablier', 'WATER', 'ELEMENTAL',
              3, 0, 1, 2, TRUE, FALSE,
-             0, 4, 1, 'NONE', 'STEP', 783
+             0, 4, 1, 'AREA', 'STEP', 783
          );
 
 -- Ratio niveau 185 (aucun crit car dégâts indirects)
@@ -1150,7 +1150,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_SINISTRO', 'XEL', 'Sinistro', 'NONE', 'NEUTRAL',
              2, 0, 2, 5, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 777
+             0, 1, 1, 'AREA', 'STEP', 777
          );
 
 -- ratio (pas de dégâts directs)
@@ -1407,7 +1407,7 @@ DELETE FROM spell              WHERE id='XEL_SYMETRIE';
 INSERT INTO spell VALUES (
                              'XEL_SYMETRIE','XEL','Symétrie','AIR','ELEMENTAL',
                              3,0,1,3,FALSE,TRUE,
-                             0,3,1,'NONE','STEP', 772
+                             0,3,1,'AREA','STEP', 772
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES

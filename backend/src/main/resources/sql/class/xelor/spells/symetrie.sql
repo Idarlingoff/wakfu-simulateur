@@ -11,7 +11,7 @@ DELETE FROM spell              WHERE id='XEL_SYMETRIE';
 INSERT INTO spell VALUES (
                              'XEL_SYMETRIE','XEL','Symétrie','AIR','ELEMENTAL',
                              3,0,1,3,FALSE,TRUE,
-                             0,3,1,'NONE','STEP', 772
+                             0,3,1,'AREA','STEP', 772
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES

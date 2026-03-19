@@ -35,7 +35,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_REGULATEUR', 'XEL', 'Régulateur', 'NONE', 'NEUTRAL',
              0, 3, 1, 2, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', 5344
+             0, 1, 1, 'AREA', 'STEP', 5344
          );
 
 -- Ratio (aucun dégât) pour cohérence
