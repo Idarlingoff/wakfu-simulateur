@@ -12,11 +12,11 @@ DELETE FROM spell              WHERE id='XEL_DEVOUEMENT';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_DEVOUEMENT', 'XEL', 'Dévouement', 'NONE', 'NEUTRAL',
              0, 4, 1, 3, TRUE, TRUE,
-             0, 99, 99, 'AREA', 'STEP', 2839
+             0, 99, 99, 'AREA', 'STEP', 2839, FALSE
          );
 
 -- Ratio

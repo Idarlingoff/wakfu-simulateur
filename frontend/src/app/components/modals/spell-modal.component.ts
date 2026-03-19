@@ -85,6 +85,7 @@ export class SpellModalComponent {
       ratioEvalMode: 'standard',
       variants: [],
       breakpoints: [],
+      isAoe: false,
       description: 'Inflige des dégâts, pose Cadran'
     },
     {
@@ -106,6 +107,7 @@ export class SpellModalComponent {
       ratioEvalMode: 'standard',
       variants: [],
       breakpoints: [],
+      isAoe: true,
       description: 'Pose un rouage sur la carte'
     },
     {
@@ -127,6 +129,7 @@ export class SpellModalComponent {
       ratioEvalMode: 'standard',
       variants: [],
       breakpoints: [],
+      isAoe: false,
       description: 'Transpose et augmente les dégâts'
     }
   ];
@@ -167,4 +170,3 @@ export class SpellModalComponent {
   onClose(): void {
   }
 }
-

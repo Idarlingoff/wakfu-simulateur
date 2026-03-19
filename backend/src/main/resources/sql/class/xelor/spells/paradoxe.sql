@@ -8,11 +8,15 @@ DELETE FROM spell_variant      WHERE spell_id='XEL_PARADOXE';
 DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_PARADOXE';
 DELETE FROM spell              WHERE id='XEL_PARADOXE';
 
-INSERT INTO spell VALUES (
-                             'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
-                             4,0,1,3,TRUE,TRUE,
-                             0,2,1,'AREA','STEP', 1418
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
+             4,0,1,3,TRUE,TRUE,
+             0,2,1,'AREA','STEP', 1418, TRUE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
     ('XEL_PARADOXE','NORMAL',200,83),

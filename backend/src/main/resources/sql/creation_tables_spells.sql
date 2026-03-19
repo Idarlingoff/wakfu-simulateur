@@ -22,6 +22,7 @@ CREATE TABLE spell (
                        direction        VARCHAR(16) NOT NULL,            -- LINE|CROSS|NONE…
                        ratio_eval_mode  VARCHAR(16) NOT NULL DEFAULT 'STEP', -- STEP|LINEAR
                        icon_id          INT,
+                       is_aoe           BOOLEAN NOT NULL DEFAULT FALSE,   -- TRUE si le sort fait des dégâts de zone
                        CONSTRAINT ck_spell_type CHECK (spell_type IN ('ELEMENTAL','NEUTRAL','INNATE'))
 );
 

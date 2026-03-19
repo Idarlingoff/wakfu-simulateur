@@ -31,11 +31,11 @@ VALUES (
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_REGULATEUR', 'XEL', 'Régulateur', 'NONE', 'NEUTRAL',
              0, 3, 1, 2, FALSE, FALSE,
-             0, 1, 1, 'AREA', 'STEP', 5344
+             0, 1, 1, 'AREA', 'STEP', 5344, FALSE
          );
 
 -- Ratio (aucun dégât) pour cohérence

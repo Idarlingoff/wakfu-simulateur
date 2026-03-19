@@ -63,6 +63,7 @@ export interface Spell {
   variants: SpellVariant[];
   breakpoints: SpellRatioBreakpoint[];
   iconId?: number;
+  isAoe: boolean;
   description?: string;
 }
 

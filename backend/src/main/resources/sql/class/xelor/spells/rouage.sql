@@ -53,11 +53,11 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_ROUAGE', 'XEL', 'Rouage', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, FALSE,
-             0, 1, 1, 'LINE', 'STEP', 766
+             0, 1, 1, 'LINE', 'STEP', 766, TRUE
          );
 
 -- Ratio (aucun dégât direct au cast)

@@ -1687,16 +1687,9 @@ export class BoardComponent {
     return 0;
   }
 
-  /** Retourne vrai si le sort a une zone (AOE) — basé sur spellType ou variants */
+  /** Retourne vrai si le sort fait des dégâts de zone (AOE) — basé sur le champ is_aoe en BDD */
   isAoe(spell: Spell): boolean {
-    const aoeTypes = ['aoe', 'zone', 'area', 'ZONE', 'AOE'];
-    if (aoeTypes.some(t => spell.spellType?.toLowerCase().includes(t.toLowerCase()))) return true;
-    return spell.variants?.some(v =>
-      v.effects?.some(e =>
-        e.targetScope === 'ZONE' || e.targetScope === 'AOE' ||
-        e.targetScope === 'AROUND_CASTER' || e.targetScope === 'AROUND_TARGET'
-      )
-    ) ?? false;
+    return spell.isAoe ?? false;
   }
 
   /** Ratio de dégâts normal — depuis le breakpoint kind=NORMAL */

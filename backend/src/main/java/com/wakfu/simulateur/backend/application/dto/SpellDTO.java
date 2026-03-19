@@ -26,6 +26,7 @@ public class SpellDTO {
     private String direction;
     private String ratioEvalMode;
     private Integer iconId;
+    private boolean isAoe;
     private List<SpellVariantDTO> variants;
     private List<SpellRatioBreakpointDTO> breakpoints;
 

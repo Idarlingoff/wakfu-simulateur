@@ -11,11 +11,11 @@ DELETE FROM spell              WHERE id='XEL_POINTE_HEURE';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_POINTE_HEURE', 'XEL', 'Pointe-heure', 'AIR', 'ELEMENTAL',
              2, 0, 2, 4, TRUE, TRUE,
-             0, 2, 1, 'LINE', 'STEP', 767
+             0, 2, 1, 'LINE', 'STEP', 767, FALSE
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
