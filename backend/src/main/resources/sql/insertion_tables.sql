@@ -136,8 +136,8 @@ INSERT INTO spell (
              0, 1, 1, 'LINE', 'STEP', 5345
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DIAL', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DIAL', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DIAL', 'NORMAL');
@@ -264,8 +264,8 @@ INSERT INTO spell (
          );
 
 -- Ratio (aucun dégât)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_CLM', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_CLM', 'NORMAL', 200, 0);
 
 -- Variante (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)
@@ -302,8 +302,9 @@ INSERT INTO spell  VALUES (
                               0, 2, 0, 'AREA', 'STEP', 1417
                           );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DESYNCHRO', 185, 78);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DESYNCHRO', 'NORMAL', 200, 83),
+       ('XEL_DESYNCHRO', 'CRIT',   200, 104);
 
 INSERT INTO EFFECT_CONDITION_GROUP (OP) values ( 'AND' );
 
@@ -400,8 +401,8 @@ INSERT INTO spell (
          );
 
 -- Ratio
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DEVOUEMENT', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DEVOUEMENT', 'NORMAL', 200, 0);
 
 -- Variante unique (pas de critique)
 INSERT INTO spell_variant (spell_id, kind)
@@ -492,8 +493,8 @@ INSERT INTO spell (
              0, 99, 99, 'NONE', 'STEP', 7794
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DISTO', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DISTO', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DISTO', 'NORMAL');
@@ -552,7 +553,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_HORLOGE',185,139);
+    ('XEL_HORLOGE','NORMAL',200,149),
+    ('XEL_HORLOGE','CRIT',200,186);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_HORLOGE','NORMAL'),
@@ -615,7 +617,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_PARADOXE',185,78);
+    ('XEL_PARADOXE','NORMAL',200,83),
+    ('XEL_PARADOXE','CRIT',200,104);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_PARADOXE','NORMAL'),
@@ -659,9 +662,10 @@ INSERT INTO spell (
              0, 2, 1, 'LINE', 'STEP', 767
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
 VALUES
-    ('XEL_POINTE_HEURE', 185, 46);
+    ('XEL_POINTE_HEURE', 'NORMAL', 200, 49),
+    ('XEL_POINTE_HEURE', 'CRIT',   200, 62);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES
@@ -722,8 +726,9 @@ INSERT INTO spell (
          );
 
 -- Ratio (palier 185) — valeur de base (non-crit)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_RALENTISSEMENT', 185, 27);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_RALENTISSEMENT', 'NORMAL', 200, 28),
+       ('XEL_RALENTISSEMENT', 'CRIT',   200, 36);
 
 -- Variantes NORMAL / CRIT
 INSERT INTO spell_variant (spell_id, kind) VALUES
@@ -816,8 +821,8 @@ INSERT INTO spell (
          );
 
 -- Ratio (aucun dégât) pour cohérence
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_REGULATEUR', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_REGULATEUR', 'NORMAL', 200, 0);
 
 -- Variante unique (pas de critique)
 INSERT INTO spell_variant (spell_id, kind)
@@ -869,7 +874,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_RETOUR_SPONTANE',185,75);
+                                       ('XEL_RETOUR_SPONTANE','NORMAL',200,80),
+                                       ('XEL_RETOUR_SPONTANE','CRIT',  200,100);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_RETOUR_SPONTANE','NORMAL'),
@@ -966,8 +972,9 @@ INSERT INTO spell (
          );
 
 -- Ratio (aucun dégât direct au cast)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_ROUAGE', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_ROUAGE', 'NORMAL',     200, 0),
+       ('XEL_ROUAGE', 'PER_CHARGE', 200, 20);
 
 -- Variante unique (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)
@@ -1041,8 +1048,9 @@ INSERT INTO spell (
          );
 
 -- Ratio niveau 185 (aucun crit car dégâts indirects)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_SABLIER', 185, 93);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_SABLIER', 'NORMAL', 200, 99),
+       ('XEL_SABLIER', 'CRIT', 200, 124);
 
 -- NORMAL
 INSERT INTO spell_variant (spell_id, kind)
@@ -1154,8 +1162,8 @@ INSERT INTO spell (
          );
 
 -- ratio (pas de dégâts directs)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_SINISTRO', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_SINISTRO', 'NORMAL', 200, 0);
 
 -- variante
 INSERT INTO spell_variant (spell_id, kind)
@@ -1232,8 +1240,8 @@ INSERT INTO spell (
          );
 
 -- Ratio (aucun dégât)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_VDT', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_VDT', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_VDT', 'NORMAL');
@@ -1411,7 +1419,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_SYMETRIE',185,58);
+    ('XEL_SYMETRIE','NORMAL',200,62),
+    ('XEL_SYMETRIE','CRIT',200,78);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_SYMETRIE','NORMAL'),

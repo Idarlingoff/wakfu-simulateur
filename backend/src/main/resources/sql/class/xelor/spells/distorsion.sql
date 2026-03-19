@@ -74,8 +74,8 @@ INSERT INTO spell (
              0, 99, 99, 'NONE', 'STEP', 7794
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DISTO', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DISTO', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DISTO', 'NORMAL');

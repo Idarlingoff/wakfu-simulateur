@@ -18,9 +18,10 @@ INSERT INTO spell (
              0, 2, 1, 'LINE', 'STEP', 767
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
 VALUES
-    ('XEL_POINTE_HEURE', 185, 46);
+    ('XEL_POINTE_HEURE', 'NORMAL', 200, 49),
+    ('XEL_POINTE_HEURE', 'CRIT',   200, 62);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES

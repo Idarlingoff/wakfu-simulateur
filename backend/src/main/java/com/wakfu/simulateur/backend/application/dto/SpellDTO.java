@@ -84,9 +84,9 @@ public class SpellDTO {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class SpellRatioBreakpointDTO {
-        private Long id;
-        private int threshold;
-        private double ratio;
+        private String kind;
+        private int lvl;
+        private int ratio;
     }
 }
 

@@ -27,6 +27,9 @@ public class SpellRatioBreakpointEntity {
         @Column(name = "spell_id", length = 64)
         private String spellId;
 
+        @Column(name = "kind", length = 16, nullable = false)
+        private String kind;
+
         @Column(name = "lvl", nullable = false)
         private int lvl;
     }

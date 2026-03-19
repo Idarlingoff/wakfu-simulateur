@@ -9,6 +9,7 @@ import { Position, TimelineAction } from '../models/timeline.model';
 import { Build } from '../models/build.model';
 import { Spell } from '../models/spell.model';
 import { DataCacheService } from '../services/data-cache.service';
+import { StatsCalculatorService } from '../services/calculators/stats-calculator.service';
 import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
 import { getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
 
@@ -224,7 +225,11 @@ interface BoardCell {
         <div class="tooltip-row">
           <span class="tooltip-label">Portée</span>
           <span class="tooltip-range">
-            {{ tooltipSpell()!.poMin }} – {{ tooltipSpell()!.poMax }}
+            {{ tooltipSpell()!.poMin }} –
+            <ng-container *ngIf="tooltipSpell()!.poModifiable && rangeBonus() > 0; else baseRange">
+              <span class="range-effective">{{ tooltipSpell()!.poMax + rangeBonus() }}</span>
+            </ng-container>
+            <ng-template #baseRange>{{ tooltipSpell()!.poMax }}</ng-template>
             <img src="assets/images/characteristics/RANGE.png" alt="Portée" class="tooltip-icon" />
             <img *ngIf="tooltipSpell()!.poModifiable" src="assets/images/characteristics/RANGE_MODIFIABLE.png" alt="Modifiable" class="tooltip-icon" title="Portée modifiable" />
           </span>
@@ -250,15 +255,19 @@ interface BoardCell {
           <span>{{ tooltipSpell()!.cooldown }} tour(s)</span>
         </div>
         <div class="tooltip-desc" *ngIf="tooltipSpell()!.description">{{ tooltipSpell()!.description }}</div>
-        <div class="tooltip-ratios" *ngIf="getNormalRatio(tooltipSpell()!) as nr">
+        <div class="tooltip-ratios" *ngIf="getNormalRatio(tooltipSpell()!) || getCritRatio(tooltipSpell()!) || getPerChargeRatio(tooltipSpell()!)">
           <div class="tooltip-ratio-title">Ratios de dégâts</div>
-          <div class="tooltip-row">
+          <div class="tooltip-row" *ngIf="getNormalRatio(tooltipSpell()!) as nr">
             <span class="tooltip-label">Normal</span>
-            <span class="ratio-value">{{ nr }}%</span>
+            <span class="ratio-value">{{ nr }}</span>
           </div>
           <div class="tooltip-row" *ngIf="getCritRatio(tooltipSpell()!) as cr">
             <span class="tooltip-label">Critique</span>
-            <span class="ratio-value ratio-crit">{{ cr }}%</span>
+            <span class="ratio-value ratio-crit">{{ cr }}</span>
+          </div>
+          <div class="tooltip-row" *ngIf="getPerChargeRatio(tooltipSpell()!) as pc">
+            <span class="tooltip-label">Par charge</span>
+            <span class="ratio-value ratio-per-charge">{{ pc }} / charge</span>
           </div>
         </div>
       </div>
@@ -801,6 +810,11 @@ interface BoardCell {
 
     .ratio-crit {
       color: #ffd166;
+    }
+
+    .ratio-per-charge {
+      color: #4cc9f0;
+      font-style: italic;
     }
 
     .btn-nav.active {
@@ -1423,6 +1437,14 @@ export class BoardComponent {
   simulationService = inject(SimulationService);
   regenerationService = inject(ResourceRegenerationService);
   dataCacheService = inject(DataCacheService);
+  statsCalculator = inject(StatsCalculatorService);
+
+  /** Bonus de portée issu du build sélectionné (0 si aucun build) */
+  rangeBonus = computed(() => {
+    const build = this.buildService.selectedBuildA();
+    if (!build) return 0;
+    return this.statsCalculator.calculateTotalStats(build).range ?? 0;
+  });
 
   spellsCache = signal<Map<string, Spell>>(new Map());
   selectedSpellId = signal<string | null>(null);
@@ -1643,13 +1665,11 @@ export class BoardComponent {
 
   showTooltip(spell: Spell, event: MouseEvent): void {
     const TOOLTIP_WIDTH = 220;
-    const TOOLTIP_HEIGHT = 280; // hauteur max approximative
+    const TOOLTIP_HEIGHT = 280;
     const MARGIN = 8;
     let x = event.clientX - TOOLTIP_WIDTH - MARGIN;
     let y = event.clientY;
-    // Si ça dépasse à gauche, on affiche à droite du curseur
     if (x < 8) x = event.clientX + MARGIN;
-    // Si ça dépasse en bas, on remonte
     if (y + TOOLTIP_HEIGHT > window.innerHeight - 8) {
       y = window.innerHeight - TOOLTIP_HEIGHT - 8;
     }
@@ -1671,7 +1691,6 @@ export class BoardComponent {
   isAoe(spell: Spell): boolean {
     const aoeTypes = ['aoe', 'zone', 'area', 'ZONE', 'AOE'];
     if (aoeTypes.some(t => spell.spellType?.toLowerCase().includes(t.toLowerCase()))) return true;
-    // Vérifier dans les variants
     return spell.variants?.some(v =>
       v.effects?.some(e =>
         e.targetScope === 'ZONE' || e.targetScope === 'AOE' ||
@@ -1680,19 +1699,22 @@ export class BoardComponent {
     ) ?? false;
   }
 
-  /** Ratio de dégâts normal (breakpoint threshold=0 ou premier breakpoint) */
+  /** Ratio de dégâts normal — depuis le breakpoint kind=NORMAL */
   getNormalRatio(spell: Spell): number | null {
-    if (!spell.breakpoints || spell.breakpoints.length === 0) return null;
-    const normal = spell.breakpoints.find(b => b.threshold === 0) ?? spell.breakpoints[0];
-    return normal?.ratio ?? null;
+    const bp = spell.breakpoints?.find(b => b.kind === 'NORMAL');
+    return (bp && bp.ratio > 0) ? bp.ratio : null;
   }
 
-  /** Ratio de dégâts critique (breakpoint threshold=100) */
+  /** Ratio de dégâts critique — depuis le breakpoint kind=CRIT */
   getCritRatio(spell: Spell): number | null {
-    if (!spell.breakpoints || spell.breakpoints.length < 2) return null;
-    const crit = spell.breakpoints.find(b => b.threshold === 100)
-      ?? spell.breakpoints.find(b => b.threshold > 0);
-    return crit?.ratio ?? null;
+    const bp = spell.breakpoints?.find(b => b.kind === 'CRIT');
+    return (bp && bp.ratio > 0) ? bp.ratio : null;
+  }
+
+  /** Ratio par charge (mécanismes comme le Rouage) — depuis le breakpoint kind=PER_CHARGE */
+  getPerChargeRatio(spell: Spell): number | null {
+    const bp = spell.breakpoints?.find(b => b.kind === 'PER_CHARGE');
+    return (bp && bp.ratio > 0) ? bp.ratio : null;
   }
 
   selectMoveMode(mode: 'move' | 'pwMove'): void {
@@ -1721,8 +1743,12 @@ export class BoardComponent {
     const player = this.boardService.state().entities.find(e => e.type === 'player');
     if (!spell || !player) return false;
 
+    const bonus = spell.poModifiable ? this.rangeBonus() : 0;
+    const effectivePoMax = spell.poMax + bonus;
+    const effectivePoMin = Math.max(0, spell.poMin);
+
     const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
-    if (dist < spell.poMin || dist > spell.poMax) return false;
+    if (dist < effectivePoMin || dist > effectivePoMax) return false;
 
     const dx = x - player.position.x;
     const dy = y - player.position.y;

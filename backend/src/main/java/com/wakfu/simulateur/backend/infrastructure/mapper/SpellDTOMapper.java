@@ -98,8 +98,8 @@ public class SpellDTOMapper {
         if (entities == null) return List.of();
         return entities.stream()
                 .map(b -> SpellDTO.SpellRatioBreakpointDTO.builder()
-                        .id(null)
-                        .threshold(b.getId() != null ? b.getId().getLvl() : 0)
+                        .kind(b.getId() != null ? b.getId().getKind() : null)
+                        .lvl(b.getId() != null ? b.getId().getLvl() : 0)
                         .ratio(b.getRatio())
                         .build())
                 .collect(Collectors.toList());

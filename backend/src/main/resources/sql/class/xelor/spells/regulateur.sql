@@ -39,8 +39,8 @@ INSERT INTO spell (
          );
 
 -- Ratio (aucun dégât) pour cohérence
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_REGULATEUR', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_REGULATEUR', 'NORMAL', 200, 0);
 
 -- Variante unique (pas de critique)
 INSERT INTO spell_variant (spell_id, kind)

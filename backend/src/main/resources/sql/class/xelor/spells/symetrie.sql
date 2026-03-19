@@ -15,7 +15,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_SYMETRIE',185,58);
+    ('XEL_SYMETRIE','NORMAL',200,62),
+    ('XEL_SYMETRIE','CRIT',200,78);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_SYMETRIE','NORMAL'),

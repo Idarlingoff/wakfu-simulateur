@@ -18,7 +18,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_HORLOGE',185,139);
+    ('XEL_HORLOGE','NORMAL',200,149),
+    ('XEL_HORLOGE','CRIT',200,186);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_HORLOGE','NORMAL'),

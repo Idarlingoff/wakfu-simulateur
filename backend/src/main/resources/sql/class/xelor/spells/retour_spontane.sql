@@ -15,7 +15,8 @@ INSERT INTO spell VALUES (
                          );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_RETOUR_SPONTANE',185,75);
+    ('XEL_RETOUR_SPONTANE','NORMAL',200,80),
+    ('XEL_RETOUR_SPONTANE','CRIT',  200,100);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_RETOUR_SPONTANE','NORMAL'),

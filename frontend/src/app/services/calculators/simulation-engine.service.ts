@@ -810,25 +810,34 @@ export class SimulationEngineService {
       return [];
     }
 
+    const breakpoint = spell.breakpoints?.find(b => b.kind === variantKind)
+      ?? spell.breakpoints?.find(b => b.kind === 'NORMAL');
+    const ratioFromBreakpoint = breakpoint?.ratio ?? null;
+
     const computableEffects: { type: string; baseValue: number; element?: string }[] = [];
 
     for (const effect of variant.effects) {
       const effectType = effect.effect;
 
       if (effectType === 'DEAL_DAMAGE' || effectType === 'HEAL' || effectType === 'GIVE_ARMOR') {
-        const baseValue = this.extractBaseValue(effect);
+        let baseValue: number;
+        if (effectType === 'DEAL_DAMAGE' && ratioFromBreakpoint !== null) {
+          baseValue = ratioFromBreakpoint;
+        } else {
+          baseValue = this.extractBaseValue(effect);
+        }
 
         if (baseValue > 0) {
           computableEffects.push({
             type: effectType,
             baseValue,
-            element: effect.element
+            element: effect.element ?? (effect.extendedData?.element ?? undefined)
           });
         }
       }
     }
 
-    console.log(`🔍 [EFFECTS] ${spell.name} (${variantKind}): ${computableEffects.length} effet(s) calculable(s) extraits`);
+    console.log(`🔍 [EFFECTS] ${spell.name} (${variantKind}): ${computableEffects.length} effet(s) calculable(s) extraits (ratio breakpoint: ${ratioFromBreakpoint})`);
     return computableEffects;
   }
 

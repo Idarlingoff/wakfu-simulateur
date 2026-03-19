@@ -61,8 +61,9 @@ INSERT INTO spell (
          );
 
 -- Ratio (aucun dégât direct au cast)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_ROUAGE', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_ROUAGE', 'NORMAL',     200, 0),
+       ('XEL_ROUAGE', 'PER_CHARGE', 200, 20);
 
 -- Variante unique (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)

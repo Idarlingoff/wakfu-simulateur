@@ -84,8 +84,8 @@ INSERT INTO spell (
          );
 
 -- ratio (pas de dégâts directs)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_SINISTRO', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_SINISTRO', 'NORMAL', 200, 0);
 
 -- variante
 INSERT INTO spell_variant (spell_id, kind)

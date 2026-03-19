@@ -129,8 +129,8 @@ INSERT INTO spell (
              0, 1, 1, 'LINE', 'STEP', 5345
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DIAL', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DIAL', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DIAL', 'NORMAL');
