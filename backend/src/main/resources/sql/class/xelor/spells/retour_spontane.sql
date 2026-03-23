@@ -8,11 +8,15 @@ DELETE FROM spell_variant      WHERE spell_id='XEL_RETOUR_SPONTANE';
 DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_RETOUR_SPONTANE';
 DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
 
-INSERT INTO spell VALUES (
-                             'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
-                             3,0,1,3,TRUE,TRUE,
-                             0,3,2,'AREA','STEP', 771
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
+             3,0,1,3,TRUE,TRUE,
+             0,3,2,'AREA','STEP', 771, FALSE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
     ('XEL_RETOUR_SPONTANE','NORMAL',200,80),

@@ -234,7 +234,7 @@ interface BoardCell {
             <img *ngIf="tooltipSpell()!.poModifiable" src="assets/images/characteristics/RANGE_MODIFIABLE.png" alt="Modifiable" class="tooltip-icon" title="Portée modifiable" />
           </span>
         </div>
-        <div class="tooltip-row">
+        <div class="tooltip-row" *ngIf="hasDamage(tooltipSpell()!)">
           <span class="tooltip-label">Cible</span>
           <span class="tooltip-aoe">
             <img *ngIf="isAoe(tooltipSpell()!)" src="assets/images/characteristics/AOE_DMG.png" alt="Zone" class="tooltip-icon" />
@@ -1690,6 +1690,11 @@ export class BoardComponent {
   /** Retourne vrai si le sort fait des dégâts de zone (AOE) — basé sur le champ is_aoe en BDD */
   isAoe(spell: Spell): boolean {
     return spell.isAoe ?? false;
+  }
+
+  /** Retourne vrai si le sort inflige des dégâts (au moins un breakpoint avec ratio > 0) */
+  hasDamage(spell: Spell): boolean {
+    return spell.breakpoints?.some(b => b.ratio > 0) ?? false;
   }
 
   /** Ratio de dégâts normal — depuis le breakpoint kind=NORMAL */

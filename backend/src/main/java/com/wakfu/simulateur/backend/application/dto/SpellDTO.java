@@ -1,5 +1,6 @@
 package com.wakfu.simulateur.backend.application.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.util.List;
@@ -26,6 +27,7 @@ public class SpellDTO {
     private String direction;
     private String ratioEvalMode;
     private Integer iconId;
+    @JsonProperty("isAoe")
     private boolean isAoe;
     private List<SpellVariantDTO> variants;
     private List<SpellRatioBreakpointDTO> breakpoints;
