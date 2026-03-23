@@ -679,7 +679,6 @@ interface BoardCell {
       position: relative;
       width: 46px;
       height: 46px;
-      border-radius: 8px 8px 0 0;
       overflow: hidden;
     }
 
