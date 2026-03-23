@@ -1,8 +1,10 @@
 import { Component, inject, computed, output, effect, input, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';import { TimelineService } from '../services/timeline.service';
+import { CommonModule } from '@angular/common';
+import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
 import { SimulationService } from '../services/simulation.service';
+import { InteractivePlayService } from '../services/interactive-play.service';
 import { ResourceRegenerationService } from '../services/processors/resource-regeneration.service';
 import { BoardEntity, Mechanism } from '../models/board.model';
 import { Position, TimelineAction } from '../models/timeline.model';
@@ -76,6 +78,45 @@ interface BoardCell {
         📍 {{ getPlacementHelpText() }}
       </div>
 
+      <!-- ═══ BANDEAU MODE INTERACTIF ═══ -->
+      <div class="interactive-bar" [class.active]="interactivePlay.isActive()">
+        <div class="interactive-bar-left">
+          <button
+            class="btn-interactive"
+            [class.on]="interactivePlay.isActive()"
+            (click)="toggleInteractiveMode()"
+            [disabled]="!hasBuild()"
+            title="{{ interactivePlay.isActive() ? 'Désactiver le mode interactif' : 'Activer le mode interactif' }}"
+          >
+            {{ interactivePlay.isActive() ? 'Mode Interactif ON' : 'Mode Interactif' }}
+          </button>
+          <button
+            *ngIf="interactivePlay.isActive()"
+            class="btn-interactive-reset"
+            (click)="resetInteractiveMode()"
+            title="Réinitialiser la session interactive"
+          >Reset</button>
+        </div>
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive()">
+          <span class="res-item pa">
+            <img src="assets/images/characteristics/AP.png" alt="PA" class="res-icon" />
+            {{ interactivePlay.availablePa }}
+          </span>
+          <span class="res-item pw">
+            <img src="assets/images/characteristics/WP.png" alt="PW" class="res-icon" />
+            {{ interactivePlay.availablePw }}
+          </span>
+          <span class="res-item mp">
+            <img src="assets/images/characteristics/MP.png" alt="MP" class="res-icon" />
+            {{ interactivePlay.availableMp }}
+          </span>
+        </div>
+        <div class="interactive-hint" *ngIf="interactivePlay.isActive()">
+          <span *ngIf="selectedSpellId()">🎯 Cliquez sur une case pour lancer <strong>{{ getSpellName(selectedSpellId()!) }}</strong></span>
+          <span *ngIf="!selectedSpellId()">🏃 Cliquez sur une case pour déplacer le joueur</span>
+        </div>
+      </div>
+
       <!-- Map + Panneau sorts côte à côte — toujours affiché -->
       <div class="board-and-spells">
 
@@ -92,6 +133,9 @@ interface BoardCell {
               [class.spell-range-cell]="isCellInSpellRange(cell.x, cell.y)"
               [class.move-range-cell]="isCellInMoveRange(cell.x, cell.y)"
               [class.hover-move-range-cell]="isCellInHoverMoveRange(cell.x, cell.y)"
+              [class.interactive-move-cell]="isCellInInteractiveMoveRange(cell.x, cell.y)"
+              [class.interactive-spell-cell]="isCellInInteractiveSpellRange(cell.x, cell.y)"
+              [class.interactive-pw-move-cell]="isCellInInteractivePwMoveRange(cell.x, cell.y)"
               [title]="'(' + cell.x + ', ' + cell.y + ')'"
               (click)="onCellClick(cell)"
             >
@@ -1428,6 +1472,154 @@ interface BoardCell {
         grid-template-rows: repeat(10, 34px);
       }
     }
+
+    /* ═══ Bandeau Mode Interactif ═══ */
+    .interactive-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      transition: all 0.3s;
+      flex-wrap: wrap;
+    }
+
+    .interactive-bar.active {
+      background: rgba(102, 126, 234, 0.1);
+      border-color: #667eea;
+      box-shadow: 0 0 14px rgba(102, 126, 234, 0.2);
+    }
+
+    .interactive-bar-left {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-interactive {
+      background: #253044;
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      border-radius: 8px;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-interactive.on {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-color: #667eea;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-interactive:hover:not(:disabled) {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-color: #667eea;
+      color: #fff;
+    }
+
+    .btn-interactive:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-interactive-reset {
+      background: #2a1e3a;
+      border: 1px solid #764ba2;
+      color: #c4a0f7;
+      border-radius: 7px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.2s;
+    }
+
+    .btn-interactive-reset:hover {
+      background: #3b2060;
+    }
+
+    .interactive-resources {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .res-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .res-item.pa { color: #ffd166; }
+    .res-item.pw { color: #4cc9f0; }
+    .res-item.mp { color: #7bd88f; }
+
+    .res-icon {
+      width: 14px;
+      height: 14px;
+      object-fit: contain;
+    }
+
+    .interactive-hint {
+      flex: 1;
+      font-size: 12px;
+      color: #8c9bb3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .interactive-hint strong {
+      color: #c4a0f7;
+    }
+
+    /* ═══ Highlights des cellules en mode interactif ═══ */
+
+    /* Déplacement PM (vert clair) */
+    .cell.interactive-move-cell {
+      background: rgba(52, 199, 89, 0.25);
+      box-shadow: inset 0 0 10px rgba(52, 199, 89, 0.6);
+      cursor: pointer;
+    }
+
+    .cell.interactive-move-cell:hover {
+      background: rgba(52, 199, 89, 0.5);
+      box-shadow: inset 0 0 14px rgba(52, 199, 89, 0.9);
+    }
+
+    /* Déplacement PW via heure cadran (or/mauve) */
+    .cell.interactive-pw-move-cell {
+      background: rgba(167, 139, 250, 0.3);
+      box-shadow: inset 0 0 10px rgba(167, 139, 250, 0.7);
+      cursor: pointer;
+    }
+
+    .cell.interactive-pw-move-cell:hover {
+      background: rgba(167, 139, 250, 0.5);
+      box-shadow: inset 0 0 14px rgba(167, 139, 250, 0.9);
+    }
+
+    /* Portée de sort interactif (bleu) */
+    .cell.interactive-spell-cell {
+      background: rgba(122, 162, 247, 0.28);
+      box-shadow: inset 0 0 12px rgba(122, 162, 247, 0.7);
+      cursor: crosshair;
+    }
+
+    .cell.interactive-spell-cell:hover {
+      background: rgba(122, 162, 247, 0.5);
+      box-shadow: inset 0 0 16px rgba(122, 162, 247, 1);
+    }
   `]
 })
 export class BoardComponent {
@@ -1435,6 +1627,7 @@ export class BoardComponent {
   buildService = inject(BuildService);
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
+  interactivePlay = inject(InteractivePlayService);
   regenerationService = inject(ResourceRegenerationService);
   dataCacheService = inject(DataCacheService);
   statsCalculator = inject(StatsCalculatorService);
@@ -1493,7 +1686,6 @@ export class BoardComponent {
       if (build?.classId) {
         this.loadSpells(build.classId);
       } else {
-        // Pas de build : utiliser la classe du joueur par défaut sur le board
         const player = this.boardService.player();
         if (player?.classId) {
           this.loadSpells(player.classId);
@@ -1512,7 +1704,6 @@ export class BoardComponent {
     const build = this.buildService.selectedBuildA();
     const cache = this.spellsCache();
 
-    // Si un build est sélectionné → afficher uniquement les sorts de la barre de sorts
     if (build) {
       return build.spellBar.spells
         .filter((s): s is NonNullable<typeof s> => !!s)
@@ -1520,7 +1711,6 @@ export class BoardComponent {
         .filter((s): s is Spell => !!s);
     }
 
-    // Pas de build → afficher tous les sorts chargés (toute la classe)
     return Array.from(cache.values())
       .filter(s => !getInnateSpellIdsForClass(this.boardService.player()?.classId ?? '').includes(s.id));
   });
@@ -1634,7 +1824,6 @@ export class BoardComponent {
     const cache = new Map<string, Spell>();
     spells.forEach(spell => cache.set(spell.id, spell));
 
-    // Charger aussi les sorts innés de la classe
     const innateIds = getInnateSpellIdsForClass(classId);
     for (const innateId of innateIds) {
       if (!cache.has(innateId)) {
@@ -1654,7 +1843,9 @@ export class BoardComponent {
       this.selectedInteractionMode.set('none');
     } else {
       this.selectedSpellId.set(spell.id);
-      this.selectedInteractionMode.set('spell');
+      if (!this.interactivePlay.isActive()) {
+        this.selectedInteractionMode.set('spell');
+      }
     }
   }
 
@@ -1737,7 +1928,15 @@ export class BoardComponent {
 
   isCellInSpellRange(x: number, y: number): boolean {
     if (this.selectedInteractionMode() !== 'spell') return false;
-    const spell = this.selectedSpellId() ? this.spellsCache().get(this.selectedSpellId()!) : null;
+    return this.computeSpellRange(x, y, this.selectedSpellId());
+  }
+
+  /**
+   * Calcul effectif de la portée d'un sort (sans check du mode sélectionné).
+   * Utilisé par isCellInSpellRange (mode timeline) ET isCellInInteractiveSpellRange (mode interactif).
+   */
+  private computeSpellRange(x: number, y: number, spellId: string | null): boolean {
+    const spell = spellId ? this.spellsCache().get(spellId) : null;
     const player = this.boardService.state().entities.find(e => e.type === 'player');
     if (!spell || !player) return false;
 
@@ -1828,10 +2027,14 @@ export class BoardComponent {
 
   isCellInHoverMoveRange(x: number, y: number): boolean {
     if (!this.hoveredPlayerId()) return false;
+    if (this.interactivePlay.isActive()) return false;
     const player = this.boardService.state().entities.find(e => e.id === this.hoveredPlayerId());
     if (!player) return false;
     const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
-    return dist > 0 && dist <= 3;
+    const mp = this.interactivePlay.availableMp > 0
+      ? this.interactivePlay.availableMp
+      : 3;
+    return dist > 0 && dist <= mp;
   }
 
   private async pushInteractionAction(cell: BoardCell): Promise<void> {
@@ -1868,6 +2071,151 @@ export class BoardComponent {
     await this.timelineService.updateTimeline(timeline.id, { steps: [...timeline.steps, step] });
   }
 
+  hasBuild(): boolean {
+    return !!this.buildService.selectedBuildA();
+  }
+
+  toggleInteractiveMode(): void {
+    const build = this.buildService.selectedBuildA();
+    if (!build) return;
+
+    if (this.interactivePlay.isActive()) {
+      this.interactivePlay.stopSession();
+    } else {
+      if (!this.boardService.hasMinimumSetup()) {
+        alert('Placez au moins 1 allié et 1 ennemi sur le board avant d\'activer le mode interactif.');
+        return;
+      }
+      this.boardService.saveInitialState();
+      this.interactivePlay.startSession(build);
+    }
+  }
+
+  resetInteractiveMode(): void {
+    const build = this.buildService.selectedBuildA();
+    if (!build) return;
+    this.boardService.restoreInitialState();
+    this.interactivePlay.resetSession(build);
+  }
+
+  /**
+   * Portée de déplacement PM en mode interactif — visible uniquement au hover sur le joueur.
+   * Si le joueur est sur une heure du cadran, les cases heures→heures sont gérées par PW.
+   */
+  isCellInInteractiveMoveRange(x: number, y: number): boolean {
+    if (!this.interactivePlay.isActive()) return false;
+    if (this.selectedSpellId()) return false;
+    if (!this.hoveredPlayerId()) return false;
+    const player = this.boardService.state().entities.find(e => e.type === 'player');
+    if (!player || player.id !== this.hoveredPlayerId()) return false;
+    const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
+    const targetIsDialHour = this.boardService.isPositionOnDialHour({ x, y });
+    if (playerOnDialHour && targetIsDialHour) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    const mp = this.interactivePlay.availableMp;
+    return dist > 0 && dist <= Math.max(mp, 0);
+  }
+
+  /**
+   * Portée de déplacement PW en mode interactif — visible uniquement au hover sur le joueur.
+   * Le joueur DOIT être sur une heure du cadran ET la cible aussi.
+   */
+  isCellInInteractivePwMoveRange(x: number, y: number): boolean {
+    if (!this.interactivePlay.isActive()) return false;
+    if (this.selectedSpellId()) return false;
+    if (!this.hoveredPlayerId()) return false;
+
+    const player = this.boardService.state().entities.find(e => e.type === 'player');
+
+    if (!player || player.id !== this.hoveredPlayerId()) return false;
+    if (!this.boardService.isPositionOnDialHour(player.position)) return false;
+    if (!this.boardService.isPositionOnDialHour({ x, y })) return false;
+
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+
+    return dist > 0 && this.interactivePlay.availablePw > 0;
+  }
+
+  /**
+   * Portée de sort en mode interactif (utilise computeSpellRange sans check du mode)
+   */
+  isCellInInteractiveSpellRange(x: number, y: number): boolean {
+    if (!this.interactivePlay.isActive()) return false;
+    if (!this.selectedSpellId()) return false;
+
+    return this.computeSpellRange(x, y, this.selectedSpellId());
+  }
+
+  /**
+   * Gestion du clic en mode interactif
+   */
+  private async handleInteractiveCellClick(cell: BoardCell): Promise<void> {
+    const spellId = this.selectedSpellId();
+
+    if (spellId) {
+      if (!this.computeSpellRange(cell.x, cell.y, spellId)) {
+        console.warn('[Interactive] La case est hors de portée du sort');
+        return;
+      }
+
+      const result = await this.interactivePlay.castSpell(spellId, { x: cell.x, y: cell.y });
+
+      if (result) {
+        const build = this.buildService.selectedBuildA()!;
+        const fakeAction: TimelineAction = {
+          id: `iplay_visual_${Date.now()}`,
+          type: 'CastSpell',
+          order: 1,
+          spellId,
+          targetPosition: { x: cell.x, y: cell.y },
+        };
+        await this.applyVisualAction(fakeAction, build, this.simulationService.cachedSteps().length - 1);
+        this.boardService.pushState();
+      }
+
+      if (result?.success) {
+        this.selectedSpellId.set(null);
+        this.selectedInteractionMode.set('none');
+      }
+    } else {
+      const player = this.boardService.state().entities.find(e => e.type === 'player');
+      if (!player) return;
+
+      const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
+      const targetIsDialHour = this.boardService.isPositionOnDialHour({ x: cell.x, y: cell.y });
+      const via: 'PM' | 'PW' = (playerOnDialHour && targetIsDialHour) ? 'PW' : 'PM';
+
+      const inRange = via === 'PW'
+        ? this.isInInteractivePwMoveRangeRaw(cell.x, cell.y, player)
+        : this.isInInteractiveMoveRangeRaw(cell.x, cell.y, player);
+
+      if (!inRange) {
+        console.warn('[Interactive] La case est hors de portée du déplacement');
+        return;
+      }
+
+      await this.interactivePlay.move({ x: cell.x, y: cell.y }, via);
+      this.boardService.pushState();
+    }
+  }
+
+  /** Validation PM pure (sans check hover) */
+  private isInInteractiveMoveRangeRaw(x: number, y: number, player: BoardEntity): boolean {
+    const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
+    const targetIsDialHour = this.boardService.isPositionOnDialHour({ x, y });
+    if (playerOnDialHour && targetIsDialHour) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    return dist > 0 && dist <= Math.max(this.interactivePlay.availableMp, 0);
+  }
+
+  /** Validation PW pure (sans check hover) */
+  private isInInteractivePwMoveRangeRaw(x: number, y: number, player: BoardEntity): boolean {
+    if (!this.boardService.isPositionOnDialHour(player.position)) return false;
+    if (!this.boardService.isPositionOnDialHour({ x, y })) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    return dist > 0 && this.interactivePlay.availablePw > 0;
+  }
+
   async onNextStep(): Promise<void> {
     const timeline = this.currentTimeline();
     const build = this.buildService.selectedBuildA();
@@ -1885,13 +2233,11 @@ export class BoardComponent {
       return;
     }
 
-    // Si c'est la première étape, sauvegarder l'état initial
     if (currentIndex === 0) {
       console.log('💾 Sauvegarde de l\'état initial du board');
       this.boardService.saveInitialState();
     }
 
-    // Vérifier qu'il reste des steps à exécuter
     if (currentIndex >= timeline.steps.length) {
       console.warn('⚠️ Aucun step suivant disponible');
       return;
@@ -1900,38 +2246,31 @@ export class BoardComponent {
     const realStepIndex = currentIndex;
     console.log(`\n🔹 [onNextStep] Exécution du step ${realStepIndex + 1}/${timeline.steps.length}...`);
 
-    // ✅ Appeler executeStep pour valider et exécuter le step
     const success = await this.simulationService.executeStep(build, timeline, realStepIndex);
 
     if (!success) {
       console.error(`❌ Le step ${realStepIndex + 1} a échoué`);
-      // Récupérer le message d'erreur depuis les résultats
       const stepResult = this.simulationService.getStepResult(realStepIndex);
       const failedAction = stepResult?.actions.find((a: any) => !a.success);
       const errorMessage = failedAction?.message || 'Action impossible à exécuter';
 
       alert(`⚠️ Erreur au step ${realStepIndex + 1}:\n${errorMessage}`);
 
-      // ❌ NE PAS mettre à jour la map en cas d'échec
       console.log('🚫 Map non mise à jour (step échoué)');
       return;
     }
 
     console.log(`✅ Step ${realStepIndex + 1} exécuté avec succès`);
 
-    // ✅ Le step a réussi : avancer l'index et mettre à jour le board
     this.timelineService.nextStep();
 
-    // Appliquer les actions visuelles (mécanismes, etc.)
     const step = timeline.steps[realStepIndex];
     for (const action of step.actions) {
       await this.applyVisualAction(action, build, realStepIndex);
     }
 
-    // Sauvegarder l'état après l'application
     this.boardService.pushState();
 
-    // Si on vient d'exécuter le dernier step, afficher le récapitulatif de fin
     if (this.currentStepIndex() >= timeline.steps.length) {
       this.logFinalSimulationSummaryFromCache(timeline.steps.length);
     }
@@ -1981,21 +2320,17 @@ export class BoardComponent {
 
   private async applyVisualAction(action: TimelineAction, _build: Build, stepIndex: number): Promise<void> {
     if (action.type === 'CastSpell' && action.spellId) {
-      // Vérifier si le sort crée un mécanisme
+
       console.log(`🔍 Analyse du sort: "${action.spellId}"`);
       const mechanismType = getSpellMechanismType(action.spellId);
       console.log(`🎯 Type de mécanisme détecté: ${mechanismType || 'aucun'}`);
 
       if (mechanismType && action.targetPosition) {
-        // 🆕 Vérifier si un mécanisme de ce type existe déjà sur le plateau
-        // La stratégie de classe (XelorSimulationStrategy) a déjà créé le mécanisme
-        // lors de l'exécution de la simulation. On ne doit pas en créer un doublon.
         const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
 
         if (existingMechanisms.length > 0) {
           console.log(`ℹ️ Mécanisme ${mechanismType} déjà créé par la stratégie de classe - pas de doublon`);
 
-          // 🆕 Pour les cadrans, vérifier aussi que les heures existent déjà
           if (mechanismType === 'dial') {
             const dialHours = this.boardService.dialHours();
             if (dialHours.length > 0) {
@@ -2007,7 +2342,6 @@ export class BoardComponent {
 
         console.log(`✅ Création d'un mécanisme ${mechanismType} à la position (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
-        // Créer le mécanisme
         const mechanism: Mechanism = {
           id: `mechanism_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           type: mechanismType,
@@ -2017,11 +2351,9 @@ export class BoardComponent {
           spellId: action.spellId
         };
 
-        // Ajouter le mécanisme au plateau
         this.boardService.addMechanism(mechanism);
         console.log('🎉 Mécanisme créé et ajouté au plateau:', mechanism);
 
-        // Si c'est un cadran, créer les 12 heures autour
         if (mechanismType === 'dial') {
           const playerEntity = this.boardService.player();
           const playerPosition = playerEntity?.position || { x: 6, y: 6 };
@@ -2066,9 +2398,7 @@ export class BoardComponent {
       let rotatedX = offsetX;
       let rotatedY = offsetY;
 
-      // Rotation de 90 degrés (sens horaire) appliquée 'rotation' fois
       for (let i = 0; i < rotation; i++) {
-        // Formule de rotation: (x, y) -> (-y, x)
         const newX = -rotatedY;
         const newY = rotatedX;
         rotatedX = newX;
@@ -2098,15 +2428,11 @@ export class BoardComponent {
     const currentIndex = this.currentStepIndex();
 
     if (currentIndex > 0) {
-      // Revenir à l'étape précédente
       this.timelineService.previousStep();
 
-      // Restaurer l'état du board à l'étape précédente
       const newIndex = this.currentStepIndex();
       this.boardService.restoreStateAtIndex(newIndex);
 
-      // Tronquer le cache de simulation pour conserver uniquement les steps encore valides
-      // et permettre une reprise correcte avec "Étape suivante"
       this.simulationService.trimSimulationCacheToStep(newIndex);
 
       console.log(`⏮️ Retour à l'étape ${newIndex} - Cache de simulation tronqué`);
@@ -2114,16 +2440,12 @@ export class BoardComponent {
   }
 
   onReset(): void {
-    // Réinitialiser la timeline à l'étape 0
     this.timelineService.resetTimeline();
 
-    // Restaurer l'état initial du board
     this.boardService.restoreInitialState();
 
-    // Nettoyer le cache de simulation
     this.simulationService.clearSimulation();
 
-    // Nettoyer l'historique de régénération
     this.regenerationService.clearHistory();
 
     console.log('🔄 Timeline et Board réinitialisés');
@@ -2156,14 +2478,11 @@ export class BoardComponent {
     console.log('📋 Timeline:', timeline.name);
     console.log('🔢 Nombre de steps:', timeline.steps.length);
 
-    // Sauvegarder l'état initial
     this.boardService.saveInitialState();
     console.log('💾 État initial sauvegardé');
 
-    // Réinitialiser le service de simulation
     this.simulationService.clearSimulation();
 
-    // Exécuter chaque step un par un
     for (let stepIndex = 0; stepIndex < timeline.steps.length; stepIndex++) {
       const step = timeline.steps[stepIndex];
       console.log('');
@@ -2171,7 +2490,6 @@ export class BoardComponent {
       console.log(`│  🔹 STEP ${stepIndex + 1}/${timeline.steps.length}: ${step.description || step.id}`);
       console.log(`└───────────────────────────────────────────────────────┘`);
 
-      // ✅ Exécuter le step avec validation complète
       const success = await this.simulationService.executeStep(build, timeline, stepIndex);
 
       if (!success) {
@@ -2188,7 +2506,6 @@ export class BoardComponent {
 
       console.log(`✅ Step ${stepIndex + 1} exécuté avec succès`);
 
-      // Log du contexte après le step (ressources restantes)
       const stepResult = this.simulationService.getStepResult(stepIndex);
       if (stepResult) {
         const contextAfter = stepResult.contextAfter;
@@ -2201,21 +2518,17 @@ export class BoardComponent {
         }
       }
 
-      // Avancer l'index de la timeline
       this.timelineService.nextStep();
 
-      // Appliquer les actions visuelles au board (mécanismes, etc.)
       for (const action of step.actions) {
         await this.applyVisualAction(action, build, stepIndex);
       }
 
-      // Sauvegarder l'état du board après ce step
       this.boardService.pushState();
 
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Récapitulatif final via le cache centralisé
     const stats = this.simulationService.getCacheStats();
     if (stats) {
       console.log('');
@@ -2282,10 +2595,16 @@ export class BoardComponent {
   }
 
   async onCellClick(cell: BoardCell): Promise<void> {
+    if (this.interactivePlay.isActive() && this.placementMode() === 'none') {
+      await this.handleInteractiveCellClick(cell);
+      return;
+    }
+
     if (this.placementMode() === 'none' && this.selectedInteractionMode() !== 'none') {
       await this.pushInteractionAction(cell);
       return;
     }
+
     this.boardCellClick.emit({ x: cell.x, y: cell.y });
   }
 }

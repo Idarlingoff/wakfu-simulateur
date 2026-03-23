@@ -91,6 +91,48 @@ export class SimulationService {
   }
 
   /**
+   * Ajoute un step résultat au cache réactif (utilisé par le mode interactif).
+   * N'impacte pas le cache de simulation timeline.
+   */
+  appendInteractiveStep(step: SimulationStepResult): void {
+    this._cachedSteps.update(steps => [...steps, step]);
+    if (this.simulationResultsCache) {
+      this.simulationResultsCache.steps.push(step);
+      const totals = this.aggregateStepTotals([step]);
+      this.simulationResultsCache.totalDamage += totals.totalDamage;
+      this.simulationResultsCache.totalHeal += totals.totalHeal;
+      this.simulationResultsCache.totalShield += totals.totalShield;
+      this.simulationResultsCache.totalPaUsed += totals.totalPaUsed;
+      this.simulationResultsCache.totalPwUsed += totals.totalPwUsed;
+      this.simulationResultsCache.totalMpUsed += totals.totalMpUsed;
+      this.simulationResultsCache.finalContext = step.contextAfter;
+    } else {
+      const totals = this.aggregateStepTotals([step]);
+      this.simulationResultsCache = {
+        buildId: '',
+        timelineId: 'interactive',
+        buildStats: {} as any,
+        initialContext: step.contextAfter,
+        steps: [step],
+        finalContext: step.contextAfter,
+        ...totals,
+        success: step.success,
+        errors: [],
+      };
+    }
+    console.log('[SimulationService] Step interactif ajouté au cache réactif');
+  }
+
+  /**
+   * Vide les steps interactifs du cache réactif
+   */
+  clearInteractiveSteps(): void {
+    this._cachedSteps.set([]);
+    this.simulationResultsCache = null;
+    console.log('[SimulationService] Steps interactifs vidés');
+  }
+
+  /**
    * Recalcule les totaux agrégés (dégâts/soins/armure/coûts) à partir d'une liste de steps
    */
   private aggregateStepTotals(steps: SimulationStepResult[]): Pick<SimulationResult, 'totalDamage' | 'totalHeal' | 'totalShield' | 'totalPaUsed' | 'totalPwUsed' | 'totalMpUsed'> {
