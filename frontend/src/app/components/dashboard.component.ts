@@ -16,13 +16,14 @@ import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
 import {TimelineSummaryComponent} from './timeline-summary.component';
 import {DamageSummaryComponent} from './damage-summary.component';
+import {TM200ModeComponent} from './tm200-mode.component';
 import { Timeline } from '../models/timeline.model';
 import {SimulationService} from '../services/simulation.service';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent],
+  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent, TM200ModeComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -77,6 +78,7 @@ import {SimulationService} from '../services/simulation.service';
           </div>
         </div>
         <button class="btn-secondary" (click)="toggleActionsMenu()">Action</button>
+        <button class="btn-tm200" (click)="openTM200()" title="Simuler le donjon TM 200 – Salle des Cristaux">⚔️ TM 200</button>
       </header>
 
       <!-- Backdrop to close dropdowns -->
@@ -136,6 +138,11 @@ import {SimulationService} from '../services/simulation.service';
           </div>
         </div>
       </div>
+
+    <!-- TM 200 Mode -->
+    @if (showTM200()) {
+      <app-tm200-mode (close)="closeTM200()"></app-tm200-mode>
+    }
 
     <!-- Build Form Modal -->
     <app-build-form #buildForm></app-build-form>
@@ -391,6 +398,23 @@ import {SimulationService} from '../services/simulation.service';
       background: #253044;
       color: #e8ecf3;
       border: 1px solid var(--stroke);
+    }
+
+    .btn-tm200 {
+      background: linear-gradient(135deg, #b8860b, #ffd700);
+      color: #0b1220;
+      border: none;
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 0 12px rgba(255, 215, 0, 0.35);
+      transition: all 0.2s;
+    }
+
+    .btn-tm200:hover {
+      background: linear-gradient(135deg, #d4a017, #ffe033);
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+      transform: translateY(-1px);
     }
 
     .btn-danger {
@@ -862,6 +886,10 @@ export class DashboardComponent {
   showTimelineDropdown = signal<boolean>(false);
   statsBuildModal = signal<any | null>(null);
   placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
+  showTM200 = signal<boolean>(false);
+
+  openTM200(): void { this.showTM200.set(true); }
+  closeTM200(): void { this.showTM200.set(false); }
 
   toggleBuildDropdown(): void {
     this.showBuildDropdown.update(v => !v);
