@@ -36,170 +36,48 @@ export class BuildService {
   });
 
   constructor(private readonly api: WakfuApiService) {
-    // Charger depuis le backend au démarrage
-    // Note: Appel async dans le constructeur - à améliorer si nécessaire
-    this.loadFromBackend();
+    this.loadBuilds();
   }
 
   /**
-   * Charger les builds depuis le backend
+   * Charge les builds depuis le localStorage (via WakfuApiService)
    */
-  async loadFromBackend(): Promise<void> {
+  async loadBuilds(): Promise<void> {
     this.isLoading.set(true);
     this.loadError.set(null);
-
-    // Charger d'abord depuis localStorage
-    this.loadFromPersistence();
-
     try {
-      const backendBuilds = await firstValueFrom(this.api.getAllBuilds());
-      this.builds.set(backendBuilds);
-      this.saveToPersistence();
-      console.log('Builds chargés depuis le backend:', backendBuilds.length);
-    } catch (error: any) {
-      const errorMsg = `Erreur de chargement depuis le backend: ${error.message}`;
-      this.loadError.set(errorMsg);
-      console.error(errorMsg);
-      console.warn('Utilisation des builds depuis localStorage');
-      // Les builds de localStorage sont déjà chargés
+      const builds = await firstValueFrom(this.api.getAllBuilds());
+      this.builds.set(builds);
+    } catch (e: any) {
+      this.loadError.set(e.message);
     } finally {
       this.isLoading.set(false);
     }
   }
 
-  /**
-   * Persist builds to localStorage
-   */
-  private saveToPersistence(): void {
-    try {
-      localStorage.setItem('wakfu_builds', JSON.stringify(this.builds()));
-    } catch (e) {
-      console.warn('Failed to save builds to localStorage', e);
-    }
-  }
-
-  /**
-   * Load builds from localStorage
-   */
-  private loadFromPersistence(): void {
-    try {
-      const stored = localStorage.getItem('wakfu_builds');
-      if (stored) {
-        const parsed = JSON.parse(stored) as Build[];
-        this.builds.set(parsed);
-      }
-    } catch (e) {
-      console.warn('Failed to load builds from localStorage', e);
-    }
-  }
-
-  // ============ Helper Methods ============
-
-  /**
-   * Prépare un build pour l'envoi au backend
-   * Convertit les objets Date en ISO strings
-   */
-  private prepareBuildForBackend(build: Build): any {
-    return {
-      ...build,
-      createdAt: build.createdAt ? new Date(build.createdAt).toISOString() : undefined,
-      updatedAt: build.updatedAt ? new Date(build.updatedAt).toISOString() : undefined
-    };
-  }
-
-  /**
-   * Convertit un build reçu du backend en objet Build
-   */
-  private parseBuildFromBackend(data: any): Build {
-    return {
-      ...data,
-      createdAt: data.createdAt ? new Date(data.createdAt) : undefined,
-      updatedAt: data.updatedAt ? new Date(data.updatedAt) : undefined
-    };
-  }
-
   // ============ CRUD Operations ============
 
   public async createBuild(build: Build): Promise<Build | null> {
-    console.log('[BuildService] createBuild - classId:', build.classId, 'name:', build.name);
-    // Ajouter immédiatement au state local
-    this.builds.update(builds => [...builds, build]);
-    this.saveToPersistence();
-    console.log('Build créé localement:', build.id);
-
-    // Tenter de synchroniser avec le backend en arrière-plan
-    try {
-      const buildForBackend = this.prepareBuildForBackend(build);
-      console.log('[BuildService] Envoi au backend - classId:', buildForBackend.classId);
-      const created = await firstValueFrom(this.api.createBuild(buildForBackend));
-      const parsedBuild = this.parseBuildFromBackend(created);
-
-      // Remplacer par la version backend si elle diffère
-      this.builds.update(builds =>
-        builds.map(b => b.id === build.id ? parsedBuild : b)
-      );
-      this.saveToPersistence();
-      console.log('Build synchronisé avec le backend:', created.id);
-      return parsedBuild;
-    } catch (error) {
-      console.warn('Impossible de synchroniser avec le backend, build gardé en local:', error);
-      return build; // Retourner le build local même si backend échoue
-    }
+    const created = await firstValueFrom(this.api.createBuild(build));
+    this.builds.update(bs => [...bs, created]);
+    return created;
   }
 
   public async updateBuild(buildId: string, updates: Partial<Build>): Promise<boolean> {
     const build = this.builds().find(b => b.id === buildId);
     if (!build) return false;
-
     const updated = { ...build, ...updates, updatedAt: new Date() } as Build;
-    console.log('[BuildService] updateBuild - buildId:', buildId, 'classId:', updated.classId);
-
-    // Mettre à jour immédiatement en local
-    this.builds.update(builds =>
-      builds.map(b => b.id === buildId ? updated : b)
-    );
-    this.saveToPersistence();
-    console.log('Build mis à jour localement:', buildId);
-
-    // Tenter de synchroniser avec le backend en arrière-plan
-    try {
-      const buildForBackend = this.prepareBuildForBackend(updated);
-      console.log('[BuildService] Envoi mise à jour au backend - classId:', buildForBackend.classId);
-      const result = await firstValueFrom(this.api.updateBuild(buildId, buildForBackend));
-      const parsedBuild = this.parseBuildFromBackend(result);
-
-      this.builds.update(builds =>
-        builds.map(b => b.id === buildId ? parsedBuild : b)
-      );
-      this.saveToPersistence();
-      console.log('Build synchronisé avec le backend:', buildId);
-      return true;
-    } catch (error) {
-      console.warn('Impossible de synchroniser avec le backend, build gardé en local:', error);
-      return true; // Retourner true car la mise à jour locale a réussi
-    }
+    await firstValueFrom(this.api.updateBuild(buildId, updated));
+    this.builds.update(bs => bs.map(b => b.id === buildId ? updated : b));
+    return true;
   }
 
   public async deleteBuild(buildId: string): Promise<boolean> {
-    // Supprimer immédiatement en local
-    this.builds.update(builds => builds.filter(b => b.id !== buildId));
-
-    // Clear selection if deleted
+    await firstValueFrom(this.api.deleteBuild(buildId));
+    this.builds.update(bs => bs.filter(b => b.id !== buildId));
     if (this.selectedBuildIdA() === buildId) this.selectedBuildIdA.set(null);
     if (this.selectedBuildIdB() === buildId) this.selectedBuildIdB.set(null);
-
-    this.saveToPersistence();
-    console.log('Build supprimé localement:', buildId);
-
-    // Tenter de synchroniser avec le backend en arrière-plan
-    try {
-      await firstValueFrom(this.api.deleteBuild(buildId));
-      console.log('Build supprimé du backend:', buildId);
-      return true;
-    } catch (error) {
-      console.warn('Impossible de synchroniser avec le backend, build supprimé en local:', error);
-      return true; // Retourner true car la suppression locale a réussi
-    }
+    return true;
   }
 
   public getBuildById(buildId: string): Build | undefined {
@@ -258,8 +136,6 @@ export class BuildService {
 
   public calculateTotalStats(build: Build): BuildStats {
     let stats: BuildStats = { ...build.stats };
-
-    // Add subli bonuses
     for (const subli of build.sublimationBar.sublimations) {
       if (subli) {
         for (const [key, value] of Object.entries(subli.stats)) {
@@ -267,7 +143,6 @@ export class BuildService {
         }
       }
     }
-
     return stats;
   }
 
