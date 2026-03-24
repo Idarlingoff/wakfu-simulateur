@@ -21,7 +21,7 @@ INSERT INTO spell (
 
 -- Ratio (palier 185) — valeur de base (non-crit)
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
-VALUES ('XEL_RALENTISSEMENT', 'NORMAL', 200, 28),
+VALUES ('XEL_RALENTISSEMENT', 'NORMAL', 200, 29),
        ('XEL_RALENTISSEMENT', 'CRIT',   200, 36);
 
 -- Variantes NORMAL / CRIT
