@@ -508,14 +508,12 @@ export class DamageSummaryComponent {
   /** Résumé des dégâts par étape, construit à partir du cache réactif */
   stepsSummary = computed(() => {
     const steps = this.simulationService.cachedSteps();
-    // Déclencher la réactivité sur le cache de sorts
-    const spellsCache = this.spellsCache();
     return steps.map(step => {
       const actions = step.actions.map(a => ({
         actionType: a.actionType,
         spellName: a.spellName || '',
         spellId: a.spellId || '',
-        iconId: a.spellId ? this.getSpellIconId(a.spellId) : undefined,
+        iconId: a.iconId ?? (a.spellId ? this.getSpellIconId(a.spellId) : undefined),
         mechanismType: a.details?.mechanismType || null,
         isMechanism: a.actionType === 'TriggerExplosion',
         damage: a.damage || 0,

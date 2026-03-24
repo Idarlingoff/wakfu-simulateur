@@ -115,6 +115,7 @@ export interface SimulationActionResult {
   actionType: string;
   spellId?: string;
   spellName?: string;
+  iconId?: number;
   damage?: number;
   heal?: number;
   shield?: number;
@@ -590,6 +591,7 @@ export class SimulationEngineService {
         actionType: 'CastSpell',
         spellId: spell.id,
         spellName: spell.name,
+        iconId: spell.iconId,
         paCost,
         pwCost,
         mpCost: 0,
@@ -623,6 +625,7 @@ export class SimulationEngineService {
         actionType: 'CastSpell',
         spellId: spell.id,
         spellName: spell.name,
+        iconId: spell.iconId,
         paCost,
         pwCost,
         mpCost: 0,
@@ -649,6 +652,7 @@ export class SimulationEngineService {
           actionType: 'CastSpell',
           spellId: spell.id,
           spellName: spell.name,
+          iconId: spell.iconId,
           paCost,
           pwCost,
           mpCost: 0,
@@ -714,6 +718,7 @@ export class SimulationEngineService {
       actionType: 'CastSpell',
       spellId: spell.id,
       spellName: spell.name,
+      iconId: spell.iconId,
       damage: totalDamage,
       heal: totalHeal,
       shield: totalShield,

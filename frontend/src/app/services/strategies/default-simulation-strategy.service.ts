@@ -67,6 +67,7 @@ export class DefaultSimulationStrategy extends ClassSimulationStrategy {
       actionType: 'CastSpell',
       spellId: spell.id,
       spellName: spell.name,
+      iconId: spell.iconId,
       paCost,
       pwCost,
       mpCost: 0,
