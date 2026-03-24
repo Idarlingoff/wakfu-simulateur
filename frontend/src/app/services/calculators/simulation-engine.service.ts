@@ -1004,10 +1004,22 @@ export class SimulationEngineService {
     console.log('  De:', currentPosition);
     console.log('  Vers:', action.targetPosition);
 
-    // ── Freeplay : aucun contrôle de déplacement ──────────────────────────
-    const validation = context.freeplay
-      ? { canMove: true, reason: undefined, cost: { mp: 0, wp: 0 }, details: { movementType: 'normal' as const } }
-      : this.movementValidator.validateMovement(currentPosition, action.targetPosition, context);
+    let validation: ReturnType<typeof this.movementValidator.validateMovement>;
+    if (context.freeplay) {
+      const fromIsDialHour = this.boardService.dialHours().some(
+        h => h.position.x === currentPosition.x && h.position.y === currentPosition.y
+      );
+      const toIsDialHour = this.boardService.dialHours().some(
+        h => h.position.x === action.targetPosition!.x && h.position.y === action.targetPosition!.y
+      );
+      if (fromIsDialHour && toIsDialHour) {
+        validation = { canMove: true, reason: undefined, cost: { mp: 0, wp: 1 }, details: { movementType: 'dial_hour' } };
+      } else {
+        validation = { canMove: true, reason: undefined, cost: { mp: 0, wp: 0 }, details: { movementType: 'normal' } };
+      }
+    } else {
+      validation = this.movementValidator.validateMovement(currentPosition, action.targetPosition, context);
+    }
 
     console.log('✅ [VALIDATION] Résultat:', {
       canMove: validation.canMove,
