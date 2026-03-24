@@ -79,18 +79,22 @@ interface BoardCell {
       </div>
 
       <!-- ═══ BANDEAU MODE INTERACTIF ═══ -->
-      <div class="interactive-bar" [class.active]="interactivePlay.isActive()" [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay()">
+      <div class="interactive-bar"
+           [class.active]="interactivePlay.isActive()"
+           [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay() && !isXelorFreeplayActive()"
+           [class.xelor-freeplay]="isXelorFreeplayActive() && interactivePlay.isActive()">
         <div class="interactive-bar-left">
+          <!-- Bouton Freeplay classique -->
           <button
             class="btn-interactive"
-            [class.on]="interactivePlay.isActive()"
-            [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay()"
+            [class.on]="interactivePlay.isActive() && !isXelorFreeplayActive()"
+            [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay() && !isXelorFreeplayActive()"
             (click)="toggleInteractiveMode()"
-            title="{{ interactivePlay.isActive() ? 'Désactiver le mode interactif' : 'Activer le mode interactif' }}"
+            title="{{ interactivePlay.isActive() && !isXelorFreeplayActive() ? 'Désactiver le mode interactif' : 'Activer le mode interactif' }}"
           >
-            @if (interactivePlay.isActive() && interactivePlay.isFreeplay()) {
+            @if (interactivePlay.isActive() && interactivePlay.isFreeplay() && !isXelorFreeplayActive()) {
               <span>Freeplay ON</span>
-            } @else if (interactivePlay.isActive()) {
+            } @else if (interactivePlay.isActive() && !isXelorFreeplayActive()) {
               <span>Mode Interactif ON</span>
             } @else if (hasBuild()) {
               <span>Mode Interactif</span>
@@ -98,6 +102,36 @@ interface BoardCell {
               <span>Freeplay (sans build)</span>
             }
           </button>
+
+          <!-- Bouton Freeplay Xel Rouage -->
+          <button
+            class="btn-interactive btn-xelor-freeplay"
+            [class.on]="isXelorFreeplayActive() && interactivePlay.isActive()"
+            (click)="toggleXelorFreeplay()"
+            title="{{ isXelorFreeplayActive() && interactivePlay.isActive() ? 'Désactiver le mode Freeplay Xel Rouage' : 'Activer le mode Freeplay Xel Rouage (passifs Xelor actifs)' }}"
+          >
+            @if (isXelorFreeplayActive() && interactivePlay.isActive()) {
+              <span>Freeplay Xel ON</span>
+            } @else {
+              <span>Freeplay Xel Rouage</span>
+            }
+          </button>
+
+          <!-- Toggle Rémanence (visible uniquement quand le mode Xel Freeplay est actif) -->
+          <button
+            *ngIf="isXelorFreeplayActive() && interactivePlay.isActive()"
+            class="btn-remanence-toggle"
+            [class.enabled]="xelorRemanenceEnabled()"
+            (click)="toggleXelorRemanence()"
+            title="{{ xelorRemanenceEnabled() ? 'Rémanence active (cliquer pour désactiver)' : 'Rémanence inactive (cliquer pour activer)' }}"
+          >
+            @if (xelorRemanenceEnabled()) {
+              <span>Rémanence ✓</span>
+            } @else {
+              <span>Rémanence ✗</span>
+            }
+          </button>
+
           <button
             *ngIf="interactivePlay.isActive()"
             class="btn-interactive-reset"
@@ -119,8 +153,11 @@ interface BoardCell {
             {{ interactivePlay.availableMp }}
           </span>
         </div>
-        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && interactivePlay.isFreeplay()">
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && interactivePlay.isFreeplay() && !isXelorFreeplayActive()">
           <span class="res-item freeplay-badge">Aucune restriction</span>
+        </div>
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && isXelorFreeplayActive()">
+          <span class="res-item freeplay-badge xelor-badge">Xel Rouage – passifs actifs</span>
         </div>
         <div class="interactive-hint" *ngIf="interactivePlay.isActive()">
           <span *ngIf="selectedSpellId()">Cliquez sur une case pour lancer <strong>{{ getSpellName(selectedSpellId()!) }}</strong></span>
@@ -1534,6 +1571,65 @@ interface BoardCell {
       box-shadow: 0 0 10px rgba(245, 87, 108, 0.5);
     }
 
+    /* ── Bouton Freeplay Xel Rouage ── */
+    .btn-xelor-freeplay {
+      background: #1e2a3a !important;
+      border-color: #ffd166 !important;
+      color: #ffd166 !important;
+    }
+
+    .btn-xelor-freeplay.on {
+      background: linear-gradient(135deg, #b8860b, #ffd166) !important;
+      border-color: #ffd166 !important;
+      color: #0b1220 !important;
+      box-shadow: 0 0 12px rgba(255, 209, 102, 0.6) !important;
+    }
+
+    .btn-xelor-freeplay:hover:not(:disabled) {
+      background: linear-gradient(135deg, #b8860b, #ffd166) !important;
+      border-color: #ffd166 !important;
+      color: #0b1220 !important;
+    }
+
+    /* ── Bouton toggle Rémanence ── */
+    .btn-remanence-toggle {
+      background: #1a1e2a;
+      border: 1px solid #555a6e;
+      color: #8c9bb3;
+      border-radius: 6px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-remanence-toggle.enabled {
+      background: rgba(167, 139, 250, 0.15);
+      border-color: #a78bfa;
+      color: #a78bfa;
+    }
+
+    .btn-remanence-toggle:hover {
+      background: rgba(167, 139, 250, 0.25);
+      border-color: #a78bfa;
+      color: #c4b5fd;
+    }
+
+    /* ── Bandeau Xel Rouage actif ── */
+    .interactive-bar.xelor-freeplay {
+      background: rgba(255, 209, 102, 0.07);
+      border-color: #ffd166;
+      box-shadow: 0 0 14px rgba(255, 209, 102, 0.2);
+    }
+
+    /* ── Badge Xel Rouage ── */
+    .res-item.xelor-badge {
+      color: #ffd166 !important;
+      background: rgba(255, 209, 102, 0.12) !important;
+      border: 1px solid rgba(255, 209, 102, 0.35) !important;
+    }
+
     .interactive-bar.freeplay {
       background: rgba(245, 87, 108, 0.08);
       border-color: #f5576c;
@@ -1676,6 +1772,10 @@ export class BoardComponent {
   selectedSpellId = signal<string | null>(null);
   selectedInteractionMode = signal<'none' | 'spell' | 'move' | 'pwMove'>('none');
   hoveredPlayerId = signal<string | null>(null);
+
+  /** Mode Freeplay Xel Rouage */
+  xelorRemanenceEnabled = signal<boolean>(true);
+  isXelorFreeplayActive = signal<boolean>(false);
 
   /** Tooltip portal */
   tooltipSpell = signal<Spell | null>(null);
@@ -2114,6 +2214,7 @@ export class BoardComponent {
   toggleInteractiveMode(): void {
     if (this.interactivePlay.isActive()) {
       this.interactivePlay.stopSession();
+      this.isXelorFreeplayActive.set(false);
       return;
     }
 
@@ -2129,12 +2230,54 @@ export class BoardComponent {
     } else {
       this.interactivePlay.startSessionFreeplay();
     }
+    this.isXelorFreeplayActive.set(false);
+  }
+
+  toggleXelorFreeplay(): void {
+    if (this.interactivePlay.isActive() && this.isXelorFreeplayActive()) {
+      this.interactivePlay.stopSession();
+      this.isXelorFreeplayActive.set(false);
+      return;
+    }
+
+    if (this.interactivePlay.isActive()) {
+      // Arrêter l'autre mode d'abord
+      this.interactivePlay.stopSession();
+    }
+
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant d\'activer le mode Freeplay Xel Rouage.');
+      return;
+    }
+
+    this.boardService.saveInitialState();
+    this.interactivePlay.startSessionXelorFreeplay(this.xelorRemanenceEnabled());
+    this.isXelorFreeplayActive.set(true);
+
+    // Charger les sorts du Xelor
+    this.loadSpells('XEL');
+  }
+
+  toggleXelorRemanence(): void {
+    const newValue = !this.xelorRemanenceEnabled();
+    this.xelorRemanenceEnabled.set(newValue);
+
+    // Si la session Xelor est active, relancer avec le nouvel état de Rémanence
+    if (this.interactivePlay.isActive() && this.isXelorFreeplayActive()) {
+      this.boardService.restoreInitialState();
+      this.boardService.saveInitialState();
+      this.interactivePlay.startSessionXelorFreeplay(newValue);
+    }
   }
 
   resetInteractiveMode(): void {
     this.boardService.restoreInitialState();
-    const build = this.buildService.selectedBuildA();
-    this.interactivePlay.resetSession(build ?? null);
+    if (this.isXelorFreeplayActive()) {
+      this.interactivePlay.startSessionXelorFreeplay(this.xelorRemanenceEnabled());
+    } else {
+      const build = this.buildService.selectedBuildA();
+      this.interactivePlay.resetSession(build ?? null);
+    }
   }
 
   /**

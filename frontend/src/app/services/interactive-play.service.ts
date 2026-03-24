@@ -113,6 +113,71 @@ export class InteractivePlayService {
     console.log('[InteractivePlay] Session FREEPLAY démarrée – aucune restriction');
   }
 
+  /**
+   * Démarre une session Freeplay Xél Rouage :
+   * ressources infinies + passifs Xélor actifs (Maître du Cadran, Cours du Temps,
+   * Connaissance du Passé, Mécanisme Spécialisé, Rémanence optionnelle).
+   */
+  startSessionXelorFreeplay(withRemanence: boolean = true): void {
+    const INFINITE = 999;
+    const player = this.boardService.player();
+    const entities = this.boardService.state().entities;
+    const mechanisms: Mechanism[] = this.boardService.mechanisms();
+
+    const activePassiveIds = [
+      'XEL_MAITRE_CADRAN',
+      'XEL_COURS_TEMPS',
+      'XEL_CONNAISSANCE_PASSE',
+      'XEL_MECANISMES_SPECIALISES',
+      ...(withRemanence ? ['XEL_REMANENCE'] : []),
+    ];
+
+    this._build = {
+      id: 'freeplay-xelor',
+      name: 'Freeplay Xél Rouage',
+      classId: 'XEL',
+      characterLevel: 230,
+      spellBar: { spells: [] },
+      passiveBar: {
+        passives: activePassiveIds.map(id => ({ passiveId: id })),
+      },
+      sublimationBar: { sublimations: [] },
+      stats: {
+        level: 230,
+        masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
+        masterySecondary: 0, backMastery: 0,
+        dommageInflict: 0, critRate: 0, critMastery: 0,
+        resistance: 0, ap: INFINITE, mp: INFINITE, wp: INFINITE, range: 99,
+      },
+    };
+    this._freeplay = true;
+    this._stepCount = 0;
+
+    const ctx: SimulationContext = {
+      availablePa: INFINITE,
+      availablePw: INFINITE,
+      availableMp: INFINITE,
+      currentPosition: player?.position ?? { x: 0, y: 0 },
+      playerPosition: player?.position ?? { x: 0, y: 0 },
+      range: 99,
+      entities: [...entities],
+      mechanisms: [...mechanisms],
+      buffs: [],
+      debuffs: [],
+      turn: 1,
+      activePassiveIds,
+      spellUsageThisTurn: new Map(),
+      spellUsagePerTarget: new Map(),
+      movementHistory: [],
+      freeplay: true,
+    };
+
+    this._context.set(ctx);
+    this.simulationService.clearInteractiveSteps();
+    this._mode.set('idle');
+    console.log('[InteractivePlay] Session FREEPLAY XÉL ROUAGE démarrée – passifs:', activePassiveIds.join(', '));
+  }
+
   /** Arrête la session interactive et nettoie */
   stopSession(): void {
     this._mode.set('off');
