@@ -96,6 +96,7 @@ export interface SimulationContext {
   spellUsageThisTurn?: Map<string, number>;
   spellUsagePerTarget?: Map<string, Map<string, number>>;
   movementHistory?: MovementRecord[];
+  freeplay?: boolean;
 }
 
 export interface SpellEffectResult {
@@ -503,7 +504,9 @@ export class SimulationEngineService {
     });
     console.log('═══════════════════════════════════════════════════════');
 
-    const spellRef = buildSpellReferencesWithInnates(build).find(s => s.spellId === action.spellId);
+    const spellRef = context.freeplay
+      ? { spellId: canonicalizeInnateSpellId(action.spellId ?? '') }
+      : buildSpellReferencesWithInnates(build).find(s => s.spellId === action.spellId);
 
     if (!spellRef) {
       return {
@@ -1001,11 +1004,10 @@ export class SimulationEngineService {
     console.log('  De:', currentPosition);
     console.log('  Vers:', action.targetPosition);
 
-    const validation = this.movementValidator.validateMovement(
-      currentPosition,
-      action.targetPosition,
-      context
-    );
+    // ── Freeplay : aucun contrôle de déplacement ──────────────────────────
+    const validation = context.freeplay
+      ? { canMove: true, reason: undefined, cost: { mp: 0, wp: 0 }, details: { movementType: 'normal' as const } }
+      : this.movementValidator.validateMovement(currentPosition, action.targetPosition, context);
 
     console.log('✅ [VALIDATION] Résultat:', {
       canMove: validation.canMove,

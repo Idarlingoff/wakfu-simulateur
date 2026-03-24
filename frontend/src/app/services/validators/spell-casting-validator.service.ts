@@ -41,6 +41,20 @@ export class SpellCastingValidatorService {
     targetPosition: Position,
     context: SimulationContext
   ): SpellCastValidationResult {
+    if (context.freeplay) {
+      return {
+        canCast: true,
+        details: {
+          hasEnoughAp: true,
+          hasEnoughWp: true,
+          hasEnoughMp: true,
+          isInRange: true,
+          hasLineOfSight: true,
+          isValidDirection: true,
+        },
+      };
+    }
+
     const details = {
       hasEnoughAp: false,
       hasEnoughWp: false,
@@ -50,7 +64,6 @@ export class SpellCastingValidatorService {
       isValidDirection: false
     };
 
-    // 1. Vérifier les ressources (AP)
     if (context.availablePa < spell.paCost) {
       return {
         canCast: false,
@@ -60,7 +73,6 @@ export class SpellCastingValidatorService {
     }
     details.hasEnoughAp = true;
 
-    // 2. Vérifier les ressources (WP)
     if (context.availablePw < spell.pwCost) {
       return {
         canCast: false,
@@ -69,9 +81,8 @@ export class SpellCastingValidatorService {
       };
     }
     details.hasEnoughWp = true;
-    details.hasEnoughMp = true; // Les sorts ne coûtent pas de MP directement
+    details.hasEnoughMp = true;
 
-    // 3. Vérifier la portée
     const distance = this.calculateDistance(casterPosition, targetPosition);
 
     console.log(`🎯 [PORTÉE] Vérification de la portée du sort "${spell.name}"`);
@@ -80,7 +91,6 @@ export class SpellCastingValidatorService {
     console.log(`   Distance calculée (Chebyshev): ${distance}`);
     console.log(`   Portée du sort: min=${spell.poMin}, max=${spell.poMax}, modifiable=${spell.poModifiable}`);
 
-    // Si la portée est modifiable, ajouter la portée du joueur (range)
     const playerRange = context.range || 0;
     const effectiveMaxRange = spell.poModifiable ? spell.poMax + playerRange : spell.poMax;
 
@@ -106,7 +116,6 @@ export class SpellCastingValidatorService {
     console.log(`   ✅ Distance valide`);
     details.isInRange = true;
 
-    // 4. Vérifier la ligne de vue
     console.log(`👁️ [LIGNE DE VUE] Vérification requise: ${spell.lineOfSight}`);
     if (spell.lineOfSight) {
       const hasLos = this.checkLineOfSight(casterPosition, targetPosition, context);
@@ -124,7 +133,6 @@ export class SpellCastingValidatorService {
     }
     details.hasLineOfSight = true;
 
-    // 5. Vérifier la direction de lancement
     const isValidDirection = this.validateSpellDirection(
       spell.direction,
       casterPosition,
@@ -140,7 +148,6 @@ export class SpellCastingValidatorService {
     }
     details.isValidDirection = true;
 
-    // 6. Vérifier le nombre d'utilisations par tour
     const usePerTurnValidation = this.validateUsePerTurn(spell, context);
     if (!usePerTurnValidation.valid) {
       return {
@@ -150,7 +157,6 @@ export class SpellCastingValidatorService {
       };
     }
 
-    // 7. Vérifier le nombre d'utilisations par cible
     const usePerTargetValidation = this.validateUsePerTarget(spell, targetPosition, context);
     if (!usePerTargetValidation.valid) {
       return {
@@ -173,7 +179,6 @@ export class SpellCastingValidatorService {
     spell: Spell,
     context: SimulationContext
   ): { valid: boolean; reason?: string } {
-    // Si usePerTurn n'est pas défini ou est très élevé (99), pas de limite
     if (!spell.usePerTurn || spell.usePerTurn >= 99) {
       return { valid: true };
     }
@@ -200,7 +205,6 @@ export class SpellCastingValidatorService {
     targetPosition: Position,
     context: SimulationContext
   ): { valid: boolean; reason?: string } {
-    // Si usePerTarget n'est pas défini ou est très élevé (99), pas de limite
     if (!spell.usePerTarget || spell.usePerTarget >= 99) {
       return { valid: true };
     }
@@ -247,24 +251,18 @@ export class SpellCastingValidatorService {
     to: Position,
     context: SimulationContext
   ): boolean {
-    // Si c'est la même position, la ligne de vue est valide
     if (from.x === to.x && from.y === to.y) {
       return true;
     }
 
-    // Récupérer toutes les positions entre from et to (excluant from et to)
     const linePositions = this.getLinePositions(from, to);
 
-    // Vérifier si le passif "Rémanence" est actif (les mécanismes ne bloquent plus la LdV)
     const hasRemanence = this.hasRemanencePassive(context);
     if (hasRemanence) {
       console.log(`   🔮 Passif "Rémanence" actif: les mécanismes ne bloquent pas la ligne de vue`);
     }
 
-    // Vérifier qu'aucune cellule intermédiaire ne contient une entité ou un mécanisme bloquant
     for (const pos of linePositions) {
-      // Vérifier si une entité bloque (ennemis, alliés, invocations)
-      // Note: Le lanceur et la cible ne sont pas sur ces positions intermédiaires
       if (context.entities) {
         const blockingEntity = context.entities.find(
           (e) => e.position.x === pos.x && e.position.y === pos.y
@@ -275,7 +273,6 @@ export class SpellCastingValidatorService {
         }
       }
 
-      // Vérifier si un mécanisme bloque (sauf si le passif Rémanence est actif)
       if (!hasRemanence && context.mechanisms) {
         const blockingMechanism = context.mechanisms.find(
           (m) => m.position.x === pos.x && m.position.y === pos.y
@@ -299,7 +296,6 @@ export class SpellCastingValidatorService {
     if (!context.activePassiveIds) {
       return false;
     }
-    // Vérifier différentes formes possibles de l'ID du passif Rémanence
     const remanenceIds = ['remanence', 'REMANENCE', 'Remanence', 'rémanence', 'Rémanence', 'xelor_remanence'];
     return context.activePassiveIds.some(id =>
       remanenceIds.some(remanenceId =>
@@ -327,7 +323,6 @@ export class SpellCastingValidatorService {
     let err = dx - dy;
 
     while (true) {
-      // Avancer d'un pas
       const e2 = 2 * err;
       if (e2 > -dy) {
         err -= dy;
@@ -338,12 +333,10 @@ export class SpellCastingValidatorService {
         y0 += sy;
       }
 
-      // Si on a atteint la destination, arrêter
       if (x0 === x1 && y0 === y1) {
         break;
       }
 
-      // Ajouter la position intermédiaire
       positions.push({ x: x0, y: y0 });
     }
 
@@ -364,23 +357,18 @@ export class SpellCastingValidatorService {
 
     switch (direction.toUpperCase()) {
       case 'NONE':
-        // Aucune restriction de direction
         return true;
 
       case 'LINE':
-        // Ligne droite (horizontal ou vertical)
         return dx === 0 || dy === 0;
 
       case 'CROSS':
-        // Croix (ligne droite horizontal, vertical ou diagonal)
         return dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);
 
       case 'DIAGONAL':
-        // Uniquement diagonal
         return Math.abs(dx) === Math.abs(dy) && dx !== 0;
 
       case 'CIRCLE':
-        // Cercle (toutes les positions à portée)
         return true;
 
       default:
@@ -397,7 +385,6 @@ export class SpellCastingValidatorService {
     spell: Spell,
     targetPosition: Position
   ): Position[] {
-    // Pour l'instant, retourner uniquement la cible
     // TODO: Implémenter les zones d'effet (AOE)
     return [targetPosition];
   }

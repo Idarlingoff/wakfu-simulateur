@@ -29,19 +29,18 @@ export class InteractivePlayService {
   private readonly _mode = signal<InteractiveMode>('off');
   public mode = computed(() => this._mode());
 
-  /** Contexte courant (PA/PW/MP restants, position, classState…) */
   private readonly _context = signal<SimulationContext | null>(null);
   public context = computed(() => this._context());
 
-  /** Mémoriser le build courant */
   private _build: Build | null = null;
-
-  /** Nombre de steps accumulés dans la session courante */
+  /** true quand la session a démarré sans build (aucun contrôle) */
+  private _freeplay = false;
   private _stepCount = 0;
 
   /** Active le mode interactif et initialise le contexte depuis le build */
   startSession(build: Build): void {
     this._build = build;
+    this._freeplay = false;
     this._stepCount = 0;
 
     const stats = this.statsCalculator.calculateTotalStats(build);
@@ -69,6 +68,7 @@ export class InteractivePlayService {
       spellUsageThisTurn: new Map(),
       spellUsagePerTarget: new Map(),
       movementHistory: [],
+      freeplay: false,
     };
 
     this._context.set(ctx);
@@ -77,24 +77,69 @@ export class InteractivePlayService {
     console.log('[InteractivePlay] Session démarrée – PA:', stats.ap, 'PW:', stats.wp, 'MP:', stats.mp);
   }
 
+  /** Démarre une session sans build : aucune restriction */
+  startSessionFreeplay(): void {
+    this._build = null;
+    this._freeplay = true;
+    this._stepCount = 0;
+
+    const INFINITE = 999;
+    const player = this.boardService.player();
+    const entities = this.boardService.state().entities;
+    const mechanisms: Mechanism[] = this.boardService.mechanisms();
+
+    const ctx: SimulationContext = {
+      availablePa: INFINITE,
+      availablePw: INFINITE,
+      availableMp: INFINITE,
+      currentPosition: player?.position ?? { x: 0, y: 0 },
+      playerPosition: player?.position ?? { x: 0, y: 0 },
+      range: 99,
+      entities: [...entities],
+      mechanisms: [...mechanisms],
+      buffs: [],
+      debuffs: [],
+      turn: 1,
+      activePassiveIds: [],
+      spellUsageThisTurn: new Map(),
+      spellUsagePerTarget: new Map(),
+      movementHistory: [],
+      freeplay: true,
+    };
+
+    this._context.set(ctx);
+    this.simulationService.clearInteractiveSteps();
+    this._mode.set('idle');
+    console.log('[InteractivePlay] Session FREEPLAY démarrée – aucune restriction');
+  }
+
   /** Arrête la session interactive et nettoie */
   stopSession(): void {
     this._mode.set('off');
     this._context.set(null);
     this._build = null;
+    this._freeplay = false;
     this._stepCount = 0;
     console.log('[InteractivePlay] Session arrêtée');
   }
 
   /** Remet les ressources à leur valeur initiale sans quitter le mode interactif */
-  resetSession(build: Build): void {
+  resetSession(build: Build | null): void {
     this.stopSession();
     this.simulationService.clearInteractiveSteps();
-    this.startSession(build);
+    if (build) {
+      this.startSession(build);
+    } else {
+      this.startSessionFreeplay();
+    }
   }
 
   isActive(): boolean {
     return this._mode() === 'idle';
+  }
+
+  isFreeplay(): boolean {
+    return this._freeplay;
   }
 
   /**
@@ -102,10 +147,11 @@ export class InteractivePlayService {
    * Met à jour le contexte interne et pousse le step dans SimulationService.
    */
   async castSpell(spellId: string, targetPosition: Position): Promise<SimulationStepResult | null> {
-    if (!this.isActive() || !this._build) {
+    if (!this.isActive()) {
       console.warn('[InteractivePlay] Session non active');
       return null;
     }
+    const buildToUse = this._build ?? this.makeDummyBuild(spellId);
 
     const ctx = this._context();
     if (!ctx) return null;
@@ -128,7 +174,7 @@ export class InteractivePlayService {
     };
 
     try {
-      const result = await this.simulationEngine.executeSingleStep(step, ctx, this._build, stepNumber);
+      const result = await this.simulationEngine.executeSingleStep(step, ctx, buildToUse, stepNumber);
       this._context.set(result.contextAfter);
       this.simulationService.appendInteractiveStep(result);
 
@@ -154,10 +200,11 @@ export class InteractivePlayService {
    * `via` = 'PM' (utilise des PM) ou 'PW' (utilise des PW – case heure cadran).
    */
   async move(targetPosition: Position, via: 'PM' | 'PW'): Promise<SimulationStepResult | null> {
-    if (!this.isActive() || !this._build) {
+    if (!this.isActive()) {
       console.warn('[InteractivePlay] Session non active');
       return null;
     }
+    const buildToUse = this._build ?? this.makeDummyBuild();
 
     const ctx = this._context();
     if (!ctx) return null;
@@ -184,7 +231,7 @@ export class InteractivePlayService {
     };
 
     try {
-      const result = await this.simulationEngine.executeSingleStep(step, ctx, this._build, stepNumber);
+      const result = await this.simulationEngine.executeSingleStep(step, ctx, buildToUse, stepNumber);
 
       if (result.success) {
         this._context.set(result.contextAfter);
@@ -205,6 +252,26 @@ export class InteractivePlayService {
       console.error('[InteractivePlay] Erreur lors du déplacement:', e);
       return null;
     }
+  }
+
+  /** Construit un build factice minimal pour le mode freeplay */
+  private makeDummyBuild(spellId?: string): Build {
+    return {
+      id: 'freeplay',
+      name: 'Freeplay',
+      classId: this.boardService.player()?.classId ?? 'XEL',
+      characterLevel: 230,
+      spellBar: { spells: spellId ? [{ spellId }] : [] },
+      passiveBar: { passives: [] },
+      sublimationBar: { sublimations: [] },
+      stats: {
+        level: 230,
+        masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
+        masterySecondary: 0, backMastery: 0,
+        dommageInflict: 0, critRate: 0, critMastery: 0,
+        resistance: 0, ap: 999, mp: 999, wp: 999, range: 99,
+      },
+    };
   }
 
   /**

@@ -79,16 +79,24 @@ interface BoardCell {
       </div>
 
       <!-- ═══ BANDEAU MODE INTERACTIF ═══ -->
-      <div class="interactive-bar" [class.active]="interactivePlay.isActive()">
+      <div class="interactive-bar" [class.active]="interactivePlay.isActive()" [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay()">
         <div class="interactive-bar-left">
           <button
             class="btn-interactive"
             [class.on]="interactivePlay.isActive()"
+            [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay()"
             (click)="toggleInteractiveMode()"
-            [disabled]="!hasBuild()"
             title="{{ interactivePlay.isActive() ? 'Désactiver le mode interactif' : 'Activer le mode interactif' }}"
           >
-            {{ interactivePlay.isActive() ? 'Mode Interactif ON' : 'Mode Interactif' }}
+            @if (interactivePlay.isActive() && interactivePlay.isFreeplay()) {
+              <span>Freeplay ON</span>
+            } @else if (interactivePlay.isActive()) {
+              <span>Mode Interactif ON</span>
+            } @else if (hasBuild()) {
+              <span>Mode Interactif</span>
+            } @else {
+              <span>Freeplay (sans build)</span>
+            }
           </button>
           <button
             *ngIf="interactivePlay.isActive()"
@@ -97,7 +105,7 @@ interface BoardCell {
             title="Réinitialiser la session interactive"
           >Reset</button>
         </div>
-        <div class="interactive-resources" *ngIf="interactivePlay.isActive()">
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && !interactivePlay.isFreeplay()">
           <span class="res-item pa">
             <img src="assets/images/characteristics/AP.png" alt="PA" class="res-icon" />
             {{ interactivePlay.availablePa }}
@@ -111,9 +119,12 @@ interface BoardCell {
             {{ interactivePlay.availableMp }}
           </span>
         </div>
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && interactivePlay.isFreeplay()">
+          <span class="res-item freeplay-badge">Aucune restriction</span>
+        </div>
         <div class="interactive-hint" *ngIf="interactivePlay.isActive()">
-          <span *ngIf="selectedSpellId()">🎯 Cliquez sur une case pour lancer <strong>{{ getSpellName(selectedSpellId()!) }}</strong></span>
-          <span *ngIf="!selectedSpellId()">🏃 Cliquez sur une case pour déplacer le joueur</span>
+          <span *ngIf="selectedSpellId()">Cliquez sur une case pour lancer <strong>{{ getSpellName(selectedSpellId()!) }}</strong></span>
+          <span *ngIf="!selectedSpellId()">Cliquez sur une case pour déplacer le joueur</span>
         </div>
       </div>
 
@@ -1516,6 +1527,29 @@ interface BoardCell {
       box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
     }
 
+    .btn-interactive.freeplay {
+      background: linear-gradient(135deg, #f093fb, #f5576c);
+      border-color: #f5576c;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(245, 87, 108, 0.5);
+    }
+
+    .interactive-bar.freeplay {
+      background: rgba(245, 87, 108, 0.08);
+      border-color: #f5576c;
+      box-shadow: 0 0 14px rgba(245, 87, 108, 0.2);
+    }
+
+    .res-item.freeplay-badge {
+      color: #f5576c;
+      font-weight: 700;
+      font-size: 12px;
+      background: rgba(245, 87, 108, 0.1);
+      border: 1px solid rgba(245, 87, 108, 0.3);
+      border-radius: 6px;
+      padding: 3px 10px;
+    }
+
     .btn-interactive:hover:not(:disabled) {
       background: linear-gradient(135deg, #667eea, #764ba2);
       border-color: #667eea;
@@ -1931,10 +1965,13 @@ export class BoardComponent {
   }
 
   /**
-   * Calcul effectif de la portée d'un sort (sans check du mode sélectionné).
-   * Utilisé par isCellInSpellRange (mode timeline) ET isCellInInteractiveSpellRange (mode interactif).
+   * Calcul effectif de la portée d'un sort.
+   * En freeplay (sans build) : toute la map est accessible.
    */
   private computeSpellRange(x: number, y: number, spellId: string | null): boolean {
+    // Freeplay : aucune restriction de portée
+    if (this.interactivePlay.isFreeplay()) return true;
+
     const spell = spellId ? this.spellsCache().get(spellId) : null;
     const player = this.boardService.state().entities.find(e => e.type === 'player');
     if (!spell || !player) return false;
@@ -2075,26 +2112,29 @@ export class BoardComponent {
   }
 
   toggleInteractiveMode(): void {
-    const build = this.buildService.selectedBuildA();
-    if (!build) return;
-
     if (this.interactivePlay.isActive()) {
       this.interactivePlay.stopSession();
-    } else {
-      if (!this.boardService.hasMinimumSetup()) {
-        alert('Placez au moins 1 allié et 1 ennemi sur le board avant d\'activer le mode interactif.');
-        return;
-      }
-      this.boardService.saveInitialState();
+      return;
+    }
+
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant d\'activer le mode interactif.');
+      return;
+    }
+
+    this.boardService.saveInitialState();
+    const build = this.buildService.selectedBuildA();
+    if (build) {
       this.interactivePlay.startSession(build);
+    } else {
+      this.interactivePlay.startSessionFreeplay();
     }
   }
 
   resetInteractiveMode(): void {
-    const build = this.buildService.selectedBuildA();
-    if (!build) return;
     this.boardService.restoreInitialState();
-    this.interactivePlay.resetSession(build);
+    const build = this.buildService.selectedBuildA();
+    this.interactivePlay.resetSession(build ?? null);
   }
 
   /**
@@ -2107,32 +2147,31 @@ export class BoardComponent {
     if (!this.hoveredPlayerId()) return false;
     const player = this.boardService.state().entities.find(e => e.type === 'player');
     if (!player || player.id !== this.hoveredPlayerId()) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    if (dist === 0) return false;
+    // Freeplay : toute la map est accessible
+    if (this.interactivePlay.isFreeplay()) return true;
     const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
     const targetIsDialHour = this.boardService.isPositionOnDialHour({ x, y });
     if (playerOnDialHour && targetIsDialHour) return false;
-    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
-    const mp = this.interactivePlay.availableMp;
-    return dist > 0 && dist <= Math.max(mp, 0);
+    return dist <= Math.max(this.interactivePlay.availableMp, 0);
   }
 
-  /**
-   * Portée de déplacement PW en mode interactif — visible uniquement au hover sur le joueur.
-   * Le joueur DOIT être sur une heure du cadran ET la cible aussi.
-   */
   isCellInInteractivePwMoveRange(x: number, y: number): boolean {
     if (!this.interactivePlay.isActive()) return false;
     if (this.selectedSpellId()) return false;
     if (!this.hoveredPlayerId()) return false;
-
     const player = this.boardService.state().entities.find(e => e.type === 'player');
-
     if (!player || player.id !== this.hoveredPlayerId()) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    if (dist === 0) return false;
+    // Freeplay : toutes les heures du cadran sont accessibles
+    if (this.interactivePlay.isFreeplay()) {
+      return this.boardService.isPositionOnDialHour({ x, y });
+    }
     if (!this.boardService.isPositionOnDialHour(player.position)) return false;
     if (!this.boardService.isPositionOnDialHour({ x, y })) return false;
-
-    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
-
-    return dist > 0 && this.interactivePlay.availablePw > 0;
+    return this.interactivePlay.availablePw > 0;
   }
 
   /**
@@ -2160,7 +2199,7 @@ export class BoardComponent {
       const result = await this.interactivePlay.castSpell(spellId, { x: cell.x, y: cell.y });
 
       if (result) {
-        const build = this.buildService.selectedBuildA()!;
+        const build = this.buildService.selectedBuildA();
         const fakeAction: TimelineAction = {
           id: `iplay_visual_${Date.now()}`,
           type: 'CastSpell',
@@ -2168,7 +2207,13 @@ export class BoardComponent {
           spellId,
           targetPosition: { x: cell.x, y: cell.y },
         };
-        await this.applyVisualAction(fakeAction, build, this.simulationService.cachedSteps().length - 1);
+        // applyVisualAction n'utilise pas vraiment le build (seulement pour les logs),
+        // on passe un build factice si nécessaire
+        if (build) {
+          await this.applyVisualAction(fakeAction, build, this.simulationService.cachedSteps().length - 1);
+        } else {
+          await this.applyVisualActionFreeplay(fakeAction, this.simulationService.cachedSteps().length - 1);
+        }
         this.boardService.pushState();
       }
 
@@ -2200,6 +2245,9 @@ export class BoardComponent {
 
   /** Validation PM pure (sans check hover) */
   private isInInteractiveMoveRangeRaw(x: number, y: number, player: BoardEntity): boolean {
+    if (this.interactivePlay.isFreeplay()) {
+      return Math.abs(player.position.x - x) + Math.abs(player.position.y - y) > 0;
+    }
     const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
     const targetIsDialHour = this.boardService.isPositionOnDialHour({ x, y });
     if (playerOnDialHour && targetIsDialHour) return false;
@@ -2209,6 +2257,10 @@ export class BoardComponent {
 
   /** Validation PW pure (sans check hover) */
   private isInInteractivePwMoveRangeRaw(x: number, y: number, player: BoardEntity): boolean {
+    if (this.interactivePlay.isFreeplay()) {
+      return this.boardService.isPositionOnDialHour({ x, y }) &&
+        Math.abs(player.position.x - x) + Math.abs(player.position.y - y) > 0;
+    }
     if (!this.boardService.isPositionOnDialHour(player.position)) return false;
     if (!this.boardService.isPositionOnDialHour({ x, y })) return false;
     const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
@@ -2315,6 +2367,11 @@ export class BoardComponent {
 
     console.log('═══════════════════════════════════════════════════════');
     console.log('');
+  }
+
+  private async applyVisualActionFreeplay(action: TimelineAction, stepIndex: number): Promise<void> {
+    // Même logique qu'applyVisualAction, le build n'est pas utilisé
+    await this.applyVisualAction(action, null as any, stepIndex);
   }
 
   private async applyVisualAction(action: TimelineAction, _build: Build, stepIndex: number): Promise<void> {
