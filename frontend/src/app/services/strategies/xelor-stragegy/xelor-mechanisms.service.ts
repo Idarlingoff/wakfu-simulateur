@@ -69,7 +69,7 @@ export class XelorMechanismsService {
       };
     }
 
-    const imageUrl = 'http://localhost:8080/' + getMechanismImagePath(mechanismType, 0);
+    const imageUrl = getMechanismImagePath(mechanismType, 0);
 
     console.log(`[XELOR] Mechanism type found:`, {
       type: mechanismType,
