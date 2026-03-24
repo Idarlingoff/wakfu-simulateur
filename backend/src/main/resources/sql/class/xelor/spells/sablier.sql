@@ -39,8 +39,8 @@ INSERT INTO spell (
 
 -- Ratio niveau 185 (aucun crit car dégâts indirects)
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
-VALUES ('XEL_SABLIER', 'NORMAL', 200, 99),
-       ('XEL_SABLIER', 'CRIT', 200, 124);
+VALUES ('XEL_SABLIER', 'NORMAL', 200, 100),
+       ('XEL_SABLIER', 'CRIT', 200, 125);
 
 -- NORMAL
 INSERT INTO spell_variant (spell_id, kind)

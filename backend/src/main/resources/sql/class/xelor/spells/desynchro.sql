@@ -19,8 +19,8 @@ INSERT INTO spell (
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
-VALUES ('XEL_DESYNCHRO', 'NORMAL', 200, 83),
-       ('XEL_DESYNCHRO', 'CRIT',   200, 104);
+VALUES ('XEL_DESYNCHRO', 'NORMAL', 200, 84),
+       ('XEL_DESYNCHRO', 'CRIT',   200, 105);
 
 INSERT INTO EFFECT_CONDITION_GROUP (OP) values ( 'AND' );
 
