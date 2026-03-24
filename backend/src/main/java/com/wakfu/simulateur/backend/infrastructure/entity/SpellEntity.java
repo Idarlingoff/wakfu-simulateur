@@ -68,6 +68,9 @@ public class SpellEntity {
     @Column(name = "icon_id")
     private Integer iconId;
 
+    @Column(name = "is_aoe", nullable = false)
+    private boolean aoe;
+
     @OneToMany(mappedBy = "spell", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SpellVariantEntity> variants = new ArrayList<>();
 

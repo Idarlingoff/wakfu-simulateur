@@ -79,7 +79,25 @@ export class BoardService {
    * Initialize board with default state
    */
   private initializeBoard(): void {
-    this.boardState.set(this.createEmptyBoardState());
+    const defaultState = this.createEmptyBoardState();
+    defaultState.entities = [
+      {
+        id: 'default_player',
+        type: 'player',
+        name: 'Xelor',
+        classId: 'XEL',
+        position: { x: 4, y: 4 },
+        facing: { direction: 'front' }
+      },
+      {
+        id: 'default_enemy',
+        type: 'enemy',
+        name: 'Ennemi',
+        position: { x: 7, y: 4 },
+        facing: { direction: 'front' }
+      }
+    ];
+    this.boardState.set(defaultState);
   }
 
   private createEmptyBoardState(): InteractiveBoardState {

@@ -129,15 +129,15 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_DIAL', 'XEL', 'Dial', 'NONE', 'INNATE',
              2, 0, 1, 3, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', null
+             0, 1, 1, 'LINE', 'STEP', 5345, FALSE
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DIAL', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DIAL', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DIAL', 'NORMAL');
@@ -256,16 +256,16 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_CLM', 'XEL', 'Contre la montre', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 776
+             0, 1, 1, 'AREA', 'STEP', 776, FALSE
          );
 
 -- Ratio (aucun dégât)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_CLM', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_CLM', 'NORMAL', 200, 0);
 
 -- Variante (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)
@@ -296,14 +296,19 @@ DELETE FROM spell_variant      WHERE spell_id='XEL_DESYNCHRO';
 DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_DESYNCHRO';
 DELETE FROM spell              WHERE id='XEL_DESYNCHRO';
 
-INSERT INTO spell  VALUES (
-                              'XEL_DESYNCHRO', 'XEL', 'Désynchronisation', 'WATER', 'ELEMENTAL',
-                              4, 0, 3, 6, TRUE, TRUE,
-                              0, 2, 0, 'AREA', 'STEP', 1417
-                          );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_DESYNCHRO', 'XEL', 'Désynchronisation', 'WATER', 'ELEMENTAL',
+             4, 0, 3, 6, TRUE, TRUE,
+             0, 2, 0, 'AREA', 'STEP', 1417, TRUE
+         );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DESYNCHRO', 185, 78);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DESYNCHRO', 'NORMAL', 200, 83),
+       ('XEL_DESYNCHRO', 'CRIT',   200, 104);
 
 INSERT INTO EFFECT_CONDITION_GROUP (OP) values ( 'AND' );
 
@@ -392,16 +397,16 @@ DELETE FROM spell              WHERE id='XEL_DEVOUEMENT';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_DEVOUEMENT', 'XEL', 'Dévouement', 'NONE', 'NEUTRAL',
              0, 4, 0, 3, TRUE, TRUE,
-             0, 99, 99, 'NONE', 'STEP', 2839
+             0, 99, 99, 'AREA', 'STEP', 2839, FALSE
          );
 
 -- Ratio
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DEVOUEMENT', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DEVOUEMENT', 'NORMAL', 200, 0);
 
 -- Variante unique (pas de critique)
 INSERT INTO spell_variant (spell_id, kind)
@@ -485,15 +490,15 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
              0, 4, 0, 1, FALSE, FALSE,
-             0, 99, 99, 'NONE', 'STEP', null
+             0, 99, 99, 'NONE', 'STEP', 7794, FALSE
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_DISTO', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_DISTO', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_DISTO', 'NORMAL');
@@ -545,14 +550,19 @@ DELETE FROM spell              WHERE id='XEL_HORLOGE';
 DELETE FROM status_effect      WHERE status_id IN ('HORLOGE_BANK','HORLOGE_MARK');
 DELETE FROM status_def         WHERE id IN ('HORLOGE_BANK','HORLOGE_MARK');
 
-INSERT INTO spell VALUES (
-                             'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
-                             5,0,1,3,TRUE,TRUE,
-                             0,2,1,'LINE','STEP', 763
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
+             5,0,1,3,TRUE,TRUE,
+             0,2,1,'LINE','STEP', 763, FALSE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_HORLOGE',185,139);
+    ('XEL_HORLOGE','NORMAL',200,149),
+    ('XEL_HORLOGE','CRIT',200,186);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_HORLOGE','NORMAL'),
@@ -608,14 +618,19 @@ DELETE FROM spell_variant      WHERE spell_id='XEL_PARADOXE';
 DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_PARADOXE';
 DELETE FROM spell              WHERE id='XEL_PARADOXE';
 
-INSERT INTO spell VALUES (
-                             'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
-                             4,0,1,3,TRUE,FALSE,
-                             0,2,1,'NONE','STEP', 1418
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_PARADOXE','XEL','Paradoxe','AIR','ELEMENTAL',
+             4,0,1,3,TRUE,FALSE,
+             0,2,1,'AREA','STEP', 1418, TRUE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_PARADOXE',185,78);
+    ('XEL_PARADOXE','NORMAL',200,83),
+    ('XEL_PARADOXE','CRIT',200,104);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_PARADOXE','NORMAL'),
@@ -652,16 +667,17 @@ DELETE FROM spell              WHERE id='XEL_POINTE_HEURE';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_POINTE_HEURE', 'XEL', 'Pointe-heure', 'AIR', 'ELEMENTAL',
              2, 0, 2, 4, TRUE, TRUE,
-             0, 2, 1, 'LINE', 'STEP', 767
+             0, 2, 1, 'LINE', 'STEP', 767, FALSE
          );
 
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
 VALUES
-    ('XEL_POINTE_HEURE', 185, 46);
+    ('XEL_POINTE_HEURE', 'NORMAL', 200, 49),
+    ('XEL_POINTE_HEURE', 'CRIT',   200, 62);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES
@@ -714,16 +730,17 @@ DELETE FROM spell              WHERE id='XEL_RALENTISSEMENT';
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_RALENTISSEMENT', 'XEL', 'Ralentissement', 'WATER', 'ELEMENTAL',
              1, 1, 1, 3, TRUE, TRUE,
-             0, 3, 2, 'NONE', 'STEP', 775
+             0, 3, 2, 'AREA', 'STEP', 775, FALSE
          );
 
 -- Ratio (palier 185) — valeur de base (non-crit)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_RALENTISSEMENT', 185, 27);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_RALENTISSEMENT', 'NORMAL', 200, 28),
+       ('XEL_RALENTISSEMENT', 'CRIT',   200, 36);
 
 -- Variantes NORMAL / CRIT
 INSERT INTO spell_variant (spell_id, kind) VALUES
@@ -808,16 +825,16 @@ VALUES (
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_REGULATEUR', 'XEL', 'Régulateur', 'NONE', 'NEUTRAL',
              0, 3, 1, 2, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', 5344
+             0, 1, 1, 'AREA', 'STEP', 5344, FALSE
          );
 
 -- Ratio (aucun dégât) pour cohérence
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_REGULATEUR', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_REGULATEUR', 'NORMAL', 200, 0);
 
 -- Variante unique (pas de critique)
 INSERT INTO spell_variant (spell_id, kind)
@@ -862,14 +879,19 @@ DELETE FROM spell_variant      WHERE spell_id='XEL_RETOUR_SPONTANE';
 DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_RETOUR_SPONTANE';
 DELETE FROM spell              WHERE id='XEL_RETOUR_SPONTANE';
 
-INSERT INTO spell VALUES (
-                             'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
-                             3,0,1,3,TRUE,TRUE,
-                             0,3,2,'NONE','STEP', 771
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_RETOUR_SPONTANE','XEL','Retour spontané','AIR','ELEMENTAL',
+             3,0,1,3,TRUE,TRUE,
+             0,3,2,'AREA','STEP', 771, FALSE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_RETOUR_SPONTANE',185,75);
+                                       ('XEL_RETOUR_SPONTANE','NORMAL',200,80),
+                                       ('XEL_RETOUR_SPONTANE','CRIT',  200,100);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_RETOUR_SPONTANE','NORMAL'),
@@ -958,16 +980,17 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_ROUAGE', 'XEL', 'Rouage', 'NONE', 'NEUTRAL',
              2, 0, 1, 3, TRUE, FALSE,
-             0, 1, 1, 'LINE', 'STEP', 766
+             0, 1, 1, 'LINE', 'STEP', 766, TRUE
          );
 
 -- Ratio (aucun dégât direct au cast)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_ROUAGE', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_ROUAGE', 'NORMAL',     200, 0),
+       ('XEL_ROUAGE', 'PER_CHARGE', 200, 20);
 
 -- Variante unique (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)
@@ -1033,16 +1056,17 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_SABLIER', 'XEL', 'Sablier', 'WATER', 'ELEMENTAL',
              3, 0, 1, 2, TRUE, FALSE,
-             0, 4, 1, 'NONE', 'STEP', 783
+             0, 4, 1, 'AREA', 'STEP', 783, TRUE
          );
 
 -- Ratio niveau 185 (aucun crit car dégâts indirects)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_SABLIER', 185, 93);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_SABLIER', 'NORMAL', 200, 99),
+       ('XEL_SABLIER', 'CRIT', 200, 124);
 
 -- NORMAL
 INSERT INTO spell_variant (spell_id, kind)
@@ -1146,16 +1170,16 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_SINISTRO', 'XEL', 'Sinistro', 'NONE', 'NEUTRAL',
              2, 0, 2, 5, FALSE, TRUE,
-             0, 1, 1, 'NONE', 'STEP', 777
+             0, 1, 1, 'AREA', 'STEP', 777, FALSE
          );
 
 -- ratio (pas de dégâts directs)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_SINISTRO', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_SINISTRO', 'NORMAL', 200, 0);
 
 -- variante
 INSERT INTO spell_variant (spell_id, kind)
@@ -1224,16 +1248,16 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
              0, 1, 0, 1, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', null
+             0, 1, 1, 'NONE', 'STEP', 3909, FALSE
          );
 
 -- Ratio (aucun dégât)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_VDT', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_VDT', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_VDT', 'NORMAL');
@@ -1404,14 +1428,19 @@ DELETE FROM spell_variant      WHERE spell_id='XEL_SYMETRIE';
 DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_SYMETRIE';
 DELETE FROM spell              WHERE id='XEL_SYMETRIE';
 
-INSERT INTO spell VALUES (
-                             'XEL_SYMETRIE','XEL','Symétrie','AIR','ELEMENTAL',
-                             3,0,1,3,FALSE,TRUE,
-                             0,3,1,'NONE','STEP', 772
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_SYMETRIE','XEL','Symétrie','AIR','ELEMENTAL',
+             3,0,1,3,FALSE,TRUE,
+             0,3,1,'AREA','STEP', 772, FALSE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_SYMETRIE',185,58);
+    ('XEL_SYMETRIE','NORMAL',200,62),
+    ('XEL_SYMETRIE','CRIT',200,78);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_SYMETRIE','NORMAL'),

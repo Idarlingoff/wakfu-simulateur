@@ -96,6 +96,7 @@ export interface SimulationContext {
   spellUsageThisTurn?: Map<string, number>;
   spellUsagePerTarget?: Map<string, Map<string, number>>;
   movementHistory?: MovementRecord[];
+  freeplay?: boolean;
 }
 
 export interface SpellEffectResult {
@@ -232,12 +233,12 @@ export class SimulationEngineService {
 
     console.log('');
     console.log('╔═══════════════════════════════════════════════════════╗');
-    console.log('║  🎮 DÉMARRAGE DE LA SIMULATION                       ║');
+    console.log('║  DÉMARRAGE DE LA SIMULATION                       ║');
     console.log('╚═══════════════════════════════════════════════════════╝');
-    console.log('📦 Build:', build.name);
-    console.log('🎭 Classe:', build.classId || 'Default');
-    console.log('📋 Timeline:', timeline.name);
-    console.log('🔢 Nombre d\'étapes:', timeline.steps.length);
+    console.log('Build:', build.name);
+    console.log('Classe:', build.classId || 'Default');
+    console.log('Timeline:', timeline.name);
+    console.log('Nombre d\'étapes:', timeline.steps.length);
     console.log('');
 
     this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
@@ -494,7 +495,7 @@ export class SimulationEngineService {
     console.log('═══════════════════════════════════════════════════════');
     console.log('🎯 [CAST SPELL] Tentative de lancement de sort');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('📦 Spell ID:', action.spellId);
+    console.log('Spell ID:', action.spellId);
     console.log('📍 Position cible:', action.targetPosition);
     console.log('⚡ Ressources disponibles:', {
       AP: context.availablePa,
@@ -503,7 +504,9 @@ export class SimulationEngineService {
     });
     console.log('═══════════════════════════════════════════════════════');
 
-    const spellRef = buildSpellReferencesWithInnates(build).find(s => s.spellId === action.spellId);
+    const spellRef = context.freeplay
+      ? { spellId: canonicalizeInnateSpellId(action.spellId ?? '') }
+      : buildSpellReferencesWithInnates(build).find(s => s.spellId === action.spellId);
 
     if (!spellRef) {
       return {
@@ -810,25 +813,34 @@ export class SimulationEngineService {
       return [];
     }
 
+    const breakpoint = spell.breakpoints?.find(b => b.kind === variantKind)
+      ?? spell.breakpoints?.find(b => b.kind === 'NORMAL');
+    const ratioFromBreakpoint = breakpoint?.ratio ?? null;
+
     const computableEffects: { type: string; baseValue: number; element?: string }[] = [];
 
     for (const effect of variant.effects) {
       const effectType = effect.effect;
 
       if (effectType === 'DEAL_DAMAGE' || effectType === 'HEAL' || effectType === 'GIVE_ARMOR') {
-        const baseValue = this.extractBaseValue(effect);
+        let baseValue: number;
+        if (effectType === 'DEAL_DAMAGE' && ratioFromBreakpoint !== null) {
+          baseValue = ratioFromBreakpoint;
+        } else {
+          baseValue = this.extractBaseValue(effect);
+        }
 
         if (baseValue > 0) {
           computableEffects.push({
             type: effectType,
             baseValue,
-            element: effect.element
+            element: effect.element ?? (effect.extendedData?.element ?? undefined)
           });
         }
       }
     }
 
-    console.log(`🔍 [EFFECTS] ${spell.name} (${variantKind}): ${computableEffects.length} effet(s) calculable(s) extraits`);
+    console.log(`🔍 [EFFECTS] ${spell.name} (${variantKind}): ${computableEffects.length} effet(s) calculable(s) extraits (ratio breakpoint: ${ratioFromBreakpoint})`);
     return computableEffects;
   }
 
@@ -992,11 +1004,10 @@ export class SimulationEngineService {
     console.log('  De:', currentPosition);
     console.log('  Vers:', action.targetPosition);
 
-    const validation = this.movementValidator.validateMovement(
-      currentPosition,
-      action.targetPosition,
-      context
-    );
+    // ── Freeplay : aucun contrôle de déplacement ──────────────────────────
+    const validation = context.freeplay
+      ? { canMove: true, reason: undefined, cost: { mp: 0, wp: 0 }, details: { movementType: 'normal' as const } }
+      : this.movementValidator.validateMovement(currentPosition, action.targetPosition, context);
 
     console.log('✅ [VALIDATION] Résultat:', {
       canMove: validation.canMove,

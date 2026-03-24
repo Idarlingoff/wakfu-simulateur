@@ -37,6 +37,10 @@ export class SimulationService {
   private currentTimelineId: string | null = null;
   private currentBuildId: string | null = null;
 
+  /** Signal réactif exposant les steps exécutés du cache incrémental */
+  private readonly _cachedSteps = signal<SimulationStepResult[]>([]);
+  public cachedSteps = computed(() => this._cachedSteps());
+
   public simulation = computed(() => this.currentSimulation());
   public isRunning = computed(() => this.isSimulating());
   public error = computed(() => this.simulationError());
@@ -83,6 +87,49 @@ export class SimulationService {
     this.simulationResultsCache = null;
     this.currentTimelineId = null;
     this.currentBuildId = null;
+    this._cachedSteps.set([]);
+  }
+
+  /**
+   * Ajoute un step résultat au cache réactif (utilisé par le mode interactif).
+   * N'impacte pas le cache de simulation timeline.
+   */
+  appendInteractiveStep(step: SimulationStepResult): void {
+    this._cachedSteps.update(steps => [...steps, step]);
+    if (this.simulationResultsCache) {
+      this.simulationResultsCache.steps.push(step);
+      const totals = this.aggregateStepTotals([step]);
+      this.simulationResultsCache.totalDamage += totals.totalDamage;
+      this.simulationResultsCache.totalHeal += totals.totalHeal;
+      this.simulationResultsCache.totalShield += totals.totalShield;
+      this.simulationResultsCache.totalPaUsed += totals.totalPaUsed;
+      this.simulationResultsCache.totalPwUsed += totals.totalPwUsed;
+      this.simulationResultsCache.totalMpUsed += totals.totalMpUsed;
+      this.simulationResultsCache.finalContext = step.contextAfter;
+    } else {
+      const totals = this.aggregateStepTotals([step]);
+      this.simulationResultsCache = {
+        buildId: '',
+        timelineId: 'interactive',
+        buildStats: {} as any,
+        initialContext: step.contextAfter,
+        steps: [step],
+        finalContext: step.contextAfter,
+        ...totals,
+        success: step.success,
+        errors: [],
+      };
+    }
+    console.log('[SimulationService] Step interactif ajouté au cache réactif');
+  }
+
+  /**
+   * Vide les steps interactifs du cache réactif
+   */
+  clearInteractiveSteps(): void {
+    this._cachedSteps.set([]);
+    this.simulationResultsCache = null;
+    console.log('[SimulationService] Steps interactifs vidés');
   }
 
   /**
@@ -140,6 +187,7 @@ export class SimulationService {
     };
 
     console.log(`🧹 [SimulationService] Cache tronqué à ${boundedStepIndex} step(s)`);
+    this._cachedSteps.set([...trimmedSteps]);
   }
 
   /**
@@ -193,6 +241,7 @@ export class SimulationService {
     }
 
     console.log(`✅ Cache étendu avec le step ${stepIndex + 1}`);
+    this._cachedSteps.set([...this.simulationResultsCache!.steps]);
   }
 
   private async executeStepFromScratch(build: Build, timeline: Timeline, stepIndex: number): Promise<void> {
@@ -210,6 +259,7 @@ export class SimulationService {
     this.currentBuildId = build.id || '';
 
     console.log(`✅ Cache initialisé avec ${result.steps.length} steps`);
+    this._cachedSteps.set([...result.steps]);
   }
 
   private validateExecutedStep(stepIndex: number): boolean {
@@ -247,7 +297,7 @@ export class SimulationService {
       const cacheHasPreviousSteps = cacheIsValid && this.simulationResultsCache!.steps.length === stepIndex;
 
       if (cacheHasThisStep) {
-        console.log('📦 [executeStep] Utilisation des résultats en cache');
+        console.log('[executeStep] Utilisation des résultats en cache');
       } else if (cacheHasPreviousSteps) {
         console.log(`🔄 [executeStep] Exécution incrémentale du step ${stepIndex + 1} uniquement`);
 

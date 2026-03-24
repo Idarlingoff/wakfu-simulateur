@@ -38,8 +38,8 @@ export interface SpellVariant {
 }
 
 export interface SpellRatioBreakpoint {
-  id: number;
-  threshold: number;
+  kind: string;
+  lvl: number;
   ratio: number;
 }
 
@@ -63,6 +63,7 @@ export interface Spell {
   variants: SpellVariant[];
   breakpoints: SpellRatioBreakpoint[];
   iconId?: number;
+  isAoe: boolean;
   description?: string;
 }
 

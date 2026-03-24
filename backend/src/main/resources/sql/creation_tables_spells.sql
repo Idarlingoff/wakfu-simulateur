@@ -22,15 +22,18 @@ CREATE TABLE spell (
                        direction        VARCHAR(16) NOT NULL,            -- LINE|CROSS|NONE…
                        ratio_eval_mode  VARCHAR(16) NOT NULL DEFAULT 'STEP', -- STEP|LINEAR
                        icon_id          INT,
+                       is_aoe           BOOLEAN NOT NULL DEFAULT FALSE,   -- TRUE si le sort fait des dégâts de zone
                        CONSTRAINT ck_spell_type CHECK (spell_type IN ('ELEMENTAL','NEUTRAL','INNATE'))
 );
 
 CREATE TABLE spell_ratio_breakpoint (
                                         spell_id VARCHAR(64) NOT NULL,
+                                        kind     VARCHAR(16) NOT NULL,   -- NORMAL|CRIT
                                         lvl      INT NOT NULL,
                                         ratio    INT NOT NULL,
-                                        PRIMARY KEY (spell_id, lvl),
-                                        FOREIGN KEY (spell_id) REFERENCES spell(id)
+                                        PRIMARY KEY (spell_id, kind, lvl),
+                                        FOREIGN KEY (spell_id) REFERENCES spell(id),
+                                        CONSTRAINT ck_breakpoint_kind CHECK (kind IN ('NORMAL','CRIT','PER_CHARGE'))
 );
 
 -- Variante NORMAL / CRIT (sépare les listes d’effets)

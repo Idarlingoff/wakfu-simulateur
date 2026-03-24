@@ -20,13 +20,6 @@ interface ResourceSummary {
   apRemaining: number;
   mpRemaining: number;
   wpRemaining: number;
-  gearExplosions: Array<{ level: number; count: number }>;
-}
-
-interface ActionSummary {
-  type: string;
-  description: string;
-  resources: string;
 }
 
 @Component({
@@ -36,107 +29,70 @@ interface ActionSummary {
   template: `
     <div class="timeline-summary" *ngIf="currentTimeline()">
       <div class="summary-header">
-        <h3>📊 Résumé de la Timeline</h3>
+        <h3>Ressources</h3>
         <span class="current-step">Étape {{ currentStepIndex() }} / {{ totalSteps() }}</span>
       </div>
 
-      <!-- Actions passées -->
-      <div class="summary-section" *ngIf="pastActions().length > 0">
-        <h4>⏮️ Actions Passées ({{ pastActions().length }})</h4>
-        <div class="actions-list">
-          <div *ngFor="let action of pastActions(); let i = index" class="action-item">
-            <span class="action-number">{{ i + 1 }}</span>
-            <div class="action-details">
-              <span class="action-type" [class]="action.type">{{ action.type }}</span>
-              <span class="action-description">{{ action.description }}</span>
-              <span class="action-resources" *ngIf="action.resources">{{ action.resources }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="no-actions" *ngIf="pastActions().length === 0">
-        <span>Aucune action exécutée</span>
-      </div>
-
       <!-- Ressources -->
-      <div class="summary-section resources-section">
-        <h4>⚡ Ressources</h4>
-
-        <div class="resources-grid">
-          <!-- PA -->
-          <div class="resource-card ap">
-            <div class="resource-header">
-              <span class="resource-icon">🔵</span>
-              <span class="resource-label">PA</span>
-            </div>
-            <div class="resource-stats">
-              <div class="stat-item">
-                <span class="stat-label">Utilisé</span>
-                <span class="stat-value negative">-{{ resourceSummary().apUsed }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Régénéré</span>
-                <span class="stat-value positive">+{{ resourceSummary().apRegenerated }}</span>
-              </div>
-              <div class="stat-item highlight">
-                <span class="stat-label">Restant</span>
-                <span class="stat-value">{{ resourceSummary().apRemaining }}</span>
-              </div>
-            </div>
+      <div class="resources-grid">
+        <!-- PA -->
+        <div class="resource-card ap">
+          <div class="resource-header">
+            <img src="assets/images/characteristics/AP.png" alt="PA" class="resource-icon-img" />
+            <span class="resource-label">PA</span>
           </div>
-
-          <!-- PM -->
-          <div class="resource-card mp">
-            <div class="resource-header">
-              <span class="resource-icon">🟢</span>
-              <span class="resource-label">PM</span>
+          <div class="resource-stats">
+            <div class="stat-item">
+              <span class="stat-label">Utilisé</span>
+              <span class="stat-value negative">-{{ resourceSummary().apUsed }}</span>
             </div>
-            <div class="resource-stats">
-              <div class="stat-item">
-                <span class="stat-label">Utilisé</span>
-                <span class="stat-value negative">-{{ resourceSummary().mpUsed }}</span>
-              </div>
-              <div class="stat-item highlight">
-                <span class="stat-label">Restant</span>
-                <span class="stat-value">{{ resourceSummary().mpRemaining }}</span>
-              </div>
+            <div class="stat-item" *ngIf="resourceSummary().apRegenerated > 0">
+              <span class="stat-label">Régénéré</span>
+              <span class="stat-value positive">+{{ resourceSummary().apRegenerated }}</span>
             </div>
-          </div>
-
-          <!-- PW -->
-          <div class="resource-card wp">
-            <div class="resource-header">
-              <span class="resource-icon">🟣</span>
-              <span class="resource-label">PW</span>
-            </div>
-            <div class="resource-stats">
-              <div class="stat-item">
-                <span class="stat-label">Utilisé</span>
-                <span class="stat-value negative">-{{ resourceSummary().wpUsed }}</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-label">Régénéré</span>
-                <span class="stat-value positive">+{{ resourceSummary().wpRegenerated }}</span>
-              </div>
-              <div class="stat-item highlight">
-                <span class="stat-label">Restant</span>
-                <span class="stat-value">{{ resourceSummary().wpRemaining }}</span>
-              </div>
+            <div class="stat-item highlight">
+              <span class="stat-label">Restant</span>
+              <span class="stat-value">{{ resourceSummary().apRemaining }}</span>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Explosions de Rouage -->
-      <div class="summary-section" *ngIf="resourceSummary().gearExplosions.length > 0">
-        <h4>💥 Explosions de Rouage</h4>
-        <div class="explosions-list">
-          <div *ngFor="let explosion of resourceSummary().gearExplosions" class="explosion-item">
-            <span class="explosion-level">Niveau {{ explosion.level }}</span>
-            <span class="explosion-count">{{ explosion.count }}x</span>
-            <div class="explosion-bar">
-              <div class="explosion-fill" [style.width.%]="(explosion.level / 10) * 100"></div>
+        <!-- PM -->
+        <div class="resource-card mp">
+          <div class="resource-header">
+            <img src="assets/images/characteristics/MP.png" alt="PM" class="resource-icon-img" />
+            <span class="resource-label">PM</span>
+          </div>
+          <div class="resource-stats">
+            <div class="stat-item">
+              <span class="stat-label">Utilisé</span>
+              <span class="stat-value negative">-{{ resourceSummary().mpUsed }}</span>
+            </div>
+            <div class="stat-item highlight">
+              <span class="stat-label">Restant</span>
+              <span class="stat-value">{{ resourceSummary().mpRemaining }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PW -->
+        <div class="resource-card wp">
+          <div class="resource-header">
+            <img src="assets/images/characteristics/WP.png" alt="PW" class="resource-icon-img" />
+            <span class="resource-label">PW</span>
+          </div>
+          <div class="resource-stats">
+            <div class="stat-item">
+              <span class="stat-label">Utilisé</span>
+              <span class="stat-value negative">-{{ resourceSummary().wpUsed }}</span>
+            </div>
+            <div class="stat-item" *ngIf="resourceSummary().wpRegenerated > 0">
+              <span class="stat-label">Régénéré</span>
+              <span class="stat-value positive">+{{ resourceSummary().wpRegenerated }}</span>
+            </div>
+            <div class="stat-item highlight">
+              <span class="stat-label">Restant</span>
+              <span class="stat-value">{{ resourceSummary().wpRemaining }}</span>
             </div>
           </div>
         </div>
@@ -144,7 +100,7 @@ interface ActionSummary {
     </div>
 
     <div class="no-timeline" *ngIf="!currentTimeline()">
-      <span>📋 Aucune timeline chargée</span>
+      <span>Aucune timeline chargée</span>
     </div>
   `,
   styles: [`
@@ -166,7 +122,7 @@ interface ActionSummary {
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
       color: #e8ecf3;
     }
 
@@ -174,153 +130,62 @@ interface ActionSummary {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 12px;
-      border-bottom: 2px solid var(--stroke);
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--stroke);
     }
 
     .summary-header h3 {
       margin: 0;
-      font-size: 16px;
-      color: #e8ecf3;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
     .current-step {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--accent);
       font-weight: 600;
       background: rgba(76, 201, 240, 0.1);
-      padding: 4px 12px;
+      padding: 3px 10px;
       border-radius: 12px;
-    }
-
-    .summary-section {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      border-radius: 8px;
-      padding: 12px;
-    }
-
-    .summary-section h4 {
-      margin: 0 0 12px 0;
-      font-size: 13px;
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .actions-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-
-    .action-item {
-      display: flex;
-      gap: 8px;
-      align-items: flex-start;
-      padding: 8px;
-      background: var(--panel);
-      border-radius: 6px;
-      border-left: 3px solid var(--accent);
-    }
-
-    .action-number {
-      background: var(--accent);
-      color: #0b1220;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 700;
-      min-width: 24px;
-      text-align: center;
-    }
-
-    .action-details {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      flex: 1;
-    }
-
-    .action-type {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      width: fit-content;
-      background: #2b344a;
-      color: #cfe3ff;
-    }
-
-    .action-type.CastSpell {
-      background: #2a3a5a;
-      color: #7aa2f7;
-    }
-
-    .action-type.Move {
-      background: #2a4a3a;
-      color: #7bd88f;
-    }
-
-    .action-description {
-      font-size: 12px;
-      color: #e8ecf3;
-    }
-
-    .action-resources {
-      font-size: 10px;
-      color: var(--muted);
-    }
-
-    .no-actions {
-      text-align: center;
-      color: var(--muted);
-      font-style: italic;
-      padding: 16px;
     }
 
     .resources-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
-    }
-
-    .resource-card {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
-      border-radius: 8px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
     }
 
-    .resource-card.ap {
-      border-left: 3px solid #4cc9f0;
+    .resource-card {
+      background: var(--panel-2);
+      border: 1px solid var(--stroke);
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
 
-    .resource-card.mp {
-      border-left: 3px solid #7bd88f;
-    }
-
-    .resource-card.wp {
-      border-left: 3px solid #a78bfa;
-    }
+    .resource-card.ap { border-top: 2px solid #4cc9f0; }
+    .resource-card.mp { border-top: 2px solid #7bd88f; }
+    .resource-card.wp { border-top: 2px solid #a78bfa; }
 
     .resource-header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
     }
 
-    .resource-icon {
-      font-size: 20px;
+    .resource-icon-img {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
     }
 
     .resource-label {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
       color: #e8ecf3;
     }
@@ -328,15 +193,15 @@ interface ActionSummary {
     .resource-stats {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
     }
 
     .stat-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 4px 8px;
-      background: var(--panel-2);
+      padding: 3px 6px;
+      background: var(--panel);
       border-radius: 4px;
       font-size: 11px;
     }
@@ -347,77 +212,26 @@ interface ActionSummary {
       font-weight: 700;
     }
 
-    .stat-label {
-      color: var(--muted);
-    }
+    .stat-label { color: var(--muted); }
 
     .stat-value {
       color: #e8ecf3;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
 
-    .stat-value.negative {
-      color: var(--bad);
-    }
-
-    .stat-value.positive {
-      color: var(--good);
-    }
-
-    .explosions-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .explosion-item {
-      display: grid;
-      grid-template-columns: auto auto 1fr;
-      gap: 8px;
-      align-items: center;
-      padding: 8px;
-      background: var(--panel);
-      border-radius: 6px;
-    }
-
-    .explosion-level {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--accent);
-      min-width: 80px;
-    }
-
-    .explosion-count {
-      font-size: 12px;
-      font-weight: 700;
-      color: #ff6b6b;
-      background: rgba(255, 107, 107, 0.1);
-      padding: 2px 8px;
-      border-radius: 4px;
-    }
-
-    .explosion-bar {
-      height: 6px;
-      background: var(--panel-2);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .explosion-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #ffd166, #ff6b6b);
-      border-radius: 3px;
-      transition: width 0.3s ease;
-    }
+    .stat-value.negative { color: var(--bad); }
+    .stat-value.positive { color: var(--good); }
 
     .no-timeline {
       background: var(--panel);
       border: 1px solid var(--stroke);
       border-radius: 12px;
-      padding: 40px;
+      padding: 24px;
       text-align: center;
       color: var(--muted);
       font-style: italic;
+      font-size: 12px;
     }
   `]
 })
@@ -483,60 +297,6 @@ export class TimelineSummaryComponent {
   });
 
   /**
-   * Récupère les actions passées (jusqu'à l'étape courante)
-   */
-  pastActions = computed((): ActionSummary[] => {
-    const timeline = this.currentTimeline();
-    const currentIndex = this.currentStepIndex();
-    // Déclencher la réactivité quand le cache de sorts change
-    const spellsCache = this.spellsCache();
-
-    if (!timeline || currentIndex === 0) return [];
-
-    const actions: ActionSummary[] = [];
-
-    // Récupérer toutes les étapes jusqu'à l'étape courante (exclue)
-    for (let i = 0; i < currentIndex && i < timeline.steps.length; i++) {
-      const step = timeline.steps[i];
-      step.actions.forEach(action => {
-        let description = '';
-        let resources = '';
-
-        switch (action.type) {
-          case 'CastSpell': {
-            const spellId = action.spellId || '';
-            const spellName = this.getSpellName(spellId);
-            const costs = this.getSpellCosts(spellId);
-            description = `Sort: ${spellName}`;
-            resources = `PA: ${costs.paCost}, PW: ${costs.pwCost}`;
-            break;
-          }
-          case 'Move':
-            description = `Déplacement vers (${action.targetPosition?.x}, ${action.targetPosition?.y})`;
-            resources = `PM: ${action.details?.['mpCost'] || 1}`;
-            break;
-          case 'Transpose':
-            description = 'Transposition';
-            break;
-          case 'ChangeFacing':
-            description = `Direction: ${action.targetFacing?.direction}`;
-            break;
-          default:
-            description = action.type;
-        }
-
-        actions.push({
-          type: action.type,
-          description,
-          resources
-        });
-      });
-    }
-
-    return actions;
-  });
-
-  /**
    * Calcule le résumé des ressources utilisées et restantes
    */
   resourceSummary = computed((): ResourceSummary => {
@@ -556,14 +316,12 @@ export class TimelineSummaryComponent {
         apRemaining: build?.stats.ap || 12,
         mpRemaining: build?.stats.mp || 3,
         wpRemaining: build?.stats.wp || 6,
-        gearExplosions: []
       };
     }
 
     let apUsed = 0;
     let mpUsed = 0;
     let wpUsed = 0;
-    const gearExplosionsMap = new Map<number, number>();
     let apRemaining = build.stats.ap;
     let mpRemaining = build.stats.mp;
     let wpRemaining = build.stats.wp;
@@ -594,12 +352,6 @@ export class TimelineSummaryComponent {
           const costs = this.getSpellCosts(action.spellId || '');
           apUsed += costs.paCost;
           wpUsed += costs.pwCost;
-
-          // Détection des explosions de rouage
-          if (action.details?.['gearExplosion']) {
-            const level = action.details['gearLevel'] || 1;
-            gearExplosionsMap.set(level, (gearExplosionsMap.get(level) || 0) + 1);
-          }
         } else if (action.type === 'Move') {
           mpUsed += action.details?.['mpCost'] || 1;
         }
@@ -612,9 +364,6 @@ export class TimelineSummaryComponent {
 
     const apRegenerated = Math.max(0, apUsed - (build.stats.ap - apRemaining));
     const wpRegenerated = Math.max(0, wpUsed - (build.stats.wp - wpRemaining));
-    const gearExplosions = Array.from(gearExplosionsMap.entries())
-      .map(([level, count]) => ({ level, count }))
-      .sort((a, b) => a.level - b.level);
 
     return {
       apUsed,
@@ -625,7 +374,6 @@ export class TimelineSummaryComponent {
       apRemaining: Math.max(0, apRemaining),
       mpRemaining: Math.max(0, mpRemaining),
       wpRemaining: Math.max(0, wpRemaining),
-      gearExplosions
     };
   });
 }

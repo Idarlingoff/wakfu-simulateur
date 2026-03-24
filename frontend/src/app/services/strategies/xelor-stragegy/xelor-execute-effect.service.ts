@@ -287,8 +287,8 @@ export class XelorExecuteEffectService {
       };
     }
 
-    console.log(`[XELOR RETOUR_SPONTANE] 📋 Last movement: ${lastMovement.type} - ${lastMovement.targetName}`);
-    console.log(`[XELOR RETOUR_SPONTANE]    From: (${lastMovement.toPosition.x}, ${lastMovement.toPosition.y}) → To: (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`);
+    console.log(`[XELOR RETOUR_SPONTANE] Last movement: ${lastMovement.type} - ${lastMovement.targetName}`);
+    console.log(`[XELOR RETOUR_SPONTANE] From: (${lastMovement.toPosition.x}, ${lastMovement.toPosition.y}) → To: (${lastMovement.fromPosition.x}, ${lastMovement.fromPosition.y})`);
 
     const paCost = spell.paCost || 3;
     const pwCost = spell.pwCost || 0;

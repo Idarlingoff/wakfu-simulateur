@@ -11,14 +11,19 @@ DELETE FROM spell              WHERE id='XEL_HORLOGE';
 DELETE FROM status_effect      WHERE status_id IN ('HORLOGE_BANK','HORLOGE_MARK');
 DELETE FROM status_def         WHERE id IN ('HORLOGE_BANK','HORLOGE_MARK');
 
-INSERT INTO spell VALUES (
-                             'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
-                             5,0,1,3,TRUE,TRUE,
-                             0,2,1,'LINE','STEP', 763
-                         );
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_HORLOGE','XEL','Horloge','WATER','ELEMENTAL',
+             5,0,1,3,TRUE,TRUE,
+             0,2,1,'LINE','STEP', 763, FALSE
+         );
 
 INSERT INTO spell_ratio_breakpoint VALUES
-    ('XEL_HORLOGE',185,139);
+    ('XEL_HORLOGE','NORMAL',200,149),
+    ('XEL_HORLOGE','CRIT',200,186);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_HORLOGE','NORMAL'),

@@ -1,25 +1,26 @@
-/**
- * Board Component
- * Interactive combat map showing entities, mechanisms, and spell actions
- */
-
-import { Component, inject, computed, output, effect, input } from '@angular/core';import { CommonModule } from '@angular/common';
+import { Component, inject, computed, output, effect, input, signal } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
 import { SimulationService } from '../services/simulation.service';
+import { InteractivePlayService } from '../services/interactive-play.service';
 import { ResourceRegenerationService } from '../services/processors/resource-regeneration.service';
 import { BoardEntity, Mechanism } from '../models/board.model';
 import { Position, TimelineAction } from '../models/timeline.model';
 import { Build } from '../models/build.model';
+import { Spell } from '../models/spell.model';
+import { DataCacheService } from '../services/data-cache.service';
+import { StatsCalculatorService } from '../services/calculators/stats-calculator.service';
 import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
+import { getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
 
 interface BoardCell {
   x: number;
   y: number;
   hasEntity: boolean;
   hasMechanism: boolean;
-  isAction: boolean; // Spell cast location
+  isAction: boolean;
   actionType?: string;
 }
 
@@ -33,7 +34,7 @@ interface BoardCell {
         <div class="header-left">
           <h2>🗺️ Carte de Combat</h2>
           <div class="timeline-indicator" *ngIf="currentTimeline()">
-            <span class="timeline-badge">📋 {{ currentTimeline()!.name }}</span>
+            <span class="timeline-badge">{{ currentTimeline()!.name }}</span>
           </div>
         </div>
         <div class="board-controls">
@@ -65,7 +66,7 @@ interface BoardCell {
 
           <div class="divider"></div>
 
-          <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">🔄 Réinitialiser</button>
+          <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">Réinitialiser</button>
         </div>
       </div>
 
@@ -77,31 +78,62 @@ interface BoardCell {
         📍 {{ getPlacementHelpText() }}
       </div>
 
-      <!-- Legend -->
-      <div class="legend">
-        <div class="legend-item">
-          <span class="legend-color player"></span> Joueur Xélor
+      <!-- ═══ BANDEAU MODE INTERACTIF ═══ -->
+      <div class="interactive-bar" [class.active]="interactivePlay.isActive()" [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay()">
+        <div class="interactive-bar-left">
+          <button
+            class="btn-interactive"
+            [class.on]="interactivePlay.isActive()"
+            [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay()"
+            (click)="toggleInteractiveMode()"
+            title="{{ interactivePlay.isActive() ? 'Désactiver le mode interactif' : 'Activer le mode interactif' }}"
+          >
+            @if (interactivePlay.isActive() && interactivePlay.isFreeplay()) {
+              <span>Freeplay ON</span>
+            } @else if (interactivePlay.isActive()) {
+              <span>Mode Interactif ON</span>
+            } @else if (hasBuild()) {
+              <span>Mode Interactif</span>
+            } @else {
+              <span>Freeplay (sans build)</span>
+            }
+          </button>
+          <button
+            *ngIf="interactivePlay.isActive()"
+            class="btn-interactive-reset"
+            (click)="resetInteractiveMode()"
+            title="Réinitialiser la session interactive"
+          >Reset</button>
         </div>
-        <div class="legend-item">
-          <span class="legend-color enemy"></span> Ennemi
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && !interactivePlay.isFreeplay()">
+          <span class="res-item pa">
+            <img src="assets/images/characteristics/AP.png" alt="PA" class="res-icon" />
+            {{ interactivePlay.availablePa }}
+          </span>
+          <span class="res-item pw">
+            <img src="assets/images/characteristics/WP.png" alt="PW" class="res-icon" />
+            {{ interactivePlay.availablePw }}
+          </span>
+          <span class="res-item mp">
+            <img src="assets/images/characteristics/MP.png" alt="MP" class="res-icon" />
+            {{ interactivePlay.availableMp }}
+          </span>
         </div>
-        <div class="legend-item">
-          <span class="legend-color mechanism"></span> Mécanisme
+        <div class="interactive-resources" *ngIf="interactivePlay.isActive() && interactivePlay.isFreeplay()">
+          <span class="res-item freeplay-badge">Aucune restriction</span>
         </div>
-        <div class="legend-item">
-          <span class="legend-color action-spell"></span> Lancer de sort
-        </div>
-        <div class="legend-item">
-          <span class="legend-color mechanism-explode"></span> Explosion Rouage
+        <div class="interactive-hint" *ngIf="interactivePlay.isActive()">
+          <span *ngIf="selectedSpellId()">Cliquez sur une case pour lancer <strong>{{ getSpellName(selectedSpellId()!) }}</strong></span>
+          <span *ngIf="!selectedSpellId()">Cliquez sur une case pour déplacer le joueur</span>
         </div>
       </div>
 
-      <!-- Board Grid -->
-      <div class="board-wrapper">
-        <div *ngIf="currentTimeline(); else noTimeline">
-          <div class="board">
-            <!-- Grid cells -->
-            <div
+      <!-- Map + Panneau sorts côte à côte — toujours affiché -->
+      <div class="board-and-spells">
+
+        <!-- MAP -->
+        <div class="board-wrapper">
+          <div class="board"><div
               *ngFor="let cell of boardCells()"
               class="cell"
               [ngStyle]="{ 'grid-column': cell.x + 1, 'grid-row': cell.y + 1 }"
@@ -109,112 +141,200 @@ interface BoardCell {
               [class.has-entity]="cell.hasEntity"
               [class.has-mechanism]="cell.hasMechanism"
               [class.has-action]="cell.isAction"
+              [class.spell-range-cell]="isCellInSpellRange(cell.x, cell.y)"
+              [class.move-range-cell]="isCellInMoveRange(cell.x, cell.y)"
+              [class.hover-move-range-cell]="isCellInHoverMoveRange(cell.x, cell.y)"
+              [class.interactive-move-cell]="isCellInInteractiveMoveRange(cell.x, cell.y)"
+              [class.interactive-spell-cell]="isCellInInteractiveSpellRange(cell.x, cell.y)"
+              [class.interactive-pw-move-cell]="isCellInInteractivePwMoveRange(cell.x, cell.y)"
               [title]="'(' + cell.x + ', ' + cell.y + ')'"
               (click)="onCellClick(cell)"
             >
-            <!-- Coordinates -->
             <span class="coord" *ngIf="cell.x === 0 || cell.y === 0">
               {{ cell.x === 0 ? cell.y : cell.x }}
             </span>
-
-            <!-- Entity -->
             <div
               *ngIf="getEntityAtPosition(cell.x, cell.y) as entity"
               class="entity"
               [class.player]="entity.type === 'player'"
               [class.enemy]="entity.type === 'enemy'"
+              (mouseenter)="onEntityHover(entity)"
+              (mouseleave)="clearHover()"
               [title]="entity.name"
             >
               {{ entity.type === 'player' ? '🧙' : '👹' }}
               <span class="entity-label">{{ entity.name }}</span>
             </div>
-
-            <!-- Dial Hours (zones visuelles/de déplacement) -->
             <div
               *ngIf="getDialHourAtPosition(cell.x, cell.y) as dialHour"
               class="dial-hour"
               [class.current-hour]="isCurrentDialHour(dialHour.hour)"
               [title]="'Cadran - ' + dialHour.hour + 'h' + (isCurrentDialHour(dialHour.hour) ? ' (HEURE COURANTE)' : '')"
             >
-              <img
-                [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'"
-                [alt]="'Heure ' + dialHour.hour"
-                class="dial-hour-image"
-              />
+              <img [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'" [alt]="'Heure ' + dialHour.hour" class="dial-hour-image" />
               <span *ngIf="isCurrentDialHour(dialHour.hour)" class="current-hour-indicator">⏰</span>
             </div>
-
-            <!-- Mechanism -->
             <div
               *ngIf="getMechanismAtPosition(cell.x, cell.y) as mech"
               class="mechanism"
               [ngClass]="[mech.type, (mech.type === 'cog' && (mech.charges || 0) > 0) ? 'has-charges' : '']"
               [title]="getMechanismTitle(mech.type) + (mech.charges ? ' (' + mech.charges + ' charges)' : '')"
             >
-              <img
-                [src]="getMechanismImage(mech.type, mech.charges)"
-                [alt]="getMechanismTitle(mech.type)"
-                class="mechanism-image"
-              />
+              <img [src]="getMechanismImage(mech.type, mech.charges)" [alt]="getMechanismTitle(mech.type)" class="mechanism-image" />
               <span *ngIf="mech.type === 'cog' && (mech.charges || 0) > 0" class="charge-badge">{{ mech.charges }}</span>
             </div>
-
-            <!-- Spell Action Indicator -->
-            <!-- N'affiche l'indicateur QUE si aucun mécanisme n'est présent -->
             <div
               *ngIf="!getMechanismAtPosition(cell.x, cell.y) && getActionAtPosition(cell.x, cell.y) as action"
               class="action-indicator"
               [class]="action.type"
               [title]="action.type"
-            >
-              ✨
-            </div>
-          </div>
-        </div>
-        </div>
-        <ng-template #noTimeline>
-          <div class="no-timeline">
-            <h3>⏱️ Aucune timeline chargée</h3>
-            <p>Veuillez sélectionner ou créer une timeline pour voir la carte de combat.</p>
-            <div class="no-timeline-steps">
-              <ol>
-                <li>Créez un build (📦 Builds)</li>
-                <li>Créez une timeline (📋 Timelines)</li>
-                <li>Cliquez sur une timeline pour la charger</li>
-                <li>Naviguez les étapes avec ◀ ▶</li>
-              </ol>
-            </div>
-          </div>
-        </ng-template>
-      </div>
+            >✨</div>
+          </div><!-- fin cell -->
+        </div><!-- fin .board -->
+        </div><!-- fin .board-wrapper -->
 
-      <!-- Timeline Actions Display -->
-      <div class="timeline-display" *ngIf="currentStep()">
-        <h3>📍 Actions à cette étape</h3>
-        <div class="actions-list">
-          <div *ngFor="let action of currentStep()?.actions || []" class="action-item">
-            <span class="action-type" [class]="action.type">{{ action.type }}</span>
-            <span *ngIf="action.spellId" class="spell-info">
-              Sort: {{ getSpellName(action.spellId) }}
+        <!-- PANNEAU SORTS -->
+        <aside class="spells-panel">
+
+          <div class="spell-grid" *ngIf="buildSpells().length > 0; else noSpells">
+            <div
+              *ngFor="let spell of buildSpells()"
+              class="spell-icon-card"
+              [class.selected]="selectedSpellId() === spell.id"
+              (click)="onSelectSpell(spell)"
+              (mouseenter)="showTooltip(spell, $event)"
+              (mouseleave)="hideTooltip()"
+            >
+              <div class="spell-icon-wrapper">
+                <img *ngIf="spell.iconId" [src]="'assets/images/spells/' + spell.iconId + '.png'" [alt]="spell.name" class="spell-icon-img" (error)="onSpellImgError($event)" />
+                <div *ngIf="!spell.iconId" class="spell-icon-fallback">✨</div>
+              </div>
+              <div class="spell-cost-band">
+                <span *ngIf="spell.paCost > 0" class="cost-item">
+                  {{ spell.paCost }}<img src="assets/images/characteristics/AP.png" alt="PA" class="cost-icon" />
+                </span>
+                <span *ngIf="spell.pwCost > 0" class="cost-item">
+                  {{ spell.pwCost }}<img src="assets/images/characteristics/WP.png" alt="PW" class="cost-icon" />
+                </span>
+              </div>
+              <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+            </div>
+          </div>
+
+          <!-- Sorts innés de la classe -->
+          <div class="innate-spells-section" *ngIf="innateSpells().length > 0">
+            <div class="innate-spells-label">Sorts innés</div>
+            <div class="spell-grid innate-spell-grid">
+              <div
+                *ngFor="let spell of innateSpells()"
+                class="spell-icon-card innate-spell-card"
+                [class.selected]="selectedSpellId() === spell.id"
+                (click)="onSelectSpell(spell)"
+                (mouseenter)="showTooltip(spell, $event)"
+                (mouseleave)="hideTooltip()"
+              >
+                <div class="spell-icon-wrapper">
+                  <img *ngIf="spell.iconId" [src]="'assets/images/spells/' + spell.iconId + '.png'" [alt]="spell.name" class="spell-icon-img" (error)="onSpellImgError($event)" />
+                  <div *ngIf="!spell.iconId" class="spell-icon-fallback">⚙️</div>
+                </div>
+                <div class="spell-cost-band">
+                  <span *ngIf="spell.paCost > 0" class="cost-item">
+                    {{ spell.paCost }}<img src="assets/images/characteristics/AP.png" alt="PA" class="cost-icon" />
+                  </span>
+                  <span *ngIf="spell.pwCost > 0" class="cost-item">
+                    {{ spell.pwCost }}<img src="assets/images/characteristics/WP.png" alt="PW" class="cost-icon" />
+                  </span>
+                </div>
+                <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+              </div>
+            </div>
+          </div>
+
+          <ng-template #noSpells>
+            <div class="no-spells-hint">Aucun sort disponible.</div>
+          </ng-template>
+        </aside>
+
+      </div><!-- fin .board-and-spells -->
+
+      <div
+        class="spell-tooltip-portal"
+        *ngIf="tooltipSpell()"
+        [ngStyle]="{ top: tooltipY() + 'px', left: tooltipX() + 'px' }"
+      >
+        <div class="tooltip-name">{{ tooltipSpell()!.name }}</div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Coût</span>
+          <span class="tooltip-costs">
+            <span *ngIf="tooltipSpell()!.paCost > 0" class="tooltip-cost-item">
+              {{ tooltipSpell()!.paCost }}<img src="assets/images/characteristics/AP.png" alt="PA" class="tooltip-icon" />
             </span>
-            <span class="pos-info">
-              Cible: ({{ action.targetPosition?.x }}, {{ action.targetPosition?.y }})
+            <span *ngIf="tooltipSpell()!.pwCost > 0" class="tooltip-cost-item">
+              {{ tooltipSpell()!.pwCost }}<img src="assets/images/characteristics/WP.png" alt="PW" class="tooltip-icon" />
             </span>
-            <span class="facing-info" *ngIf="action.targetFacing">
-              Direction: {{ action.targetFacing.direction }}
+            <span *ngIf="getMpCost(tooltipSpell()!) > 0" class="tooltip-cost-item">
+              {{ getMpCost(tooltipSpell()!) }}<img src="assets/images/characteristics/MP.png" alt="MP" class="tooltip-icon" />
             </span>
+          </span>
+        </div>
+        <div class="tooltip-row">
+          <span class="tooltip-label">Portée</span>
+          <span class="tooltip-range">
+            {{ tooltipSpell()!.poMin }} –
+            <ng-container *ngIf="tooltipSpell()!.poModifiable && rangeBonus() > 0; else baseRange">
+              <span class="range-effective">{{ tooltipSpell()!.poMax + rangeBonus() }}</span>
+            </ng-container>
+            <ng-template #baseRange>{{ tooltipSpell()!.poMax }}</ng-template>
+            <img src="assets/images/characteristics/RANGE.png" alt="Portée" class="tooltip-icon" />
+            <img *ngIf="tooltipSpell()!.poModifiable" src="assets/images/characteristics/RANGE_MODIFIABLE.png" alt="Modifiable" class="tooltip-icon" title="Portée modifiable" />
+          </span>
+        </div>
+        <div class="tooltip-row" *ngIf="hasDamage(tooltipSpell()!)">
+          <span class="tooltip-label">Cible</span>
+          <span class="tooltip-aoe">
+            <img *ngIf="isAoe(tooltipSpell()!)" src="assets/images/characteristics/AOE_DMG.png" alt="Zone" class="tooltip-icon" />
+            <img *ngIf="!isAoe(tooltipSpell()!)" src="assets/images/characteristics/SINGLE_TARGET_DMG.png" alt="Mono-cible" class="tooltip-icon" />
+            <span>{{ isAoe(tooltipSpell()!) ? 'Zone' : 'Mono-cible' }}</span>
+          </span>
+        </div>
+        <div class="tooltip-row" *ngIf="tooltipSpell()!.usePerTurn > 0">
+          <span class="tooltip-label">Utilisations/tour</span>
+          <span>{{ tooltipSpell()!.usePerTurn }}</span>
+        </div>
+        <div class="tooltip-row" *ngIf="tooltipSpell()!.usePerTarget > 0">
+          <span class="tooltip-label">Utilisations/cible</span>
+          <span>{{ tooltipSpell()!.usePerTarget }}</span>
+        </div>
+        <div class="tooltip-row" *ngIf="tooltipSpell()!.cooldown > 0">
+          <span class="tooltip-label">Rechargement</span>
+          <span>{{ tooltipSpell()!.cooldown }} tour(s)</span>
+        </div>
+        <div class="tooltip-desc" *ngIf="tooltipSpell()!.description">{{ tooltipSpell()!.description }}</div>
+        <div class="tooltip-ratios" *ngIf="getNormalRatio(tooltipSpell()!) || getCritRatio(tooltipSpell()!) || getPerChargeRatio(tooltipSpell()!)">
+          <div class="tooltip-ratio-title">Ratios de dégâts</div>
+          <div class="tooltip-row" *ngIf="getNormalRatio(tooltipSpell()!) as nr">
+            <span class="tooltip-label">Normal</span>
+            <span class="ratio-value">{{ nr }}</span>
+          </div>
+          <div class="tooltip-row" *ngIf="getCritRatio(tooltipSpell()!) as cr">
+            <span class="tooltip-label">Critique</span>
+            <span class="ratio-value ratio-crit">{{ cr }}</span>
+          </div>
+          <div class="tooltip-row" *ngIf="getPerChargeRatio(tooltipSpell()!) as pc">
+            <span class="tooltip-label">Par charge</span>
+            <span class="ratio-value ratio-per-charge">{{ pc }} / charge</span>
           </div>
         </div>
       </div>
 
       <!-- Entities Info -->
       <div class="entities-info">
-        <h3>👥 Entités</h3>
+        <h3>Entités</h3>
         <div class="info-grid">
           <div class="entity-info" *ngFor="let entity of boardService.state().entities">
             <div class="entity-header">
               <div class="entity-type" [class]="entity.type">
-                {{ entity.type === 'player' ? '🧙 Joueur' : '👹 Ennemi' }}
+                {{ entity.type === 'player' ? 'Joueur' : 'Ennemi' }}
               </div>
               <div class="entity-actions">
                 <button (click)="onEditEntity(entity)" class="btn-edit" title="Modifier">✏️</button>
@@ -410,7 +530,7 @@ interface BoardCell {
 
     .legend {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));  /* Larger min-width for text to fit */
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 12px;
       padding: 12px;
       background: var(--panel);
@@ -420,7 +540,7 @@ interface BoardCell {
       position: sticky;
       top: 0;
       z-index: 10;
-      width: 100%;  /* Take full width */
+      width: 100%;
     }
 
     .legend-item {
@@ -461,17 +581,302 @@ interface BoardCell {
       background: #ff6b6b;
     }
 
-    /* Board Wrapper */
+    /* ══════════════════════════════════════
+       Layout principal : map + panneau sorts
+       ══════════════════════════════════════ */
+    .board-and-spells {
+      display: flex;
+      flex-direction: row;
+      gap: 16px;
+      align-items: flex-start;
+      width: 100%;
+    }
+
+    /* MAP — 58% de la largeur */
     .board-wrapper {
       display: flex;
+      flex: 0 0 58%;
+      width: 58%;
       justify-content: center;
-      padding: 16px;
+      padding: 10px;
       background: var(--panel);
       border-radius: 12px;
       border: 1px solid var(--stroke);
       overflow: auto;
-      min-height: 350px;
+      min-height: 420px;
+      box-sizing: border-box;
     }
+
+    /* PANNEAU SORTS — prend le reste (≈33%) — sticky, s'aligne avec le haut de la map */
+    .spells-panel {
+      flex: 1 1 0;
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 10px;
+      padding: 14px;
+      position: sticky;
+      top: 8px;
+      align-self: flex-start;
+      max-height: calc(100vh - 120px);
+      overflow-y: auto;
+      overflow-x: visible;
+      box-sizing: border-box;
+    }
+
+    .spells-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .spells-actions .cancel-btn {
+      grid-column: unset;
+    }
+
+    .btn-icon {
+      width: 14px;
+      height: 14px;
+      vertical-align: middle;
+      margin-right: 2px;
+    }
+
+    /* Grille des sorts — icônes 4 par ligne */
+    .spell-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      padding: 4px 0;
+    }
+
+    .spells-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .spells-actions .cancel-btn {
+      grid-column: 1 / -1;
+    }
+
+    .btn-icon {
+      width: 14px;
+      height: 14px;
+      vertical-align: middle;
+      margin-right: 2px;
+    }
+
+    /* Grille des icônes de sorts */
+    .spell-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 4px 0;
+    }
+
+    /* Carte icône de sort */
+    .spell-icon-card {
+      position: relative;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+    }
+
+    .spell-icon-wrapper {
+      position: relative;
+      width: 46px;
+      height: 46px;
+      overflow: hidden;
+    }
+
+    .spell-icon-card:hover .spell-icon-wrapper {
+      box-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+    }
+
+    .spell-icon-img {
+      width: 46px;
+      height: 46px;
+      display: block;
+      object-fit: cover;
+    }
+
+    .spell-icon-fallback {
+      width: 46px;
+      height: 46px;
+      background: #1f2838;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+    }
+
+    /* Bandeau coût SOUS l'image */
+    .spell-cost-band {
+      width: 46px;
+      background: rgba(0, 0, 0, 0.88);
+      border-radius: 0 0 6px 6px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 2px 4px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      box-sizing: border-box;
+    }
+
+    .cost-item {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .cost-icon {
+      width: 11px;
+      height: 11px;
+      object-fit: contain;
+    }
+
+    /* Anneau de sélection — positionné sur toute la card (image + bandeau) */
+    .selected-ring {
+      position: absolute;
+      inset: -2px;
+      border-radius: 10px;
+      border: 2px solid #7aa2f7;
+      pointer-events: none;
+      animation: ringPulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes ringPulse {
+      0%, 100% { box-shadow: 0 0 6px rgba(122, 162, 247, 0.4); }
+      50% { box-shadow: 0 0 14px rgba(122, 162, 247, 0.8); }
+    }
+
+    /* ═══ Portail Tooltip — position: fixed, jamais dans le flux ═══ */
+    .spell-tooltip-portal {
+      position: fixed;
+      z-index: 9999;
+      width: 220px;
+      background: #161c2a;
+      border: 1px solid #2e3d58;
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.8);
+      color: #e8ecf3;
+      font-size: 11px;
+      pointer-events: none;
+    }
+
+    .spell-icon-card:hover .spell-tooltip-portal {
+      display: block;
+    }
+
+    .tooltip-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #cfe3ff;
+      margin-bottom: 6px;
+      border-bottom: 1px solid #2e3d58;
+      padding-bottom: 5px;
+    }
+
+    .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
+    }
+
+    .tooltip-label {
+      color: #8c9bb3;
+      white-space: nowrap;
+      font-size: 10px;
+    }
+
+    .tooltip-costs,
+    .tooltip-range,
+    .tooltip-aoe {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .tooltip-cost-item {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.06);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+
+    .tooltip-icon {
+      width: 13px;
+      height: 13px;
+      object-fit: contain;
+      vertical-align: middle;
+    }
+
+    .tooltip-desc {
+      font-size: 10px;
+      color: #8c9bb3;
+      margin-top: 6px;
+      border-top: 1px solid #2e3d58;
+      padding-top: 6px;
+      line-height: 1.4;
+      max-height: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+    }
+
+    .tooltip-ratios {
+      margin-top: 6px;
+      border-top: 1px solid #2e3d58;
+      padding-top: 6px;
+    }
+
+    .tooltip-ratio-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #8c9bb3;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .ratio-value {
+      font-weight: 700;
+      color: #7bd88f;
+      font-size: 11px;
+    }
+
+    .ratio-crit {
+      color: #ffd166;
+    }
+
+    .ratio-per-charge {
+      color: #4cc9f0;
+      font-style: italic;
+    }
+
+    .btn-nav.active {
+      border-color: #7aa2f7;
+      background: #1a2a44;
+      box-shadow: 0 0 0 2px rgba(122, 162, 247, 0.35);
+    }
+
 
     .no-timeline {
       display: flex;
@@ -517,12 +922,50 @@ interface BoardCell {
 
     .board {
       display: grid;
-      grid-template-columns: repeat(13, 40px);
-      grid-template-rows: repeat(13, 40px);
+      grid-template-columns: repeat(10, 44px);
+      grid-template-rows: repeat(10, 44px);
       gap: 1px;
       background: #0f1415;
-      padding: 8px;
+      padding: 10px;
       border-radius: 8px;
+    }
+
+    .no-spells-hint {
+      color: var(--muted);
+      padding: 8px;
+      font-size: 13px;
+    }
+
+    /* Section sorts innés */
+    .innate-spells-section {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--stroke);
+    }
+
+    .innate-spells-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #ffd166;
+      margin-bottom: 8px;
+      padding: 0 2px;
+    }
+
+    .innate-spell-card:hover .spell-icon-wrapper {
+      box-shadow: 0 0 10px rgba(255, 209, 102, 0.5);
+    }
+
+
+    .innate-spell-card.selected .selected-ring {
+      border-color: #ffd166;
+      animation: ringPulseGold 1.5s ease-in-out infinite;
+    }
+
+    @keyframes ringPulseGold {
+      0%, 100% { box-shadow: 0 0 6px rgba(255, 209, 102, 0.4); }
+      50% { box-shadow: 0 0 14px rgba(255, 209, 102, 0.8); }
     }
 
     .cell {
@@ -555,6 +998,17 @@ interface BoardCell {
     .cell.has-action {
       background: #2a3a5a;
       box-shadow: inset 0 0 8px rgba(122, 162, 247, 0.3);
+    }
+
+    .cell.spell-range-cell {
+      background: rgba(41, 98, 255, 0.35);
+      box-shadow: inset 0 0 12px rgba(76, 144, 255, 0.8);
+    }
+
+    .cell.move-range-cell,
+    .cell.hover-move-range-cell {
+      background: rgba(52, 199, 89, 0.3);
+      box-shadow: inset 0 0 10px rgba(52, 199, 89, 0.7);
     }
 
     .cell.has-mechanism {
@@ -654,55 +1108,49 @@ interface BoardCell {
       z-index: 10;
     }
 
-    /* Rouage (cog) - TOUJOURS au premier plan */
     .board .mechanism.cog {
-      z-index: 3 !important; /* Au-dessus de tout */
+      z-index: 3 !important;
     }
 
-    /* Cadran central - reste au premier plan avec les autres mécanismes */
     .board .mechanism.dial .mechanism-image {
       filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.9));
     }
 
-    /* Cadran central (sans heures) - z-index explicite */
     .board .mechanism.dial:not(.dial-hour) {
-      z-index: 3 !important; /* Au-dessus de tout */
+      z-index: 3 !important;
     }
 
-    /* Heures du cadran - ZONES VISUELLES (pas des mécanismes) */
-    /* Les heures sont des éléments séparés avec leur propre rendu */
     .board .dial-hour {
       position: absolute;
-      z-index: 0 !important; /* Passe derrière tout le reste */
+      z-index: 0 !important;
       display: flex;
       align-items: center;
       justify-content: center;
       width: 100%;
       height: 100%;
-      pointer-events: none; /* Les heures ne bloquent pas les clics */
+      pointer-events: none;
     }
 
     .board .dial-hour-image {
       width: 60%;
       height: 60%;
-      opacity: 0.5; /* Opacité réduite pour être plus discrètes */
+      opacity: 0.5;
       object-fit: contain;
       filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.5));
-      animation: hourGlow 3s ease-in-out infinite; /* Animation plus lente et douce */
+      animation: hourGlow 3s ease-in-out infinite;
     }
 
     @keyframes hourGlow {
       0%, 100% {
-        opacity: 0.4; /* Plus transparentes */
+        opacity: 0.4;
         filter: drop-shadow(0 0 2px rgba(167, 139, 250, 0.4));
       }
       50% {
-        opacity: 0.6; /* Légère augmentation */
+        opacity: 0.6;
         filter: drop-shadow(0 0 4px rgba(167, 139, 250, 0.6));
       }
     }
 
-    /* Heure courante du cadran - MISE EN SURBRILLANCE */
     .board .dial-hour.current-hour .dial-hour-image {
       opacity: 1 !important;
       width: 80%;
@@ -712,7 +1160,7 @@ interface BoardCell {
     }
 
     .board .dial-hour.current-hour {
-      z-index: 1 !important; /* Légèrement au-dessus des autres heures */
+      z-index: 1 !important;
     }
 
     .board .current-hour-indicator {
@@ -741,18 +1189,16 @@ interface BoardCell {
       100% { transform: translateY(-3px); }
     }
 
-    /* Sinistro - TOUJOURS au premier plan */
     .board .mechanism.sinistro {
-      z-index: 3 !important; /* Au-dessus de tout */
+      z-index: 3 !important;
     }
 
     .board .mechanism.sinistro .mechanism-image {
       filter: drop-shadow(0 0 4px rgba(255, 107, 107, 0.8));
     }
 
-    /* Régulateur - TOUJOURS au premier plan */
     .board .mechanism.regulateur {
-      z-index: 3 !important; /* Au-dessus de tout */
+      z-index: 3 !important;
     }
 
     .board .mechanism.regulateur .mechanism-image {
@@ -764,7 +1210,6 @@ interface BoardCell {
       50% { transform: scale(1.1); }
     }
 
-    /* Action Indicator */
     .action-indicator {
       font-size: 0.8em;
       position: absolute;
@@ -789,7 +1234,6 @@ interface BoardCell {
       100% { transform: scale(1.5); opacity: 0; }
     }
 
-    /* Timeline Display */
     .timeline-display {
       background: var(--panel);
       border: 1px solid var(--stroke);
@@ -841,7 +1285,6 @@ interface BoardCell {
       color: var(--muted);
     }
 
-    /* Entities Info */
     .entities-info,
     .mechanisms-info {
       background: var(--panel);
@@ -1009,11 +1452,206 @@ interface BoardCell {
       color: var(--muted);
     }
 
+    @media (max-width: 1400px) {
+      .board-and-spells {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .spells-panel {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 600px;
+        position: relative;
+        top: auto;
+        max-height: none;
+      }
+
+      .spell-grid {
+        grid-template-columns: repeat(6, 1fr);
+      }
+
+      .board-wrapper {
+        min-height: 0;
+      }
+    }
+
     @media (max-width: 1200px) {
       .board {
-        grid-template-columns: repeat(13, 35px);
-        grid-template-rows: repeat(13, 35px);
+        grid-template-columns: repeat(10, 34px);
+        grid-template-rows: repeat(10, 34px);
       }
+    }
+
+    /* ═══ Bandeau Mode Interactif ═══ */
+    .interactive-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      transition: all 0.3s;
+      flex-wrap: wrap;
+    }
+
+    .interactive-bar.active {
+      background: rgba(102, 126, 234, 0.1);
+      border-color: #667eea;
+      box-shadow: 0 0 14px rgba(102, 126, 234, 0.2);
+    }
+
+    .interactive-bar-left {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-interactive {
+      background: #253044;
+      border: 1px solid var(--stroke);
+      color: #e8ecf3;
+      border-radius: 8px;
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-interactive.on {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-color: #667eea;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
+    }
+
+    .btn-interactive.freeplay {
+      background: linear-gradient(135deg, #f093fb, #f5576c);
+      border-color: #f5576c;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(245, 87, 108, 0.5);
+    }
+
+    .interactive-bar.freeplay {
+      background: rgba(245, 87, 108, 0.08);
+      border-color: #f5576c;
+      box-shadow: 0 0 14px rgba(245, 87, 108, 0.2);
+    }
+
+    .res-item.freeplay-badge {
+      color: #f5576c;
+      font-weight: 700;
+      font-size: 12px;
+      background: rgba(245, 87, 108, 0.1);
+      border: 1px solid rgba(245, 87, 108, 0.3);
+      border-radius: 6px;
+      padding: 3px 10px;
+    }
+
+    .btn-interactive:hover:not(:disabled) {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-color: #667eea;
+      color: #fff;
+    }
+
+    .btn-interactive:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-interactive-reset {
+      background: #2a1e3a;
+      border: 1px solid #764ba2;
+      color: #c4a0f7;
+      border-radius: 7px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.2s;
+    }
+
+    .btn-interactive-reset:hover {
+      background: #3b2060;
+    }
+
+    .interactive-resources {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .res-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .res-item.pa { color: #ffd166; }
+    .res-item.pw { color: #4cc9f0; }
+    .res-item.mp { color: #7bd88f; }
+
+    .res-icon {
+      width: 14px;
+      height: 14px;
+      object-fit: contain;
+    }
+
+    .interactive-hint {
+      flex: 1;
+      font-size: 12px;
+      color: #8c9bb3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .interactive-hint strong {
+      color: #c4a0f7;
+    }
+
+    /* ═══ Highlights des cellules en mode interactif ═══ */
+
+    /* Déplacement PM (vert clair) */
+    .cell.interactive-move-cell {
+      background: rgba(52, 199, 89, 0.25);
+      box-shadow: inset 0 0 10px rgba(52, 199, 89, 0.6);
+      cursor: pointer;
+    }
+
+    .cell.interactive-move-cell:hover {
+      background: rgba(52, 199, 89, 0.5);
+      box-shadow: inset 0 0 14px rgba(52, 199, 89, 0.9);
+    }
+
+    /* Déplacement PW via heure cadran (or/mauve) */
+    .cell.interactive-pw-move-cell {
+      background: rgba(167, 139, 250, 0.3);
+      box-shadow: inset 0 0 10px rgba(167, 139, 250, 0.7);
+      cursor: pointer;
+    }
+
+    .cell.interactive-pw-move-cell:hover {
+      background: rgba(167, 139, 250, 0.5);
+      box-shadow: inset 0 0 14px rgba(167, 139, 250, 0.9);
+    }
+
+    /* Portée de sort interactif (bleu) */
+    .cell.interactive-spell-cell {
+      background: rgba(122, 162, 247, 0.28);
+      box-shadow: inset 0 0 12px rgba(122, 162, 247, 0.7);
+      cursor: crosshair;
+    }
+
+    .cell.interactive-spell-cell:hover {
+      background: rgba(122, 162, 247, 0.5);
+      box-shadow: inset 0 0 16px rgba(122, 162, 247, 1);
     }
   `]
 })
@@ -1022,7 +1660,27 @@ export class BoardComponent {
   buildService = inject(BuildService);
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
+  interactivePlay = inject(InteractivePlayService);
   regenerationService = inject(ResourceRegenerationService);
+  dataCacheService = inject(DataCacheService);
+  statsCalculator = inject(StatsCalculatorService);
+
+  /** Bonus de portée issu du build sélectionné (0 si aucun build) */
+  rangeBonus = computed(() => {
+    const build = this.buildService.selectedBuildA();
+    if (!build) return 0;
+    return this.statsCalculator.calculateTotalStats(build).range ?? 0;
+  });
+
+  spellsCache = signal<Map<string, Spell>>(new Map());
+  selectedSpellId = signal<string | null>(null);
+  selectedInteractionMode = signal<'none' | 'spell' | 'move' | 'pwMove'>('none');
+  hoveredPlayerId = signal<string | null>(null);
+
+  /** Tooltip portal */
+  tooltipSpell = signal<Spell | null>(null);
+  tooltipX = signal<number>(0);
+  tooltipY = signal<number>(0);
 
   editPlayer = output<BoardEntity>();
   editEnemy = output<BoardEntity>();
@@ -1033,15 +1691,12 @@ export class BoardComponent {
   currentTimeline = computed(() => this.timelineService.currentTimeline());
   currentStepIndex = computed(() => this.timelineService.currentStepIndex());
 
-  // 🆕 Signal pour indiquer si une simulation est en cours
   isSimulating = computed(() => this.simulationService.isRunning());
   hasMinimumBoardSetup = computed(() => this.boardService.hasMinimumSetup());
 
   private lastObservedTimelineId: string | null = null;
 
   constructor() {
-    // Invalider l'état de simulation à chaque changement réel de timeline
-    // pour éviter les validations effectuées avec un contexte en cache d'une autre timeline.
     effect(() => {
       const timelineId = this.timelineService.currentTimelineId();
       const timeline = this.currentTimeline();
@@ -1058,26 +1713,68 @@ export class BoardComponent {
         console.log('🗑️ Timeline changée:', timeline.name, '- cache simulation/régénération réinitialisé');
       }
     });
+
+    effect(() => {
+      const build = this.buildService.selectedBuildA();
+      if (build?.classId) {
+        this.loadSpells(build.classId);
+      } else {
+        const player = this.boardService.player();
+        if (player?.classId) {
+          this.loadSpells(player.classId);
+        }
+      }
+    });
   }
+
+  /** Classe effective : build sélectionné ou joueur par défaut sur le board */
+  private get effectiveClassId(): string | undefined {
+    return this.buildService.selectedBuildA()?.classId
+      ?? this.boardService.player()?.classId;
+  }
+
+  buildSpells = computed(() => {
+    const build = this.buildService.selectedBuildA();
+    const cache = this.spellsCache();
+
+    if (build) {
+      return build.spellBar.spells
+        .filter((s): s is NonNullable<typeof s> => !!s)
+        .map(s => cache.get(s.spellId))
+        .filter((s): s is Spell => !!s);
+    }
+
+    return Array.from(cache.values())
+      .filter(s => !getInnateSpellIdsForClass(this.boardService.player()?.classId ?? '').includes(s.id));
+  });
+
+  innateSpells = computed(() => {
+    const build = this.buildService.selectedBuildA();
+    const cache = this.spellsCache();
+    const classId = build?.classId ?? this.boardService.player()?.classId ?? '';
+    if (!classId) return [] as Spell[];
+    const innateIds = getInnateSpellIdsForClass(classId);
+    return innateIds
+      .map(id => cache.get(id))
+      .filter((s): s is Spell => !!s);
+  });
 
   currentStep = computed(() => {
     const timeline = this.currentTimeline();
     if (!timeline) return null;
     const idx = this.currentStepIndex();
-    // idx = 0 → État initial (avant toute exécution)
-    // idx = 1, 2, 3... → Affiche l'étape correspondante (idx)
     return idx > 0 && idx <= timeline.steps.length ? timeline.steps[idx - 1] || null : null;
   });
 
   totalSteps = computed(() => {
     const stepsCount = this.currentTimeline()?.steps.length || 0;
-    return stepsCount + 1; // +1 pour l'état initial
+    return stepsCount + 1;
   });
 
   boardCells = computed(() => {
     const cells: BoardCell[] = [];
-    for (let y = 0; y < 13; y++) {
-      for (let x = 0; x < 13; x++) {
+    for (let y = 0; y < 10; y++) {
+      for (let x = 0; x < 10; x++) {
         cells.push({
           x,
           y,
@@ -1090,44 +1787,29 @@ export class BoardComponent {
     return cells;
   });
 
-  /**
-   * Get entity at position
-   */
   getEntityAtPosition(x: number, y: number) {
     return this.boardService.state().entities.find(
       e => e.position.x === x && e.position.y === y
     );
   }
 
-  /**
-   * Get mechanism at position
-   */
   getMechanismAtPosition(x: number, y: number) {
     return this.boardService.state().mechanisms.find(
       m => m.position.x === x && m.position.y === y
     );
   }
 
-  /**
-   * Get dial hour at position
-   */
   getDialHourAtPosition(x: number, y: number) {
     return this.boardService.dialHours().find(
       h => h.position.x === x && h.position.y === y
     );
   }
 
-  /**
-   * Check if a dial hour is the current hour
-   */
   isCurrentDialHour(hour: number): boolean {
     const currentHour = this.boardService.currentDialHour();
     return currentHour !== undefined && currentHour === hour;
   }
 
-  /**
-   * Get the current dial hour (for display purposes)
-   */
   getCurrentDialHour(): number | undefined {
     return this.boardService.currentDialHour();
   }
@@ -1141,62 +1823,450 @@ export class BoardComponent {
     return 'Cliquez sur une case de la carte pour placer le rouage.';
   }
 
-  /**
-   * Get action at position
-   * Exclude Move, Transpose, and mechanism spells as they have their own visual representation
-   */
   getActionAtPosition(x: number, y: number) {
     if (!this.currentStep()) return null;
 
     const actions = this.currentStep()?.actions || [];
     return actions.find(a => {
-      // Vérifier la position
       if (a.targetPosition?.x !== x || a.targetPosition?.y !== y) {
         return false;
       }
 
-      // Exclure les déplacements et transpositions
       if (a.type === 'Move' || a.type === 'Transpose') {
         return false;
       }
 
-      // Exclure les sorts qui créent des mécanismes (ils ont leur propre représentation visuelle)
       return !(a.type === 'CastSpell' && a.spellId && isSpellMechanism(a.spellId));
     });
   }
 
-  /**
-   * Get mechanism image path
-   */
   getMechanismImage(type: string, charges?: number): string {
     return 'http://localhost:8080/' + getMechanismImagePath(type, charges);
   }
 
-  /**
-   * Get mechanism title (localized name)
-   */
   getMechanismTitle(type: string): string {
     return getMechanismDisplayName(type);
   }
 
-  /**
-   * Get spell name by ID
-   */
   getSpellName(spellId: string): string {
-    const build = this.buildService.selectedBuildA();
-    if (!build) return spellId;
+    return this.spellsCache().get(spellId)?.name || spellId;
+  }
 
-    // SpellReference contient spellId, pas id ni name
-    const spellRef = build.spellBar.spells.find(s => s?.spellId === spellId);
+  private async loadSpells(classId: string): Promise<void> {
+    const spells = await this.dataCacheService.getSpells(classId);
+    const cache = new Map<string, Spell>();
+    spells.forEach(spell => cache.set(spell.id, spell));
 
-    // Retourne l'ID car SpellReference ne contient pas le nom
-    return spellRef?.spellId || spellId;
+    const innateIds = getInnateSpellIdsForClass(classId);
+    for (const innateId of innateIds) {
+      if (!cache.has(innateId)) {
+        const innateSpell = await this.dataCacheService.getSpellById(innateId);
+        if (innateSpell) {
+          cache.set(innateSpell.id, innateSpell);
+        }
+      }
+    }
+
+    this.spellsCache.set(cache);
+  }
+
+  onSelectSpell(spell: Spell): void {
+    if (this.selectedSpellId() === spell.id) {
+      this.selectedSpellId.set(null);
+      this.selectedInteractionMode.set('none');
+    } else {
+      this.selectedSpellId.set(spell.id);
+      if (!this.interactivePlay.isActive()) {
+        this.selectedInteractionMode.set('spell');
+      }
+    }
+  }
+
+  onSpellImgError(event: Event): void {
+    const img = event.target as HTMLImageElement;
+    img.style.display = 'none';
+  }
+
+  showTooltip(spell: Spell, event: MouseEvent): void {
+    const TOOLTIP_WIDTH = 220;
+    const TOOLTIP_HEIGHT = 280;
+    const MARGIN = 8;
+    let x = event.clientX - TOOLTIP_WIDTH - MARGIN;
+    let y = event.clientY;
+    if (x < 8) x = event.clientX + MARGIN;
+    if (y + TOOLTIP_HEIGHT > window.innerHeight - 8) {
+      y = window.innerHeight - TOOLTIP_HEIGHT - 8;
+    }
+    this.tooltipSpell.set(spell);
+    this.tooltipX.set(x);
+    this.tooltipY.set(y);
+  }
+
+  hideTooltip(): void {
+    this.tooltipSpell.set(null);
+  }
+
+  /** Coût en PM (si le sort déplace) — pour l'instant 0, extensible */
+  getMpCost(_spell: Spell): number {
+    return 0;
+  }
+
+  /** Retourne vrai si le sort fait des dégâts de zone (AOE) — basé sur le champ is_aoe en BDD */
+  isAoe(spell: Spell): boolean {
+    return spell.isAoe ?? false;
+  }
+
+  /** Retourne vrai si le sort inflige des dégâts (au moins un breakpoint avec ratio > 0) */
+  hasDamage(spell: Spell): boolean {
+    return spell.breakpoints?.some(b => b.ratio > 0) ?? false;
+  }
+
+  /** Ratio de dégâts normal — depuis le breakpoint kind=NORMAL */
+  getNormalRatio(spell: Spell): number | null {
+    const bp = spell.breakpoints?.find(b => b.kind === 'NORMAL');
+    return (bp && bp.ratio > 0) ? bp.ratio : null;
+  }
+
+  /** Ratio de dégâts critique — depuis le breakpoint kind=CRIT */
+  getCritRatio(spell: Spell): number | null {
+    const bp = spell.breakpoints?.find(b => b.kind === 'CRIT');
+    return (bp && bp.ratio > 0) ? bp.ratio : null;
+  }
+
+  /** Ratio par charge (mécanismes comme le Rouage) — depuis le breakpoint kind=PER_CHARGE */
+  getPerChargeRatio(spell: Spell): number | null {
+    const bp = spell.breakpoints?.find(b => b.kind === 'PER_CHARGE');
+    return (bp && bp.ratio > 0) ? bp.ratio : null;
+  }
+
+  selectMoveMode(mode: 'move' | 'pwMove'): void {
+    this.selectedSpellId.set(null);
+    this.selectedInteractionMode.set(mode);
+  }
+
+  clearSelectedInteraction(): void {
+    this.selectedSpellId.set(null);
+    this.selectedInteractionMode.set('none');
+  }
+
+  onEntityHover(entity: BoardEntity): void {
+    if (entity.type === 'player') {
+      this.hoveredPlayerId.set(entity.id);
+    }
+  }
+
+  clearHover(): void {
+    this.hoveredPlayerId.set(null);
+  }
+
+  isCellInSpellRange(x: number, y: number): boolean {
+    if (this.selectedInteractionMode() !== 'spell') return false;
+    return this.computeSpellRange(x, y, this.selectedSpellId());
   }
 
   /**
-   * Navigation - Step by step
-   * Exécute un seul step à la fois avec validation complète
+   * Calcul effectif de la portée d'un sort.
+   * En freeplay (sans build) : toute la map est accessible.
    */
+  private computeSpellRange(x: number, y: number, spellId: string | null): boolean {
+    // Freeplay : aucune restriction de portée
+    if (this.interactivePlay.isFreeplay()) return true;
+
+    const spell = spellId ? this.spellsCache().get(spellId) : null;
+    const player = this.boardService.state().entities.find(e => e.type === 'player');
+    if (!spell || !player) return false;
+
+    const bonus = spell.poModifiable ? this.rangeBonus() : 0;
+    const effectivePoMax = spell.poMax + bonus;
+    const effectivePoMin = Math.max(0, spell.poMin);
+
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    if (dist < effectivePoMin || dist > effectivePoMax) return false;
+
+    const dx = x - player.position.x;
+    const dy = y - player.position.y;
+
+    switch ((spell.direction || 'NONE').toUpperCase()) {
+      case 'LINE':
+        if (dx !== 0 && dy !== 0) return false;
+        break;
+      case 'CROSS':
+        if (dx !== 0 && dy !== 0 && Math.abs(dx) !== Math.abs(dy)) return false;
+        break;
+      default:
+        break;
+    }
+
+    if (spell.lineOfSight) {
+      return this.hasLineOfSightOnBoard(player.position, { x, y });
+    }
+
+    return true;
+  }
+
+  /**
+   * Vérifie la ligne de vue entre deux positions via Bresenham
+   * sur l'état courant du board (entités + mécanismes comme obstacles)
+   */
+  private hasLineOfSightOnBoard(
+    from: { x: number; y: number },
+    to: { x: number; y: number }
+  ): boolean {
+    if (from.x === to.x && from.y === to.y) return true;
+
+    const state = this.boardService.state();
+
+    const build = this.buildService.selectedBuildA();
+    const hasRemanence = build?.passiveBar.passives.some(p =>
+      p && p.passiveId.toLowerCase().replace(/é/g, 'e').includes('remanence')
+    ) ?? false;
+
+    const blockers = new Set<string>();
+
+    for (const entity of state.entities) {
+      if (entity.position.x !== from.x || entity.position.y !== from.y) {
+        blockers.add(`${entity.position.x},${entity.position.y}`);
+      }
+    }
+    if (!hasRemanence) {
+      for (const mech of state.mechanisms) {
+        blockers.add(`${mech.position.x},${mech.position.y}`);
+      }
+    }
+
+    let x0 = from.x, y0 = from.y;
+    const x1 = to.x, y1 = to.y;
+    const adx = Math.abs(x1 - x0), ady = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = adx - ady;
+
+    while (true) {
+      const e2 = 2 * err;
+      if (e2 > -ady) { err -= ady; x0 += sx; }
+      if (e2 < adx)  { err += adx; y0 += sy; }
+      if (x0 === x1 && y0 === y1) break;
+      if (blockers.has(`${x0},${y0}`)) return false;
+    }
+
+    return true;
+  }
+
+  isCellInMoveRange(x: number, y: number): boolean {
+    const mode = this.selectedInteractionMode();
+    if (mode !== 'move' && mode !== 'pwMove') return false;
+    const player = this.boardService.state().entities.find(e => e.type === 'player');
+    if (!player) return false;
+    const maxRange = mode === 'move' ? 3 : 2;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    return dist > 0 && dist <= maxRange;
+  }
+
+  isCellInHoverMoveRange(x: number, y: number): boolean {
+    if (!this.hoveredPlayerId()) return false;
+    if (this.interactivePlay.isActive()) return false;
+    const player = this.boardService.state().entities.find(e => e.id === this.hoveredPlayerId());
+    if (!player) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    const mp = this.interactivePlay.availableMp > 0
+      ? this.interactivePlay.availableMp
+      : 3;
+    return dist > 0 && dist <= mp;
+  }
+
+  private async pushInteractionAction(cell: BoardCell): Promise<void> {
+    const timeline = this.currentTimeline();
+    if (!timeline) return;
+
+    const mode = this.selectedInteractionMode();
+    if (mode === 'none') return;
+
+    let action: TimelineAction | null = null;
+    if (mode === 'spell' && this.selectedSpellId() && this.isCellInSpellRange(cell.x, cell.y)) {
+      action = {
+        id: `action_${Date.now()}`,
+        type: 'CastSpell',
+        order: 1,
+        spellId: this.selectedSpellId()!,
+        targetPosition: { x: cell.x, y: cell.y }
+      };
+    }
+
+    if ((mode === 'move' || mode === 'pwMove') && this.isCellInMoveRange(cell.x, cell.y)) {
+      action = {
+        id: `action_${Date.now()}`,
+        type: 'Move',
+        order: 1,
+        targetPosition: { x: cell.x, y: cell.y },
+        details: { via: mode === 'pwMove' ? 'PW' : 'PM', mpCost: mode === 'pwMove' ? 0 : 1, pwCost: mode === 'pwMove' ? 1 : 0 }
+      };
+    }
+
+    if (!action) return;
+
+    const step = { id: `step_${Date.now()}`, actions: [action], description: 'Ajout map interactive' };
+    await this.timelineService.updateTimeline(timeline.id, { steps: [...timeline.steps, step] });
+  }
+
+  hasBuild(): boolean {
+    return !!this.buildService.selectedBuildA();
+  }
+
+  toggleInteractiveMode(): void {
+    if (this.interactivePlay.isActive()) {
+      this.interactivePlay.stopSession();
+      return;
+    }
+
+    if (!this.boardService.hasMinimumSetup()) {
+      alert('Placez au moins 1 allié et 1 ennemi sur le board avant d\'activer le mode interactif.');
+      return;
+    }
+
+    this.boardService.saveInitialState();
+    const build = this.buildService.selectedBuildA();
+    if (build) {
+      this.interactivePlay.startSession(build);
+    } else {
+      this.interactivePlay.startSessionFreeplay();
+    }
+  }
+
+  resetInteractiveMode(): void {
+    this.boardService.restoreInitialState();
+    const build = this.buildService.selectedBuildA();
+    this.interactivePlay.resetSession(build ?? null);
+  }
+
+  /**
+   * Portée de déplacement PM en mode interactif — visible uniquement au hover sur le joueur.
+   * Si le joueur est sur une heure du cadran, les cases heures→heures sont gérées par PW.
+   */
+  isCellInInteractiveMoveRange(x: number, y: number): boolean {
+    if (!this.interactivePlay.isActive()) return false;
+    if (this.selectedSpellId()) return false;
+    if (!this.hoveredPlayerId()) return false;
+    const player = this.boardService.state().entities.find(e => e.type === 'player');
+    if (!player || player.id !== this.hoveredPlayerId()) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    if (dist === 0) return false;
+    // Freeplay : toute la map est accessible
+    if (this.interactivePlay.isFreeplay()) return true;
+    const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
+    const targetIsDialHour = this.boardService.isPositionOnDialHour({ x, y });
+    if (playerOnDialHour && targetIsDialHour) return false;
+    return dist <= Math.max(this.interactivePlay.availableMp, 0);
+  }
+
+  isCellInInteractivePwMoveRange(x: number, y: number): boolean {
+    if (!this.interactivePlay.isActive()) return false;
+    if (this.selectedSpellId()) return false;
+    if (!this.hoveredPlayerId()) return false;
+    const player = this.boardService.state().entities.find(e => e.type === 'player');
+    if (!player || player.id !== this.hoveredPlayerId()) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    if (dist === 0) return false;
+    // Freeplay : toutes les heures du cadran sont accessibles
+    if (this.interactivePlay.isFreeplay()) {
+      return this.boardService.isPositionOnDialHour({ x, y });
+    }
+    if (!this.boardService.isPositionOnDialHour(player.position)) return false;
+    if (!this.boardService.isPositionOnDialHour({ x, y })) return false;
+    return this.interactivePlay.availablePw > 0;
+  }
+
+  /**
+   * Portée de sort en mode interactif (utilise computeSpellRange sans check du mode)
+   */
+  isCellInInteractiveSpellRange(x: number, y: number): boolean {
+    if (!this.interactivePlay.isActive()) return false;
+    if (!this.selectedSpellId()) return false;
+
+    return this.computeSpellRange(x, y, this.selectedSpellId());
+  }
+
+  /**
+   * Gestion du clic en mode interactif
+   */
+  private async handleInteractiveCellClick(cell: BoardCell): Promise<void> {
+    const spellId = this.selectedSpellId();
+
+    if (spellId) {
+      if (!this.computeSpellRange(cell.x, cell.y, spellId)) {
+        console.warn('[Interactive] La case est hors de portée du sort');
+        return;
+      }
+
+      const result = await this.interactivePlay.castSpell(spellId, { x: cell.x, y: cell.y });
+
+      if (result) {
+        const build = this.buildService.selectedBuildA();
+        const fakeAction: TimelineAction = {
+          id: `iplay_visual_${Date.now()}`,
+          type: 'CastSpell',
+          order: 1,
+          spellId,
+          targetPosition: { x: cell.x, y: cell.y },
+        };
+        // applyVisualAction n'utilise pas vraiment le build (seulement pour les logs),
+        // on passe un build factice si nécessaire
+        if (build) {
+          await this.applyVisualAction(fakeAction, build, this.simulationService.cachedSteps().length - 1);
+        } else {
+          await this.applyVisualActionFreeplay(fakeAction, this.simulationService.cachedSteps().length - 1);
+        }
+        this.boardService.pushState();
+      }
+
+      if (result?.success) {
+        this.selectedSpellId.set(null);
+        this.selectedInteractionMode.set('none');
+      }
+    } else {
+      const player = this.boardService.state().entities.find(e => e.type === 'player');
+      if (!player) return;
+
+      const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
+      const targetIsDialHour = this.boardService.isPositionOnDialHour({ x: cell.x, y: cell.y });
+      const via: 'PM' | 'PW' = (playerOnDialHour && targetIsDialHour) ? 'PW' : 'PM';
+
+      const inRange = via === 'PW'
+        ? this.isInInteractivePwMoveRangeRaw(cell.x, cell.y, player)
+        : this.isInInteractiveMoveRangeRaw(cell.x, cell.y, player);
+
+      if (!inRange) {
+        console.warn('[Interactive] La case est hors de portée du déplacement');
+        return;
+      }
+
+      await this.interactivePlay.move({ x: cell.x, y: cell.y }, via);
+      this.boardService.pushState();
+    }
+  }
+
+  /** Validation PM pure (sans check hover) */
+  private isInInteractiveMoveRangeRaw(x: number, y: number, player: BoardEntity): boolean {
+    if (this.interactivePlay.isFreeplay()) {
+      return Math.abs(player.position.x - x) + Math.abs(player.position.y - y) > 0;
+    }
+    const playerOnDialHour = this.boardService.isPositionOnDialHour(player.position);
+    const targetIsDialHour = this.boardService.isPositionOnDialHour({ x, y });
+    if (playerOnDialHour && targetIsDialHour) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    return dist > 0 && dist <= Math.max(this.interactivePlay.availableMp, 0);
+  }
+
+  /** Validation PW pure (sans check hover) */
+  private isInInteractivePwMoveRangeRaw(x: number, y: number, player: BoardEntity): boolean {
+    if (this.interactivePlay.isFreeplay()) {
+      return this.boardService.isPositionOnDialHour({ x, y }) &&
+        Math.abs(player.position.x - x) + Math.abs(player.position.y - y) > 0;
+    }
+    if (!this.boardService.isPositionOnDialHour(player.position)) return false;
+    if (!this.boardService.isPositionOnDialHour({ x, y })) return false;
+    const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
+    return dist > 0 && this.interactivePlay.availablePw > 0;
+  }
+
   async onNextStep(): Promise<void> {
     const timeline = this.currentTimeline();
     const build = this.buildService.selectedBuildA();
@@ -1214,13 +2284,11 @@ export class BoardComponent {
       return;
     }
 
-    // Si c'est la première étape, sauvegarder l'état initial
     if (currentIndex === 0) {
       console.log('💾 Sauvegarde de l\'état initial du board');
       this.boardService.saveInitialState();
     }
 
-    // Vérifier qu'il reste des steps à exécuter
     if (currentIndex >= timeline.steps.length) {
       console.warn('⚠️ Aucun step suivant disponible');
       return;
@@ -1229,38 +2297,31 @@ export class BoardComponent {
     const realStepIndex = currentIndex;
     console.log(`\n🔹 [onNextStep] Exécution du step ${realStepIndex + 1}/${timeline.steps.length}...`);
 
-    // ✅ Appeler executeStep pour valider et exécuter le step
     const success = await this.simulationService.executeStep(build, timeline, realStepIndex);
 
     if (!success) {
       console.error(`❌ Le step ${realStepIndex + 1} a échoué`);
-      // Récupérer le message d'erreur depuis les résultats
       const stepResult = this.simulationService.getStepResult(realStepIndex);
       const failedAction = stepResult?.actions.find((a: any) => !a.success);
       const errorMessage = failedAction?.message || 'Action impossible à exécuter';
 
       alert(`⚠️ Erreur au step ${realStepIndex + 1}:\n${errorMessage}`);
 
-      // ❌ NE PAS mettre à jour la map en cas d'échec
       console.log('🚫 Map non mise à jour (step échoué)');
       return;
     }
 
     console.log(`✅ Step ${realStepIndex + 1} exécuté avec succès`);
 
-    // ✅ Le step a réussi : avancer l'index et mettre à jour le board
     this.timelineService.nextStep();
 
-    // Appliquer les actions visuelles (mécanismes, etc.)
     const step = timeline.steps[realStepIndex];
     for (const action of step.actions) {
       await this.applyVisualAction(action, build, realStepIndex);
     }
 
-    // Sauvegarder l'état après l'application
     this.boardService.pushState();
 
-    // Si on vient d'exécuter le dernier step, afficher le récapitulatif de fin
     if (this.currentStepIndex() >= timeline.steps.length) {
       this.logFinalSimulationSummaryFromCache(timeline.steps.length);
     }
@@ -1308,23 +2369,24 @@ export class BoardComponent {
     console.log('');
   }
 
+  private async applyVisualActionFreeplay(action: TimelineAction, stepIndex: number): Promise<void> {
+    // Même logique qu'applyVisualAction, le build n'est pas utilisé
+    await this.applyVisualAction(action, null as any, stepIndex);
+  }
+
   private async applyVisualAction(action: TimelineAction, _build: Build, stepIndex: number): Promise<void> {
     if (action.type === 'CastSpell' && action.spellId) {
-      // Vérifier si le sort crée un mécanisme
+
       console.log(`🔍 Analyse du sort: "${action.spellId}"`);
       const mechanismType = getSpellMechanismType(action.spellId);
       console.log(`🎯 Type de mécanisme détecté: ${mechanismType || 'aucun'}`);
 
       if (mechanismType && action.targetPosition) {
-        // 🆕 Vérifier si un mécanisme de ce type existe déjà sur le plateau
-        // La stratégie de classe (XelorSimulationStrategy) a déjà créé le mécanisme
-        // lors de l'exécution de la simulation. On ne doit pas en créer un doublon.
         const existingMechanisms = this.boardService.getMechanismsByType(mechanismType);
 
         if (existingMechanisms.length > 0) {
           console.log(`ℹ️ Mécanisme ${mechanismType} déjà créé par la stratégie de classe - pas de doublon`);
 
-          // 🆕 Pour les cadrans, vérifier aussi que les heures existent déjà
           if (mechanismType === 'dial') {
             const dialHours = this.boardService.dialHours();
             if (dialHours.length > 0) {
@@ -1336,7 +2398,6 @@ export class BoardComponent {
 
         console.log(`✅ Création d'un mécanisme ${mechanismType} à la position (${action.targetPosition.x}, ${action.targetPosition.y})`);
 
-        // Créer le mécanisme
         const mechanism: Mechanism = {
           id: `mechanism_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
           type: mechanismType,
@@ -1346,11 +2407,9 @@ export class BoardComponent {
           spellId: action.spellId
         };
 
-        // Ajouter le mécanisme au plateau
         this.boardService.addMechanism(mechanism);
         console.log('🎉 Mécanisme créé et ajouté au plateau:', mechanism);
 
-        // Si c'est un cadran, créer les 12 heures autour
         if (mechanismType === 'dial') {
           const playerEntity = this.boardService.player();
           const playerPosition = playerEntity?.position || { x: 6, y: 6 };
@@ -1395,9 +2454,7 @@ export class BoardComponent {
       let rotatedX = offsetX;
       let rotatedY = offsetY;
 
-      // Rotation de 90 degrés (sens horaire) appliquée 'rotation' fois
       for (let i = 0; i < rotation; i++) {
-        // Formule de rotation: (x, y) -> (-y, x)
         const newX = -rotatedY;
         const newY = rotatedX;
         rotatedX = newX;
@@ -1427,15 +2484,11 @@ export class BoardComponent {
     const currentIndex = this.currentStepIndex();
 
     if (currentIndex > 0) {
-      // Revenir à l'étape précédente
       this.timelineService.previousStep();
 
-      // Restaurer l'état du board à l'étape précédente
       const newIndex = this.currentStepIndex();
       this.boardService.restoreStateAtIndex(newIndex);
 
-      // Tronquer le cache de simulation pour conserver uniquement les steps encore valides
-      // et permettre une reprise correcte avec "Étape suivante"
       this.simulationService.trimSimulationCacheToStep(newIndex);
 
       console.log(`⏮️ Retour à l'étape ${newIndex} - Cache de simulation tronqué`);
@@ -1443,16 +2496,12 @@ export class BoardComponent {
   }
 
   onReset(): void {
-    // Réinitialiser la timeline à l'étape 0
     this.timelineService.resetTimeline();
 
-    // Restaurer l'état initial du board
     this.boardService.restoreInitialState();
 
-    // Nettoyer le cache de simulation
     this.simulationService.clearSimulation();
 
-    // Nettoyer l'historique de régénération
     this.regenerationService.clearHistory();
 
     console.log('🔄 Timeline et Board réinitialisés');
@@ -1485,14 +2534,11 @@ export class BoardComponent {
     console.log('📋 Timeline:', timeline.name);
     console.log('🔢 Nombre de steps:', timeline.steps.length);
 
-    // Sauvegarder l'état initial
     this.boardService.saveInitialState();
     console.log('💾 État initial sauvegardé');
 
-    // Réinitialiser le service de simulation
     this.simulationService.clearSimulation();
 
-    // Exécuter chaque step un par un
     for (let stepIndex = 0; stepIndex < timeline.steps.length; stepIndex++) {
       const step = timeline.steps[stepIndex];
       console.log('');
@@ -1500,7 +2546,6 @@ export class BoardComponent {
       console.log(`│  🔹 STEP ${stepIndex + 1}/${timeline.steps.length}: ${step.description || step.id}`);
       console.log(`└───────────────────────────────────────────────────────┘`);
 
-      // ✅ Exécuter le step avec validation complète
       const success = await this.simulationService.executeStep(build, timeline, stepIndex);
 
       if (!success) {
@@ -1517,7 +2562,6 @@ export class BoardComponent {
 
       console.log(`✅ Step ${stepIndex + 1} exécuté avec succès`);
 
-      // Log du contexte après le step (ressources restantes)
       const stepResult = this.simulationService.getStepResult(stepIndex);
       if (stepResult) {
         const contextAfter = stepResult.contextAfter;
@@ -1530,21 +2574,17 @@ export class BoardComponent {
         }
       }
 
-      // Avancer l'index de la timeline
       this.timelineService.nextStep();
 
-      // Appliquer les actions visuelles au board (mécanismes, etc.)
       for (const action of step.actions) {
         await this.applyVisualAction(action, build, stepIndex);
       }
 
-      // Sauvegarder l'état du board après ce step
       this.boardService.pushState();
 
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    // Récapitulatif final via le cache centralisé
     const stats = this.simulationService.getCacheStats();
     if (stats) {
       console.log('');
@@ -1610,7 +2650,17 @@ export class BoardComponent {
     }
   }
 
-  onCellClick(cell: BoardCell): void {
+  async onCellClick(cell: BoardCell): Promise<void> {
+    if (this.interactivePlay.isActive() && this.placementMode() === 'none') {
+      await this.handleInteractiveCellClick(cell);
+      return;
+    }
+
+    if (this.placementMode() === 'none' && this.selectedInteractionMode() !== 'none') {
+      await this.pushInteractionAction(cell);
+      return;
+    }
+
     this.boardCellClick.emit({ x: cell.x, y: cell.y });
   }
 }

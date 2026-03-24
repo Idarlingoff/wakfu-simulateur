@@ -42,7 +42,7 @@ if check_port 8080; then
 else
     echo -e "${GREEN}✓${NC} Port 8080 disponible"
     echo ""
-    echo "📦 Démarrage du serveur backend Spring Boot..."
+    echo "Démarrage du serveur backend Spring Boot..."
 
     # Démarrer le backend Spring Boot en arrière-plan
     cd backend
@@ -121,7 +121,7 @@ echo "🛑 Pour arrêter l'application :"
 echo "   ./stop.sh"
 echo ""
 echo "═══════════════════════════════════════════════"
-echo -e "${YELLOW}🎮 Ouvrez http://localhost:4200 dans votre navigateur !${NC}"
+echo -e "${YELLOW} Ouvrez http://localhost:4200 dans votre navigateur !${NC}"
 echo "═══════════════════════════════════════════════"
 
 # Sauvegarder les PIDs pour pouvoir les arrêter plus tard

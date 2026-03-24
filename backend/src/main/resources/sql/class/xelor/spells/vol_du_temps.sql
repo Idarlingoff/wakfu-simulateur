@@ -34,16 +34,16 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
 INSERT INTO spell (
     id, class_id, name, element, spell_type,
     pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
-    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_VDT', 'XEL', 'Vol du Temps', 'NONE', 'INNATE',
              0, 0, 1, 1, FALSE, FALSE,
-             0, 1, 1, 'NONE', 'STEP', null
+             0, 1, 1, 'NONE', 'STEP', 3909, FALSE
          );
 
 -- Ratio (aucun dégât)
-INSERT INTO spell_ratio_breakpoint (spell_id, lvl, ratio)
-VALUES ('XEL_VDT', 185, 0);
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_VDT', 'NORMAL', 200, 0);
 
 INSERT INTO spell_variant (spell_id, kind)
 VALUES ('XEL_VDT', 'NORMAL');
