@@ -74,15 +74,15 @@ export function getMechanismImagePath(type: string, _charges?: number): string {
     case 'cog':
     case 'gear':
       // Utilise toujours rouage.png - le CSS gère la teinte bleue quand il y a des charges
-      return 'resources/rouage.png';
+      return 'assets/images/board/rouage.png';
     case 'dial':
-      return 'resources/dial/dial-center.png';
+      return 'assets/images/board/dial/dial-center.png';
     case 'sinistro':
-      return 'resources/sinistro.png';
+      return 'assets/images/board/sinistro.png';
     case 'regulateur':
-      return 'resources/regulateur.png';
+      return 'assets/images/board/regulateur.png';
     default:
-      return 'resources/rouage.png';
+      return 'assets/images/board/rouage.png';
   }
 }
 
@@ -91,9 +91,9 @@ export function getMechanismImagePath(type: string, _charges?: number): string {
  */
 export function getDialHourImagePath(hour: number): string {
   if (hour < 1 || hour > 12) {
-    return 'resources/dial/dial-center.png';
+    return 'assets/images/board/dial/dial-center.png';
   }
-  return `resources/dial/dial_hours-${hour}.png`;
+  return `assets/images/board/dial/dial_hours-${hour}.png`;
 }
 
 /**

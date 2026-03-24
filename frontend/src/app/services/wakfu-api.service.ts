@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Build } from '../models/build.model';
 import { Timeline } from '../models/timeline.model';
 import { Spell } from '../models/spell.model';
@@ -43,99 +44,121 @@ export interface ActionResult {
   details?: any;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+const LS_BUILDS    = 'wakfu_builds';
+const LS_TIMELINES = 'wakfu_timelines';
+
+function lsGet<T>(key: string): T[] {
+  try { return JSON.parse(localStorage.getItem(key) ?? '[]') as T[]; }
+  catch { return []; }
+}
+function lsSet<T>(key: string, data: T[]): void {
+  try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* quota */ }
+}
+
+@Injectable({ providedIn: 'root' })
 export class WakfuApiService {
-  private readonly baseUrl = 'http://localhost:8080/api';
 
   constructor(private http: HttpClient) {}
 
-  // ============ Build API ============
-
-  getAllBuilds(): Observable<Build[]> {
-    return this.http.get<Build[]>(`${this.baseUrl}/builds`);
-  }
-
-  getBuildById(id: string): Observable<Build> {
-    return this.http.get<Build>(`${this.baseUrl}/builds/${id}`);
-  }
-
-  createBuild(build: Build): Observable<Build> {
-    return this.http.post<Build>(`${this.baseUrl}/builds`, build);
-  }
-
-  updateBuild(id: string, build: Build): Observable<Build> {
-    return this.http.put<Build>(`${this.baseUrl}/builds/${id}`, build);
-  }
-
-  deleteBuild(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/builds/${id}`);
-  }
-
-  // ============ Timeline API ============
-
-  getAllTimelines(buildId?: string): Observable<Timeline[]> {
-    if (buildId) {
-      return this.http.get<Timeline[]>(`${this.baseUrl}/timelines`, {
-        params: { buildId }
-      });
-    }
-    return this.http.get<Timeline[]>(`${this.baseUrl}/timelines`);
-  }
-
-  getTimelineById(id: string): Observable<Timeline> {
-    return this.http.get<Timeline>(`${this.baseUrl}/timelines/${id}`);
-  }
-
-  createTimeline(timeline: Timeline): Observable<Timeline> {
-    return this.http.post<Timeline>(`${this.baseUrl}/timelines`, timeline);
-  }
-
-  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> {
-    return this.http.put<Timeline>(`${this.baseUrl}/timelines/${id}`, timeline);
-  }
-
-  deleteTimeline(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/timelines/${id}`);
-  }
-
-  // ============ Spell API ============
+  // ============ Spells (JSON statique) ============
 
   getAllSpells(classId?: string): Observable<Spell[]> {
-    console.log('[WakfuAPI] getAllSpells - classId:', classId);
-    if (classId) {
-      return this.http.get<Spell[]>(`${this.baseUrl}/spells`, {
-        params: { classId }
-      });
-    }
-    return this.http.get<Spell[]>(`${this.baseUrl}/spells`);
+    return this.http.get<Spell[]>('assets/data/Spells.json').pipe(
+      map(spells => classId ? spells.filter(s => s.classId === classId) : spells)
+    );
   }
 
   getSpellById(id: string): Observable<Spell> {
-    return this.http.get<Spell>(`${this.baseUrl}/spells/${id}`);
+    return this.http.get<Spell[]>('assets/data/Spells.json').pipe(
+      map(spells => {
+        const found = spells.find(s => s.id === id);
+        if (!found) throw new Error(`Spell ${id} not found`);
+        return found;
+      })
+    );
   }
 
-  // ============ Passive API ============
+  // ============ Passives (JSON statique) ============
 
   getAllPassives(classId?: string): Observable<Passive[]> {
-    console.log('[WakfuAPI] getAllPassives - classId:', classId);
-    if (classId) {
-      return this.http.get<Passive[]>(`${this.baseUrl}/passives`, {
-        params: { classId }
-      });
-    }
-    return this.http.get<Passive[]>(`${this.baseUrl}/passives`);
+    return this.http.get<Passive[]>('assets/data/Passives.json').pipe(
+      map(passives => classId ? passives.filter(p => p.classId === classId) : passives)
+    );
   }
 
   getPassiveById(id: string): Observable<Passive> {
-    return this.http.get<Passive>(`${this.baseUrl}/passives/${id}`);
+    return this.http.get<Passive[]>('assets/data/Passives.json').pipe(
+      map(passives => {
+        const found = passives.find(p => p.id === id);
+        if (!found) throw new Error(`Passive ${id} not found`);
+        return found;
+      })
+    );
   }
 
-  // ============ Simulation API ============
+  // ============ Builds (localStorage) ============
+
+  getAllBuilds(): Observable<Build[]> {
+    return of(lsGet<Build>(LS_BUILDS));
+  }
+
+  getBuildById(id: string): Observable<Build> {
+    const found = lsGet<Build>(LS_BUILDS).find(b => b.id === id);
+    return found ? of(found) : throwError(() => new Error(`Build ${id} not found`));
+  }
+
+  createBuild(build: Build): Observable<Build> {
+    const builds = lsGet<Build>(LS_BUILDS);
+    builds.push(build);
+    lsSet(LS_BUILDS, builds);
+    return of(build);
+  }
+
+  updateBuild(id: string, build: Build): Observable<Build> {
+    const builds = lsGet<Build>(LS_BUILDS).map(b => b.id === id ? build : b);
+    lsSet(LS_BUILDS, builds);
+    return of(build);
+  }
+
+  deleteBuild(id: string): Observable<void> {
+    lsSet(LS_BUILDS, lsGet<Build>(LS_BUILDS).filter(b => b.id !== id));
+    return of(undefined);
+  }
+
+  // ============ Timelines (localStorage) ============
+
+  getAllTimelines(buildId?: string): Observable<Timeline[]> {
+    const timelines = lsGet<Timeline>(LS_TIMELINES);
+    return of(buildId ? timelines.filter(t => t.buildId === buildId) : timelines);
+  }
+
+  getTimelineById(id: string): Observable<Timeline> {
+    const found = lsGet<Timeline>(LS_TIMELINES).find(t => t.id === id);
+    return found ? of(found) : throwError(() => new Error(`Timeline ${id} not found`));
+  }
+
+  createTimeline(timeline: Timeline): Observable<Timeline> {
+    const timelines = lsGet<Timeline>(LS_TIMELINES);
+    timelines.push(timeline);
+    lsSet(LS_TIMELINES, timelines);
+    return of(timeline);
+  }
+
+  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> {
+    const timelines = lsGet<Timeline>(LS_TIMELINES).map(t => t.id === id ? timeline : t);
+    lsSet(LS_TIMELINES, timelines);
+    return of(timeline);
+  }
+
+  deleteTimeline(id: string): Observable<void> {
+    lsSet(LS_TIMELINES, lsGet<Timeline>(LS_TIMELINES).filter(t => t.id !== id));
+    return of(undefined);
+  }
+
+  // ============ Simulation (moteur local, non utilisé via HTTP) ============
 
   runSimulation(request: SimulationRequest): Observable<SimulationResult> {
-    return this.http.post<SimulationResult>(`${this.baseUrl}/simulations/run`, request);
+    return throwError(() => new Error('Simulation runs locally via SimulationEngineService'));
   }
 }
 

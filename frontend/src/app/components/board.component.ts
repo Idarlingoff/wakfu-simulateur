@@ -171,7 +171,7 @@ interface BoardCell {
               [class.current-hour]="isCurrentDialHour(dialHour.hour)"
               [title]="'Cadran - ' + dialHour.hour + 'h' + (isCurrentDialHour(dialHour.hour) ? ' (HEURE COURANTE)' : '')"
             >
-              <img [src]="'http://localhost:8080/resources/dial/dial_hours-' + dialHour.hour + '.png'" [alt]="'Heure ' + dialHour.hour" class="dial-hour-image" />
+              <img [src]="'assets/images/board/dial/dial_hours-' + dialHour.hour + '.png'" [alt]="'Heure ' + dialHour.hour" class="dial-hour-image" />
               <span *ngIf="isCurrentDialHour(dialHour.hour)" class="current-hour-indicator">⏰</span>
             </div>
             <div
@@ -1841,7 +1841,7 @@ export class BoardComponent {
   }
 
   getMechanismImage(type: string, charges?: number): string {
-    return 'http://localhost:8080/' + getMechanismImagePath(type, charges);
+    return getMechanismImagePath(type, charges);
   }
 
   getMechanismTitle(type: string): string {
