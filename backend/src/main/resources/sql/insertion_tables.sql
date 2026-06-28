@@ -493,7 +493,8 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
-             0, 4, 0, 1, FALSE, FALSE,
+             -- refonte: coût de base 1 PW (+1 PW par niveau de tour de cadran, ajouté en code)
+             0, 1, 0, 1, FALSE, FALSE,
              0, 99, 99, 'NONE', 'STEP', 7794, FALSE
          );
 
@@ -671,7 +672,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_POINTE_HEURE', 'XEL', 'Pointe-heure', 'AIR', 'ELEMENTAL',
              2, 0, 2, 4, TRUE, TRUE,
-             0, 2, 1, 'LINE', 'STEP', 767, FALSE
+             0, 2, 1, 'AREA', 'STEP', 767, FALSE
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
@@ -696,7 +697,7 @@ WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
 INSERT INTO spell_effect
 (variant_id, phase, order_index, effect_type, target_scope, params_json)
 SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET',
-       '{"cells":2, "direction":"BACK"}'
+       '{"cells":2, "direction":"BACK", "diagonalCells":1, "swapPaBonus":true}'
 FROM spell_variant v
 WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
 
@@ -712,7 +713,7 @@ WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
 INSERT INTO spell_effect
 (variant_id, phase, order_index, effect_type, target_scope, params_json)
 SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET',
-       '{"cells":2, "direction":"BACK"}'
+       '{"cells":2, "direction":"BACK", "diagonalCells":1, "swapPaBonus":true}'
 FROM spell_variant v
 WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
 
@@ -953,7 +954,7 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
            "owner":"CASTER",
            "area":"CROSS2",
            "element":"LIGHT",
-           "perChargeAmount":20,
+           "perChargeAmount":17,
            "scaleByCharges": true,
            "maxCharges":10
          }'
@@ -970,7 +971,7 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
            "owner":"CASTER",
            "area":"CROSS2",
            "element":"LIGHT",
-           "perChargeAmount":20,
+           "perChargeAmount":17,
            "scaleByCharges": true,
            "maxCharges":10
          }'
@@ -990,7 +991,7 @@ INSERT INTO spell (
 -- Ratio (aucun dégât direct au cast)
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
 VALUES ('XEL_ROUAGE', 'NORMAL',     200, 0),
-       ('XEL_ROUAGE', 'PER_CHARGE', 200, 21);
+       ('XEL_ROUAGE', 'PER_CHARGE', 200, 17); -- refonte: 21 -> 17 par charge
 
 -- Variante unique (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)
@@ -1311,32 +1312,19 @@ WHERE v.spell_id='XEL_VDT' AND v.kind='NORMAL';
 DELETE FROM passive_effect WHERE passive_id IN ('XEL_CONNAISSANCE_PASSE', 'XEL_COURS_TEMPS', 'XEL_MAITRE_CADRAN', 'XEL_REMANENCE', 'XEL_MECANISME_SPECIALISE');
 DELETE FROM passive WHERE id IN ('XEL_CONNAISSANCE_PASSE', 'XEL_COURS_TEMPS', 'XEL_MAITRE_CADRAN', 'XEL_REMANENCE', 'XEL_MECANISME_SPECIALISE');
 
+-- REFONTE: l'ancienne régén (+2 PA/+2 PW au tour de cadran) est désormais le comportement
+-- PAR DÉFAUT du Cadran (code: XelorPassivesService.applyDialDefaultRegeneration).
+-- Le passif ne conserve que le surcoût +2 PW du Cadran. Le +50% PV du Cadran n'est pas simulé
+-- (les mécanismes n'ont pas de PV). Le +1 de relance du Cadran migre vers le passif Horlogerie.
 INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
     ('XEL_CONNAISSANCE_PASSE','XEL','Connaissance du passé',
-     'À chaque tour de cadran : +2 PW. Gagnera +2 PA en début de tour. '
-         'Le Cadran coûte +2 PW et son temps de relance augmente de 1.', 7186);
+     'Le Cadran possède 50% de PV supplémentaires (non simulé) et coûte +2 PW.', 7186);
 
--- +2 PW à chaque tour de cadran
-INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
-VALUES
-    ('XEL_CONNAISSANCE_PASSE','ON_HOUR_WRAPPED',0,'ADD_PW','SELF','{"amount":2}');
-
--- +2 PA en début de tour
-INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
-VALUES
-    ('XEL_CONNAISSANCE_PASSE','ON_CASTER_TURN_START',0,'ADD_AP','SELF','{"amount":2}');
-
--- Cadran : +2 PW de coût
+-- Cadran : +2 PW de coût (implémenté en code via getSpellExtraCost)
 INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
 VALUES
     ('XEL_CONNAISSANCE_PASSE','ON_PASSIVE_EQUIPPED',1,'ADD_SPELL_EXTRA_COST','SELF',
      '{"spellId":"XEL_CADRAN","resource":"PW","extra":2}');
-
--- Cadran : +1 cd
-INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
-VALUES
-    ('XEL_CONNAISSANCE_PASSE','ON_PASSIVE_EQUIPPED',2,'ADD_SPELL_COOLDOWN_DELTA','SELF',
-     '{"spellId":"XEL_CADRAN","delta":1}');
 
 
 INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
@@ -1465,3 +1453,132 @@ FROM spell_variant v WHERE v.spell_id='XEL_SYMETRIE' AND v.kind='CRIT';
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
 SELECT v.id, 'ON_CAST', 1, 'DEAL_DAMAGE', 'TARGET', '{"amount":72,"element":"AIR"}'
 FROM spell_variant v WHERE v.spell_id='XEL_SYMETRIE' AND v.kind='CRIT';
+
+-- ============================
+--  TEMPUS FUGIT  (nouveau sort - refonte Xélor)
+-- ============================
+-- 3 PA, PO 1-6 (modifiable), monocible, dégâts Air.
+-- Téléporte la cible sur l'heure courante du cadran (max 6 cases).
+-- Si lancé sur le cadran (ON_DIAL_CELL) : +2 PA au Xélor + déplace le cadran sur l'heure courante.
+-- NOTE icon_id = 767 = PLACEHOLDER (icône Pointe-heure) -> remplacer par le gameId réel.
+-- NOTE "lançable sur soi" non représenté (pas de flag self-cast dans le modèle ; po_min=1).
+
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_TEMPUS_FUGIT');
+DELETE FROM spell_variant      WHERE spell_id='XEL_TEMPUS_FUGIT';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_TEMPUS_FUGIT';
+DELETE FROM spell              WHERE id='XEL_TEMPUS_FUGIT';
+
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_TEMPUS_FUGIT', 'XEL', 'Tempus Fugit', 'AIR', 'ELEMENTAL',
+             3, 0, 1, 6, TRUE, TRUE,
+             0, 3, 2, 'AREA', 'STEP', 765, FALSE
+         );
+
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_TEMPUS_FUGIT', 'NORMAL', 200, 63),
+       ('XEL_TEMPUS_FUGIT', 'CRIT',   200, 79);
+
+INSERT INTO spell_variant (spell_id, kind)
+VALUES ('XEL_TEMPUS_FUGIT', 'NORMAL');
+
+-- (0) Dégâts Air sur la cible
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
+SELECT v.id, 'ON_CAST', 0, 'DEAL_DAMAGE', 'TARGET', '{"amount":63,"element":"AIR"}', NULL
+FROM spell_variant v WHERE v.spell_id='XEL_TEMPUS_FUGIT' AND v.kind='NORMAL';
+
+-- (1) Téléporte la cible sur l'heure courante (max 6 cases)
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT_TO_CURRENT_HOUR', 'TARGET', '{"maxCells":6}', NULL
+FROM spell_variant v WHERE v.spell_id='XEL_TEMPUS_FUGIT' AND v.kind='NORMAL';
+
+-- Effets conditionnels : lancé sur le cadran (ON_DIAL_CELL)
+INSERT INTO effect_condition_group (op) VALUES ('AND');
+INSERT INTO effect_condition (group_id, cond_type, params_json)
+VALUES ((SELECT MAX(id) FROM effect_condition_group), 'ON_DIAL_CELL', '{}');
+
+-- (2) +2 PA au Xélor
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
+SELECT v.id, 'ON_CAST', 2, 'ADD_AP', 'SELF', '{"amount":2}', (SELECT MAX(id) FROM effect_condition_group)
+FROM spell_variant v WHERE v.spell_id='XEL_TEMPUS_FUGIT' AND v.kind='NORMAL';
+
+-- (3) Déplace le cadran sur l'heure courante
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
+SELECT v.id, 'ON_CAST', 3, 'MOVE_DIAL_TO_CURRENT_HOUR', 'SELF', '{}', (SELECT MAX(id) FROM effect_condition_group)
+FROM spell_variant v WHERE v.spell_id='XEL_TEMPUS_FUGIT' AND v.kind='NORMAL';
+
+-- ============================
+--  PRÉMONITION  (nouveau sort - refonte Xélor)
+-- ============================
+-- Périmètre simulé: case vide -> TP différé du Xélor sur cette case au prochain tour.
+-- Volet PV non simulé. icon_id 767 = PLACEHOLDER. "lançable sur soi" non représenté.
+DELETE FROM spell_effect       WHERE variant_id IN (SELECT id FROM spell_variant WHERE spell_id='XEL_PREMONITION');
+DELETE FROM spell_variant      WHERE spell_id='XEL_PREMONITION';
+DELETE FROM spell_ratio_breakpoint WHERE spell_id='XEL_PREMONITION';
+DELETE FROM spell              WHERE id='XEL_PREMONITION';
+
+INSERT INTO spell (
+    id, class_id, name, element, spell_type,
+    pa_cost, pw_cost, po_min, po_max, po_modifiable, line_of_sight,
+    cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
+) VALUES (
+             'XEL_PREMONITION', 'XEL', 'Prémonition', 'NONE', 'NEUTRAL',
+             3, 0, 1, 7, TRUE, TRUE,
+             2, 1, 1, 'AREA', 'STEP', 757, FALSE
+         );
+
+INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
+VALUES ('XEL_PREMONITION', 'NORMAL', 200, 0);
+
+INSERT INTO spell_variant (spell_id, kind)
+VALUES ('XEL_PREMONITION', 'NORMAL');
+
+INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json, cond_group_id)
+SELECT v.id, 'ON_CAST', 0, 'REGISTER_SELF_TP_IF_EMPTY', 'SELF', '{}', NULL
+FROM spell_variant v WHERE v.spell_id='XEL_PREMONITION' AND v.kind='NORMAL';
+
+-- =========================================
+-- HORLOGERIE  (nouveau passif - refonte Xélor)
+-- =========================================
+-- Début de tour: TP du Xélor sur l'heure courante (code: applyHorlogerie). +1 CD Cadran NON simulé.
+DELETE FROM passive_effect WHERE passive_id = 'XEL_HORLOGERIE';
+DELETE FROM passive WHERE id = 'XEL_HORLOGERIE';
+
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
+    ('XEL_HORLOGERIE','XEL','Horlogerie',
+     'En début de tour, téléporte le Xélor sur l''heure courante. '
+         'Le Cadran peut être posé un tour sur deux (cooldown non simulé).', 761);
+
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
+VALUES
+    ('XEL_HORLOGERIE','ON_CASTER_TURN_START',0,'TELEPORT_TO_CURRENT_HOUR','SELF','{}');
+
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
+VALUES
+    ('XEL_HORLOGERIE','ON_PASSIVE_EQUIPPED',1,'ADD_SPELL_COOLDOWN_DELTA','SELF',
+     '{"spellId":"XEL_CADRAN","delta":1}');
+
+-- =========================================
+-- PERMUTATION MOMENTANÉE  (nouveau passif - refonte Xélor)
+-- =========================================
+-- Fin de tour: échange Xélor <-> Cadran (code: applyPermutationMomentanee) -> +2 charges + Cours du temps.
+-- +100 résistance élémentaire du Cadran NON simulé.
+DELETE FROM passive_effect WHERE passive_id = 'XEL_PERMUTATION_MOMENTANEE';
+DELETE FROM passive WHERE id = 'XEL_PERMUTATION_MOMENTANEE';
+
+INSERT INTO passive (id, class_id, name, description, icon_id) VALUES
+    ('XEL_PERMUTATION_MOMENTANEE','XEL','Permutation momentanée',
+     'En fin de tour, échange de position avec le Cadran (génère 2 charges, déclenche Cours du temps). '
+         'Le Cadran gagne 100 de résistance élémentaire (non simulé).', 7192);
+
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
+VALUES
+    ('XEL_PERMUTATION_MOMENTANEE','ON_CASTER_TURN_END',0,'SWAP_WITH_MECHANISM','SELF','{"mechanism":"DIAL"}');
+
+INSERT INTO passive_effect (passive_id, trigger, order_index, effect_type, target_scope, params_json)
+VALUES
+    ('XEL_PERMUTATION_MOMENTANEE','ON_PASSIVE_EQUIPPED',1,'MODIFY_MECHANISM_STAT','MECHANISM',
+     '{"mechanism":"DIAL","stat":"elementalResistance","flat":100}');

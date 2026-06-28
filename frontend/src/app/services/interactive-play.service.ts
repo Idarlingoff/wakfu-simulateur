@@ -303,7 +303,11 @@ export class InteractivePlayService {
         this.simulationService.appendInteractiveStep(result);
         const player = this.boardService.player();
         if (player) {
-          this.boardService.updateEntityPosition(player.id, targetPosition);
+          // Position finale RÉELLE : un tour de cadran déclenché par ce déplacement a pu repositionner
+          // le joueur (échange Permutation puis téléportation Horlogerie). Ne PAS forcer la case
+          // d'arrivée du déplacement, sinon on annule ces effets.
+          const finalPos = result.contextAfter.playerPosition ?? targetPosition;
+          this.boardService.updateEntityPosition(player.id, finalPos);
         }
         console.log(`[InteractivePlay] Déplacement ${via} vers (${targetPosition.x}, ${targetPosition.y})`);
       } else {
@@ -315,6 +319,37 @@ export class InteractivePlayService {
       return result;
     } catch (e) {
       console.error('[InteractivePlay] Erreur lors du déplacement:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Termine explicitement le tour courant : applique les effets de fin de tour
+   * (Permutation momentanée, ticks de mécanismes, purge des mouvements) puis le début du
+   * tour suivant (Horlogerie, TP différé Prémonition, reset des gardes "par tour").
+   */
+  async endTurn(): Promise<SimulationStepResult | null> {
+    if (!this.isActive()) {
+      console.warn('[InteractivePlay] Session non active');
+      return null;
+    }
+    const ctx = this._context();
+    if (!ctx) return null;
+    const buildToUse = this._build ?? this.makeDummyBuild();
+
+    this._stepCount++;
+
+    try {
+      const result = this.simulationEngine.endInteractiveTurn(ctx, buildToUse);
+      this._context.set(result.contextAfter);
+      this.simulationService.appendInteractiveStep(result);
+      // Les échanges/TP de fin/début de tour ont déjà bougé le board via BoardService ;
+      // on resynchronise la position du joueur depuis le contexte par sécurité.
+      this.syncPlayerPositionFromContext(result.contextAfter);
+      console.log(`[InteractivePlay] Fin de tour → tour ${result.contextAfter.turn}`);
+      return result;
+    } catch (e) {
+      console.error('[InteractivePlay] Erreur lors de la fin de tour:', e);
       return null;
     }
   }

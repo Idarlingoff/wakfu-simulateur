@@ -93,8 +93,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       this.teleport.processTeleportEffects(spell, action, context, actionResult);
     }
 
-    // Avancer l'heure du cadran (1h par PW dépensé)
-    const dialHourAdvance = this.getDialHourAdvanceForSpell(spell);
+    // Avancer l'heure du cadran : 1h par PW RÉELLEMENT dépensé sur le cast (surcoûts dynamiques
+    // inclus, ex: Distorsion), SAUF le cast qui vient de POSER le cadran (sa propre dépense ne fait
+    // pas tourner le cadran fraîchement placé).
+    const isDialSummon = mechanismType === 'dial';
+    const dialHourAdvance = isDialSummon ? 0 : (actionResult.pwCost || 0);
     console.log(`[XELOR] 🔍 Checking dial hour advancement: advance=${dialHourAdvance}, success=${actionResult.success}, dialId=${getXelorState(context, true).dialId}, currentHour=${getXelorState(context, true).currentDialHour}`);
 
     if (dialHourAdvance > 0 && actionResult.success && getXelorState(context, true).dialId) {
@@ -156,21 +159,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
-   * Retourne le nombre d'heures à avancer sur le cadran pour un sort.
-   *
-   * Règle: 1h par PW dépensé.
-   */
-  private getDialHourAdvanceForSpell(spell: Spell): number {
-    const staticPwCost = spell.pwCost || 0;
-
-    if (staticPwCost > 0) {
-      return staticPwCost;
-    }
-
-    return 0;
-  }
-
-  /**
    * * Ajoute des charges aux rouages/sinistros selon les transpositions du sort courant.
    *    *
    *    * Règles métier:
@@ -180,7 +168,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
    *    * - Les Sinistros partagent le même compteur (max 15)
    */
   private addRouageAndSinistroChargesFromTranspositions(spellId: string, context: SimulationContext): void {
-    const generatedCharges = this.isRetourSpontaneSpell(spellId)
+    const generatedCharges = this.castValidator.isRetourSpontaneSpell(spellId)
       ? this.getTranspositionChargesForRetourSpontane(context)
       : this.getTranspositionChargesForCurrentAction(spellId, context);
 
@@ -202,6 +190,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     const revertedMovement = this.movement.getLastMovement(context);
 
     if (!revertedMovement) {
+      return 0;
+    }
+
+    // Un déplacement classique (PM/PW) n'est pas une transposition -> ne génère pas de charges.
+    if (revertedMovement.type === 'move') {
       return 0;
     }
 
@@ -235,6 +228,11 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
         if (movement.sourceSpellId !== spellId) {
           break;
         }
+      }
+
+      // Un déplacement classique (PM/PW) n'est pas une transposition -> ne génère pas de charges.
+      if (movement.type === 'move') {
+        continue;
       }
 
       if (movement.type === 'swap' || movement.type === 'swap_mechanism') {
@@ -301,10 +299,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     return Math.min(...charges);
   }
 
-  private isRetourSpontaneSpell(spellId: string): boolean {
-    const normalizedId = spellId.toLowerCase();
-    return normalizedId.includes('retour') && normalizedId.includes('spontane');
-  }
 
   /**
    * Retourne le nombre maximum de charges pour un type de mécanisme
@@ -341,12 +335,36 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     let extraPaCost = 0;
     let extraPwCost = 0;
 
-    if (this.passive.hasConnaissancePassePassive(context)) {
-      const isDialSpell = spell.id.toLowerCase() === 'xel_dial'
+    const activePassives = context.activePassiveIds ?? [];
 
-      if (isDialSpell) {
-        extraPwCost += 2;
-        console.log(`[XELOR CONNAISSANCE_PASSE] 💰 Cadran extra cost: +2 PW (total PW: ${spell.pwCost + extraPwCost})`);
+    // Surcoûts conditionnels PILOTÉS PAR LES DONNÉES : effets 'EXTRA_COST_IF_PASSIVE'
+    // (ex: Cadran +2 PW si "Connaissance du passé" équipé). Plus de test d'identifiant en dur.
+    const variant = spell.variants?.find(v => v.kind === 'NORMAL') ?? spell.variants?.[0];
+    for (const effect of variant?.effects ?? []) {
+      if (effect.effect !== 'EXTRA_COST_IF_PASSIVE') {
+        continue;
+      }
+      const data = (effect.extendedData ?? {}) as Record<string, any>;
+      const passiveId = data['passiveId'];
+      if (!passiveId || !activePassives.some(id => id.toLowerCase() === String(passiveId).toLowerCase())) {
+        continue;
+      }
+      const extra = Number(data['extra'] ?? 0);
+      if ((data['resource'] ?? 'PW') === 'PA') {
+        extraPaCost += extra;
+      } else {
+        extraPwCost += extra;
+      }
+      console.log(`[XELOR] 💰 Surcoût ${spell.name}: +${extra} ${data['resource'] ?? 'PW'} (passif ${passiveId})`);
+    }
+
+    // Distorsion : coût dynamique = +1 PW par niveau de "tour de cadran". Reste basé sur l'identifiant
+    // de sort car le compteur (distortionPower) est un état de classe (pas de système de stacks générique).
+    if (spell.id === XelorSimulationStrategy.DISTORSION_SPELL_ID) {
+      const level = Math.min(getXelorState(context, true).distortionPower ?? 0, 4);
+      if (level > 0) {
+        extraPwCost += level;
+        console.log(`[XELOR DISTORSION] 💰 Coût dynamique: +${level} PW (niveau tour de cadran, total PW: ${spell.pwCost + extraPwCost})`);
       }
     }
 
@@ -388,6 +406,9 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     getXelorState(context, true).distorsionActive = false;
     getXelorState(context, true).distorsionCooldownRemaining = 0;
+    getXelorState(context, true).distortionPower = 0;
+    getXelorState(context, true).dialPaBonusGrantedThisTurn = false;
+    getXelorState(context, true).permutationDoneThisTurn = false;
 
     const mechanisms = this.boardService.mechanisms();
     mechanisms.forEach(mechanism => {
@@ -434,18 +455,45 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   }
 
   /**
+   * Début de tour (chaque TimelineStep = un tour).
+   * - Réinitialise les compteurs "par tour" (cap +2 PA du Cadran, garde permutation, usages).
+   * - Prémonition : résout un TP différé enregistré au tour précédent.
+   * NB : Horlogerie n'est PAS ici — elle se déclenche sur un tour de cadran (voir processHourWrap).
+   */
+  override onTurnStart(context: SimulationContext): void {
+    console.log('[XELOR] Turn start');
+    // Reset des compteurs/gardes "par tour" : utilisation par tour/cible, bonus cadran, permutation.
+    // (Indispensable depuis le câblage du cycle de tour : sinon les limites "X/tour" et les bonus
+    //  1x/tour resteraient bloqués après le 1er tour.)
+    context.spellUsageThisTurn?.clear();
+    context.spellUsagePerTarget?.clear();
+    getXelorState(context, true).dialPaBonusGrantedThisTurn = false;
+    getXelorState(context, true).permutationDoneThisTurn = false;
+    this.teleport.resolvePremonitionDeferredTeleport(context);
+  }
+
+  /**
    * Nettoie les données spécifiques au Xelor à la fin d'un tour
    */
-  cleanupTurn(context: SimulationContext): void {
+  override cleanupTurn(context: SimulationContext): void {
     console.log('[XELOR] Cleaning up turn');
+
+    // 0. Permutation momentanée — déclencheur "fin de tour" (b) : UNIQUEMENT si aucun tour de cadran
+    //    ne l'a déjà déclenchée ce tour (sinon double échange). Sur tour de cadran (a), elle est gérée
+    //    dans processHourWrap et peut proc plusieurs fois (une par tour de cadran).
+    if (!getXelorState(context, true).permutationDoneThisTurn) {
+      this.passive.applyPermutationMomentanee(context);
+    }
 
     // 1. Appliquer les effets de fin de tour des mécanismes
     this.applyEndOfTurnMechanismEffects(context);
 
-    // 2. Avancer l'heure du cadran (si présent)
-    if (getXelorState(context, true).dialId && getXelorState(context, true).currentDialHour !== undefined) {
-      this.dial.advanceDialHour(context);
-    }
+    // 2. (désactivé) L'avance automatique de l'heure du cadran en fin de tour n'est pas une règle
+    //    Xélor (l'heure avance via les PW dépensés). Réactivée dormante par le câblage du cycle de
+    //    tour, elle fausserait tours de cadran/régén -> laissée commentée. À confirmer si besoin.
+    // if (getXelorState(context, true).dialId && getXelorState(context, true).currentDialHour !== undefined) {
+    //   this.dial.advanceDialHour(context);
+    // }
 
     // 3. Appliquer le bonus PW du Régulateur en fin de tour
     this.applyRegulatorPwBonus(context);
@@ -511,6 +559,8 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   public activateDistorsion(context: SimulationContext): void {
     getXelorState(context, true).distorsionActive = true;
     getXelorState(context, true).distorsionCooldownRemaining = 0;
+    // Refonte: la puissance "tour de cadran" retombe à 0 après le cast de Distorsion.
+    getXelorState(context, true).distortionPower = 0;
     console.log(`[XELOR DISTORSION] ✅ Distorsion activée`);
   }
 
@@ -537,12 +587,6 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       }
     }
   }
-
-  // ============================================
-  // PASSIF "CONNAISSANCE DU PASSÉ" - REGENERATION
-  // Correspond à: passive_effect.effect_type = 'ADD_AP' et 'ADD_PW'
-  // avec trigger = 'ON_HOUR_WRAPPED'
-  // ============================================
 
   /**
    * Retourne le nombre d'effets différés en attente

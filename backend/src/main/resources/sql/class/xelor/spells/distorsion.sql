@@ -70,7 +70,8 @@ INSERT INTO spell (
     cooldown, use_per_turn, use_per_target, direction, ratio_eval_mode, icon_id, is_aoe
 ) VALUES (
              'XEL_DISTO', 'XEL', 'Distorsion', 'NONE', 'INNATE',
-             0, 4, 0, 1, FALSE, FALSE,
+             -- refonte: coût de base 1 PW (+1 PW par niveau de tour de cadran, ajouté en code)
+             0, 1, 0, 1, FALSE, FALSE,
              0, 99, 99, 'NONE', 'STEP', 7794, FALSE
          );
 

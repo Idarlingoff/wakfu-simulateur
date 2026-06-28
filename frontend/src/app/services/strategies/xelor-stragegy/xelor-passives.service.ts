@@ -6,14 +6,16 @@ import {BoardService} from '../../board.service';
 import {XelorMovementService} from './xelor-movement.service';
 import {XelorDialService} from './xelor-dial.service';
 import {Position} from '../../../models/timeline.model';
+import {getXelorState} from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
 export class XelorPassivesService {
 
   private static readonly MAITRE_DU_CADRAN_ID = 'XEL_MAITRE_CADRAN';
   private static readonly COURS_DU_TEMPS = 'XEL_COURS_TEMPS';
-  private static readonly CONNAISSANCE_PASSE = 'XEL_CONNAISSANCE_PASSE';
   private static readonly MECANISME_SPECIALISE = 'XEL_MECANISMES_SPECIALISES';
+  private static readonly HORLOGERIE = 'XEL_HORLOGERIE';
+  private static readonly PERMUTATION_MOMENTANEE = 'XEL_PERMUTATION_MOMENTANEE';
   private readonly boardService = inject(BoardService);
   private readonly regenerationService = inject(ResourceRegenerationService);
   private readonly xelorCastValidatorService = inject(XelorCastValidatorService);
@@ -95,45 +97,39 @@ export class XelorPassivesService {
   }
 
   /**
-   * Vérifie si le passif "Connaissance du passé" est actif
-   * Ce passif :
-   * - Régénère 2 PA et 2 PW à chaque tour de cadran
-   * - Le Cadran coûte +2 PW supplémentaires
+   * Régénération PAR DÉFAUT du Cadran (refonte : ex-"Connaissance du passé", désormais
+   * comportement de base du Cadran, indépendant du passif).
+   * À chaque tour de cadran : +2 PW (à chaque tour) ; +2 PA (1 fois max par tour de jeu).
+   *
+   * NOTE: le cap "1x/tour" du +2 PA s'appuie sur un flag (dialPaBonusGrantedThisTurn) qui n'est
+   * pas encore réinitialisé en début de tour (le cycle de tour n'est pas câblé) -> en pratique
+   * 1x/simulation, ce qui est correct pour les combos mono-tour. À revoir avec le lifecycle de tour.
    */
-  public hasConnaissancePassePassive(context: SimulationContext): boolean {
-    const passiveIds = context.activePassiveIds || [];
-    const found = passiveIds.some(
-      activeId => activeId.toLowerCase() === XelorPassivesService.CONNAISSANCE_PASSE.toLowerCase()
-    );
-
-    console.log(`[XELOR CONNAISSANCE_PASSE]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
-    return found;
-  }
-
-  /**
-   * Applique la régénération du passif "Connaissance du passé"
-   * À chaque tour de cadran : +2 PA et +2 PW
-   */
-  public applyConnaissancePasseRegeneration(context: SimulationContext): void {
-    console.log('[XELOR CONNAISSANCE_PASSE] ⚡ Triggering Connaissance du passé regeneration on ON_HOUR_WRAPPED');
-
-    this.regenerationService.regeneratePA(
-      context,
-      2,
-      'CONNAISSANCE_PASSE',
-      'Connaissance du passé: +2 PA (tour de cadran)',
-      { trigger: 'ON_HOUR_WRAPPED' }
-    );
+  public applyDialDefaultRegeneration(context: SimulationContext): void {
+    console.log('[XELOR CADRAN] ⚡ Régénération par défaut du Cadran (ON_HOUR_WRAPPED)');
 
     this.regenerationService.regeneratePW(
       context,
       2,
-      'CONNAISSANCE_PASSE',
-      'Connaissance du passé: +2 PW (tour de cadran)',
+      'HOUR_WRAP',
+      'Cadran: +2 PW (tour de cadran)',
       { trigger: 'ON_HOUR_WRAPPED' }
     );
 
-    console.log('[XELOR CONNAISSANCE_PASSE] ✅ Regeneration complete: +2 PA, +2 PW');
+    const state = getXelorState(context, true);
+    if (!state.dialPaBonusGrantedThisTurn) {
+      this.regenerationService.regeneratePA(
+        context,
+        2,
+        'HOUR_WRAP',
+        'Cadran: +2 PA (tour de cadran, 1x/tour)',
+        { trigger: 'ON_HOUR_WRAPPED' }
+      );
+      state.dialPaBonusGrantedThisTurn = true;
+      console.log('[XELOR CADRAN] ✅ Régénération: +2 PW, +2 PA');
+    } else {
+      console.log('[XELOR CADRAN] ✅ Régénération: +2 PW (+2 PA déjà accordé ce tour)');
+    }
   }
 
   /**
@@ -148,7 +144,7 @@ export class XelorPassivesService {
       activeId => activeId.toLowerCase() === XelorPassivesService.MECANISME_SPECIALISE.toLowerCase()
     );
 
-    console.log(`[XELOR XEL_MECANISMES_SPECIALISES]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
+    console.log(`[XELOR MECANISME_SPECIALISE]    Result: ${found ? '✅ FOUND' : '❌ NOT FOUND'}`);
     return found;
   }
 
@@ -365,5 +361,147 @@ export class XelorPassivesService {
     } else {
       console.warn(`[XELOR MECANISME_SPECIALISE] ⚠️ Swap failed`);
     }
+  }
+
+  // =========================================
+  // HORLOGERIE (passif - refonte)
+  // =========================================
+  public hasHorlogeriePassive(context: SimulationContext): boolean {
+    const passiveIds = context.activePassiveIds || [];
+    return passiveIds.some(id => id.toLowerCase() === XelorPassivesService.HORLOGERIE.toLowerCase());
+  }
+
+  /**
+   * Horlogerie : en début de tour, téléporte le Xélor sur l'heure courante du cadran.
+   * NOTE: le "+1 au CD du Cadran" n'est pas simulé (aucun cooldown n'est appliqué par le moteur).
+   * Ce TP de passif ne déclenche pas Cours du temps et ne génère pas de charges.
+   */
+  public applyHorlogerie(context: SimulationContext): void {
+    if (!this.hasHorlogeriePassive(context)) return;
+
+    const state = getXelorState(context, true);
+    if (!state.dialId || state.currentDialHour === undefined) {
+      console.log('[XELOR HORLOGERIE] Pas de cadran actif - pas de téléportation');
+      return;
+    }
+
+    const dest = this.boardService.getDialHourPosition(state.currentDialHour, state.dialId);
+    if (!dest) {
+      console.warn('[XELOR HORLOGERIE] Heure courante introuvable - pas de téléportation');
+      return;
+    }
+
+    const player = this.boardService.player();
+    if (!player?.id) return;
+
+    if (player.position.x === dest.x && player.position.y === dest.y) {
+      console.log("[XELOR HORLOGERIE] Xélor déjà sur l'heure courante");
+      return;
+    }
+
+    const occupant = this.boardService.getEntityAtPosition(dest);
+    if (occupant && occupant.id !== player.id) {
+      this.boardService.swapEntityPositions(player.id, occupant.id);
+    } else {
+      this.boardService.updateEntityPosition(player.id, dest);
+    }
+
+    context.playerPosition = dest;
+    context.currentPosition = dest;
+    if (context.entities) {
+      const p = context.entities.find(e => e.type === 'player');
+      if (p) p.position = dest;
+    }
+
+    console.log(`[XELOR HORLOGERIE] 🌀 Xélor téléporté sur l'heure courante (${state.currentDialHour}) -> (${dest.x}, ${dest.y})`);
+  }
+
+  // =========================================
+  // PERMUTATION MOMENTANÉE (passif - refonte)
+  // =========================================
+  public hasPermutationMomentaneePassive(context: SimulationContext): boolean {
+    const passiveIds = context.activePassiveIds || [];
+    return passiveIds.some(id => id.toLowerCase() === XelorPassivesService.PERMUTATION_MOMENTANEE.toLowerCase());
+  }
+
+  /**
+   * Permutation momentanée : échange la position du Xélor avec le Cadran.
+   * Déclencheurs :
+   *   a) à CHAQUE tour complet du cadran (hour wrap) -> peut proc plusieurs fois par tour de jeu
+   *      (1 fois par tour de cadran), géré dans processHourWrap ;
+   *   b) à la fin du tour de jeu (cleanupTurn) UNIQUEMENT si aucun tour de cadran ne l'a déjà
+   *      déclenchée ce tour (le déclencheur "OU fin de tour").
+   * `permutationDoneThisTurn` ne BLOQUE pas les déclenchements (a) : il sert seulement à savoir, en
+   * fin de tour, si (a) a déjà eu lieu (pour ne pas re-déclencher en (b)).
+   * Génère 2 charges (Rouage/Sinistro) et déclenche Cours du temps. Renvoie true si l'échange a eu lieu.
+   * Le "+100 résistance" du Cadran n'est pas simulé (les mécanismes n'ont ni PV ni résistances).
+   */
+  public applyPermutationMomentanee(context: SimulationContext): boolean {
+    if (!this.hasPermutationMomentaneePassive(context)) return false;
+
+    const state = getXelorState(context, true);
+
+    if (!state.dialId) {
+      console.log("[XELOR PERMUTATION] Pas de cadran - pas d'échange");
+      return false;
+    }
+
+    const dial = this.boardService.getMechanism(state.dialId);
+    const player = this.boardService.player();
+    if (!dial || dial.type !== 'dial' || !player?.id) return false;
+
+    const dialPos = { x: dial.position.x, y: dial.position.y };
+    const playerPos = { x: player.position.x, y: player.position.y };
+    if (dialPos.x === playerPos.x && dialPos.y === playerPos.y) return false;
+
+    const swapSuccess = this.boardService.swapEntityWithMechanism(player.id, state.dialId);
+    if (!swapSuccess) {
+      console.warn('[XELOR PERMUTATION] Échange échoué');
+      return false;
+    }
+
+    // Le cadran a bougé : translater ses 12 heures vers sa nouvelle position.
+    this.dial.updateDialHoursAfterSwap(state.dialId);
+
+    context.playerPosition = dialPos;
+    context.currentPosition = dialPos;
+    if (context.entities) {
+      const p = context.entities.find(e => e.type === 'player');
+      if (p) p.position = dialPos;
+    }
+
+    // Échange -> Cours du temps (confirmé par l'utilisateur).
+    this.applyCoursduTempsOnTransposition(context, 'permutation_momentanee_swap');
+
+    // NB : l'échange de Permutation momentanée n'est volontairement PAS enregistré dans
+    // l'historique des mouvements -> il n'est donc PAS annulable par Retour Spontané.
+
+    // +2 charges (swap) sur Rouage/Sinistro (partagées, capées) - même règle que les transpositions.
+    this.addSwapTranspositionCharges(context, 2);
+
+    state.permutationDoneThisTurn = true;
+    console.log(`[XELOR PERMUTATION] 🔄 Échange Xélor <-> Cadran : joueur -> (${dialPos.x}, ${dialPos.y}), cadran -> (${playerPos.x}, ${playerPos.y})`);
+    return true;
+  }
+
+  /**
+   * Ajoute des charges de transposition partagées (Rouage/Sinistro), avec cap par type.
+   * Utilisé par Permutation momentanée (échange = 2 charges).
+   */
+  private addSwapTranspositionCharges(context: SimulationContext, amount: number): void {
+    const state = getXelorState(context, true);
+    const caps: Record<'cog' | 'sinistro', number> = { cog: 10, sinistro: 15 };
+    (['cog', 'sinistro'] as const).forEach(type => {
+      const current = state.sharedMechanismCharges?.get(type) ?? 0;
+      const next = Math.min(caps[type], current + amount);
+      state.sharedMechanismCharges?.set(type, next);
+      for (const mech of this.boardService.getMechanismsByType(type)) {
+        const cur = state.mechanismCharges?.get(mech.id) ?? 0;
+        if (next > cur) {
+          this.boardService.addCharges(mech.id, next - cur);
+        }
+        state.mechanismCharges?.set(mech.id, next);
+      }
+    });
   }
 }

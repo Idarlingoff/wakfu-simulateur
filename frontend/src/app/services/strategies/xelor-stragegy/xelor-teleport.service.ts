@@ -103,17 +103,21 @@ export class XelorTeleportService {
     destinationPosition: Position,
     context: SimulationContext,
     spellId: string,
-    actionResult: SimulationActionResult
+    actionResult: SimulationActionResult,
+    grantSwapPaBonus: boolean = true
   ): void {
 
     const hasMechanism = target.kind === 'mechanism' || occupant.kind === 'mechanism';
     const trigger = hasMechanism ? 'ON_SWAP_MECHANISM' : 'ON_SWAP';
-    this.regenerationService.regeneratePA(
-      context, 1, 'POINTE_HEURE',
-      `Pointe-heure: +1 PA (échange de position)`,
-      { spellId, trigger }
-    );
-    console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap bonus)`);
+    // Bonus PA spécifique à Pointe-heure : ne s'applique pas aux autres téléports (ex: Tempus Fugit).
+    if (grantSwapPaBonus) {
+      this.regenerationService.regeneratePA(
+        context, 1, 'POINTE_HEURE',
+        `Pointe-heure: +1 PA (échange de position)`,
+        { spellId, trigger }
+      );
+      console.log(`[XELOR TELEPORT] 💰 +1 PA granted (swap bonus)`);
+    }
 
     const swapType = `${target.kind}_${occupant.kind}_swap`;
     this.xelorPassivesService.applyCoursduTempsOnTransposition(context, swapType);
@@ -152,7 +156,7 @@ export class XelorTeleportService {
       swappedWith: this.unitDisplayName(occupant),
       from: sourcePosition,
       to: destinationPosition,
-      paGained: 1
+      paGained: grantSwapPaBonus ? 1 : 0
     };
 
     console.log(`[XELOR TELEPORT] ✅ Swap successful!`);
@@ -221,6 +225,7 @@ export class XelorTeleportService {
 
     const teleportEffects = variant.effects.filter(
       e => e.effect === 'TELEPORT' || e.effect === 'TELEPORT_SYMMETRIC'
+        || e.effect === 'TELEPORT_TO_CURRENT_HOUR' || e.effect === 'REGISTER_SELF_TP_IF_EMPTY'
     );
     if (teleportEffects.length === 0) return;
 
@@ -230,9 +235,22 @@ export class XelorTeleportService {
         continue;
       }
 
-      const cells = effect.extendedData?.cells || 2;
+      if (effect.effect === 'TELEPORT_TO_CURRENT_HOUR') {
+        const maxCells = Number(effect.extendedData?.maxCells ?? 6);
+        this.processTeleportToCurrentHour(action, context, actionResult, spell.id, maxCells);
+        continue;
+      }
+
+      if (effect.effect === 'REGISTER_SELF_TP_IF_EMPTY') {
+        this.registerPremonitionTeleport(action, context);
+        continue;
+      }
+
+      const baseCells = effect.extendedData?.cells || 2;
+      // En diagonale, distance de poussée SPÉCIFIQUE (data-driven via diagonalCells) qui REMPLACE la base
+      // (ex: Pointe-heure pousse de 2 en ligne, de 1 en diagonale). Absente -> on garde la base.
+      const diagonalCellsRaw = effect.extendedData?.diagonalCells;
       const direction = effect.extendedData?.direction || 'BACK';
-      console.log(`[XELOR TELEPORT] 🌀 Processing TELEPORT effect: ${cells} cells, direction: ${direction}`);
 
       const casterPosition = this.boardService.player()?.position || context.playerPosition;
       const targetPosition = action.targetPosition;
@@ -253,12 +271,14 @@ export class XelorTeleportService {
       console.log(`[XELOR TELEPORT] 🎯 Target: ${target.kind} ${this.unitDisplayName(target)} at (${targetPosition.x}, ${targetPosition.y})`);
 
       const { dirX, dirY } = this.computeDirection(casterPosition, targetPosition);
+      const isDiagonal = dirX !== 0 && dirY !== 0;
+      const cells = (isDiagonal && diagonalCellsRaw != null) ? Number(diagonalCellsRaw) : baseCells;
       const pushMultiplier = direction === 'BACK' ? 1 : -1;
       const destinationPosition: Position = {
         x: targetPosition.x + (dirX * cells * pushMultiplier),
         y: targetPosition.y + (dirY * cells * pushMultiplier)
       };
-      console.log(`[XELOR TELEPORT] 📍 Destination: (${destinationPosition.x}, ${destinationPosition.y})`);
+      console.log(`[XELOR TELEPORT] 🌀 TELEPORT: ${cells} case(s)${isDiagonal ? ' (diagonale)' : ''}, direction: ${direction} -> (${destinationPosition.x}, ${destinationPosition.y})`);
 
       if (this.isOutOfBounds(destinationPosition)) {
         console.warn(`[XELOR TELEPORT] ⚠️ Destination out of bounds`);
@@ -275,12 +295,142 @@ export class XelorTeleportService {
         console.log(`[XELOR TELEPORT] 🔄 Destination occupied by ${occupant.kind} ${this.unitDisplayName(occupant)} - SWAP!`);
         const swapSuccess = this.performBoardSwap(target, occupant);
         if (swapSuccess) {
-          this.applySwapSideEffects(target, occupant, targetPosition, destinationPosition, context, spell.id, actionResult);
+          // Bonus PA d'échange piloté par les données (seul Pointe-heure le déclare via swapPaBonus),
+          // au lieu d'être accordé par défaut à tout sort à effet TELEPORT.
+          const grantSwapPaBonus = !!effect.extendedData?.swapPaBonus;
+          this.applySwapSideEffects(target, occupant, targetPosition, destinationPosition, context, spell.id, actionResult, grantSwapPaBonus);
         }
       } else {
         this.applySimpleTeleport(target, targetPosition, destinationPosition, context, spell.id, actionResult);
       }
     }
+  }
+
+  /**
+   * Téléporte la cible (entité ou mécanisme) sur la case de l'heure courante du cadran.
+   * Effet data-driven (effect_type 'TELEPORT_TO_CURRENT_HOUR', param `maxCells`).
+   * Utilisé par Tempus Fugit. Si la destination est occupée -> échange (sans bonus PA Pointe-heure).
+   */
+  public processTeleportToCurrentHour(
+    action: TimelineAction,
+    context: SimulationContext,
+    actionResult: SimulationActionResult,
+    spellId: string,
+    maxCells: number
+  ): void {
+    const state = getXelorState(context, true);
+    if (!state.dialId || state.currentDialHour === undefined) {
+      console.log('[XELOR TELEPORT] ⚠️ TELEPORT_TO_CURRENT_HOUR ignoré : aucun cadran actif');
+      return;
+    }
+
+    const destination = this.boardService.getDialHourPosition(state.currentDialHour, state.dialId);
+    if (!destination) {
+      console.warn(`[XELOR TELEPORT] ⚠️ Position de l'heure courante (${state.currentDialHour}) introuvable`);
+      return;
+    }
+
+    const targetPosition = action.targetPosition;
+    if (!targetPosition) {
+      console.warn('[XELOR TELEPORT] ⚠️ TELEPORT_TO_CURRENT_HOUR : pas de position cible');
+      return;
+    }
+
+    const target = this.getUnitAtPosition(targetPosition);
+    if (!target) {
+      console.warn(`[XELOR TELEPORT] ⚠️ Aucune cible à (${targetPosition.x}, ${targetPosition.y})`);
+      return;
+    }
+    if (this.isStabilized(target)) {
+      console.warn(`[XELOR TELEPORT] ⚠️ Cible ${this.unitDisplayName(target)} stabilisée, téléport impossible`);
+      return;
+    }
+
+    const distance = Math.abs(targetPosition.x - destination.x) + Math.abs(targetPosition.y - destination.y);
+    if (distance === 0) {
+      console.log("[XELOR TELEPORT] ℹ️ Cible déjà sur l'heure courante");
+      return;
+    }
+    if (distance > maxCells) {
+      console.log(`[XELOR TELEPORT] ⚠️ Heure courante trop éloignée (${distance} > ${maxCells} cases) - téléport annulé`);
+      return;
+    }
+
+    const occupant = this.getUnitAtPosition(destination);
+    if (occupant) {
+      if (this.isStabilized(occupant)) {
+        console.warn(`[XELOR TELEPORT] ⚠️ Destination occupée par ${this.unitDisplayName(occupant)} (stabilisé) - téléport bloqué`);
+        return;
+      }
+      console.log(`[XELOR TELEPORT] 🔄 Heure courante occupée par ${occupant.kind} ${this.unitDisplayName(occupant)} - ÉCHANGE`);
+      const swapSuccess = this.performBoardSwap(target, occupant);
+      if (swapSuccess) {
+        this.applySwapSideEffects(target, occupant, targetPosition, destination, context, spellId, actionResult, false);
+      }
+    } else {
+      this.applySimpleTeleport(target, targetPosition, destination, context, spellId, actionResult);
+    }
+
+    console.log(`[XELOR TELEPORT] ✅ Cible téléportée sur l'heure courante (${state.currentDialHour})`);
+  }
+
+  /**
+   * Prémonition (volet positionnel) : si lancé sur une CASE VIDE, enregistre un TP différé
+   * du Xélor sur cette case, résolu au début du tour suivant. Sur une cible occupée, aucun effet
+   * (le volet PV n'est pas simulé).
+   */
+  public registerPremonitionTeleport(action: TimelineAction, context: SimulationContext): void {
+    const targetPosition = action.targetPosition;
+    if (!targetPosition) return;
+
+    const entity = this.boardService.getEntityAtPosition(targetPosition);
+    const mechanism = this.boardService.getMechanismAtPosition(targetPosition);
+    if (entity || mechanism) {
+      console.log('[XELOR PREMONITION] Case non vide - aucun TP différé enregistré (volet PV non simulé)');
+      return;
+    }
+
+    const state = getXelorState(context, true);
+    state.premonitionTeleport = { position: { x: targetPosition.x, y: targetPosition.y }, turn: context.turn || 1 };
+    console.log(`[XELOR PREMONITION] 📌 TP différé enregistré sur (${targetPosition.x}, ${targetPosition.y}) (tour ${state.premonitionTeleport.turn})`);
+  }
+
+  /**
+   * Résout, au début du tour suivant, le TP différé de Prémonition (téléporte le Xélor sur la
+   * case sauvegardée ; échange si occupée). Appelé depuis onTurnStart.
+   */
+  public resolvePremonitionDeferredTeleport(context: SimulationContext): void {
+    const state = getXelorState(context, true);
+    const pending = state.premonitionTeleport;
+    if (!pending) return;
+
+    // onTurnStart ne s'exécute qu'aux BORNES de tour, alors que l'enregistrement se fait PENDANT un
+    // cast : tout TP en attente vu ici a donc été enregistré au tour précédent -> on le résout.
+    console.log(`[XELOR PREMONITION] ⏩ Résolution du TP différé (enregistré tour ${pending.turn}) au tour ${context.turn ?? '?'}`);
+
+    const player = this.boardService.player();
+    if (!player?.id) {
+      state.premonitionTeleport = undefined;
+      return;
+    }
+
+    const dest = pending.position;
+    const occupant = this.boardService.getEntityAtPosition(dest);
+    if (occupant && occupant.id !== player.id) {
+      this.boardService.swapEntityPositions(player.id, occupant.id);
+    } else {
+      this.boardService.updateEntityPosition(player.id, dest);
+    }
+
+    context.playerPosition = dest;
+    context.currentPosition = dest;
+    if (context.entities) {
+      const p = context.entities.find(e => e.type === 'player');
+      if (p) p.position = dest;
+    }
+
+    console.log(`[XELOR PREMONITION] 🌀 TP différé résolu : Xélor -> (${dest.x}, ${dest.y})`);
+    state.premonitionTeleport = undefined;
   }
 
   private processSymmetricTeleportEffect(

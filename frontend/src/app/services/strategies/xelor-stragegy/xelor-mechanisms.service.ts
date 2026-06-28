@@ -29,7 +29,7 @@ export class XelorMechanismsService {
 
   private static readonly ROUAGE_STATUS_EFFECT_CONFIG = {
     area: 'CROSS2',
-    perChargeAmount: 20,
+    perChargeAmount: 17, // refonte: 17 dégâts par charge (valeur appliquée par le moteur)
     maxCharges: 10,
     element: 'Light'
   } as const

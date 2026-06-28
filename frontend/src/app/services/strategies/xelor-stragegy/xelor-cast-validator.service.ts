@@ -58,7 +58,8 @@ export class XelorCastValidatorService {
       console.log(`[XELOR] ✅ Régulateur can be placed on dial hour at (${targetPosition.x}, ${targetPosition.y})`);
     }
 
-    if (spell.id === 'XEL_PARADOXE') {
+    // Contrainte data-driven : certains sorts exigent une cible occupée (ex: Paradoxe).
+    if (spell.requiresOccupiedTarget) {
       const targetEntityInContext = context.entities?.find(entity =>
         entity.position.x === targetPosition.x && entity.position.y === targetPosition.y
       );
@@ -73,10 +74,10 @@ export class XelorCastValidatorService {
       const hasMechanismTarget = !!targetMechanismInContext || !!targetMechanismOnBoard;
 
       if (!hasEntityTarget && !hasMechanismTarget) {
-        console.log(`[XELOR] ❌ Paradoxe cannot be cast on empty cell (${targetPosition.x}, ${targetPosition.y})`);
+        console.log(`[XELOR] ❌ ${spell.name} ne peut pas cibler une case vide (${targetPosition.x}, ${targetPosition.y})`);
         return {
           canCast: false,
-          reason: 'Paradoxe doit cibler une entité ou un mécanisme'
+          reason: `${spell.name} doit cibler une entité ou un mécanisme`
         };
       }
     }

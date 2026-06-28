@@ -134,6 +134,13 @@ interface BoardCell {
 
           <button
             *ngIf="interactivePlay.isActive()"
+            class="btn-interactive-end-turn"
+            (click)="endInteractiveTurn()"
+            title="Terminer le tour : Permutation momentanée + effets de fin de tour, puis début du tour suivant (Horlogerie, TP différé Prémonition)"
+          >Fin de tour</button>
+
+          <button
+            *ngIf="interactivePlay.isActive()"
             class="btn-interactive-reset"
             (click)="resetInteractiveMode()"
             title="Réinitialiser la session interactive"
@@ -2081,7 +2088,8 @@ export class BoardComponent {
     const effectivePoMin = Math.max(0, spell.poMin);
 
     const dist = Math.abs(player.position.x - x) + Math.abs(player.position.y - y);
-    if (dist < effectivePoMin || dist > effectivePoMax) return false;
+    const isSelfCast = dist === 0 && spell.selfCastable === true;
+    if (!isSelfCast && (dist < effectivePoMin || dist > effectivePoMax)) return false;
 
     const dx = x - player.position.x;
     const dy = y - player.position.y;
@@ -2231,6 +2239,11 @@ export class BoardComponent {
       this.interactivePlay.startSessionFreeplay();
     }
     this.isXelorFreeplayActive.set(false);
+  }
+
+  /** Termine le tour courant en jeu interactif (fin de tour puis début du tour suivant). */
+  async endInteractiveTurn(): Promise<void> {
+    await this.interactivePlay.endTurn();
   }
 
   toggleXelorFreeplay(): void {
