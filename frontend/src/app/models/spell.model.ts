@@ -54,6 +54,10 @@ export interface Spell {
   poMin: number;
   poMax: number;
   poModifiable: boolean;
+  /** Si vrai, le sort peut être lancé sur soi (distance 0) même si poMin > 0. */
+  selfCastable?: boolean;
+  /** Si vrai, le sort ne peut cibler qu'une case occupée (entité ou mécanisme), pas une case vide. */
+  requiresOccupiedTarget?: boolean;
   lineOfSight: boolean;
   cooldown: number;
   usePerTurn: number;

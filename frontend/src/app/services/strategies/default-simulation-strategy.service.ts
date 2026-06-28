@@ -79,7 +79,7 @@ export class DefaultSimulationStrategy extends ClassSimulationStrategy {
     // Pas d'initialisation spécifique
   }
 
-  cleanupTurn(context: SimulationContext): void {
+  override cleanupTurn(context: SimulationContext): void {
     // Pas de nettoyage spécifique
   }
 }

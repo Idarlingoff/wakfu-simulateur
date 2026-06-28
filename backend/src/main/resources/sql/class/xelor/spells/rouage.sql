@@ -26,7 +26,7 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
            "owner":"CASTER",
            "area":"CROSS2",
            "element":"LIGHT",
-           "perChargeAmount":20,
+           "perChargeAmount":17,
            "scaleByCharges": true,
            "maxCharges":10
          }'
@@ -43,7 +43,7 @@ INSERT INTO status_effect (status_id, tick_phase, effect_type, params_json) VALU
            "owner":"CASTER",
            "area":"CROSS2",
            "element":"LIGHT",
-           "perChargeAmount":20,
+           "perChargeAmount":17,
            "scaleByCharges": true,
            "maxCharges":10
          }'
@@ -63,7 +63,7 @@ INSERT INTO spell (
 -- Ratio (aucun dégât direct au cast)
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
 VALUES ('XEL_ROUAGE', 'NORMAL',     200, 0),
-       ('XEL_ROUAGE', 'PER_CHARGE', 200, 21);
+       ('XEL_ROUAGE', 'PER_CHARGE', 200, 17); -- refonte: 21 -> 17 par charge
 
 -- Variante unique (pas de crit)
 INSERT INTO spell_variant (spell_id, kind)

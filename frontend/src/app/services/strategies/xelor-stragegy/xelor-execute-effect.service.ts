@@ -23,8 +23,6 @@ export class XelorExecuteEffectService {
     return this.injector.get(XelorDialService);
   }
 
-  private static readonly DESYNCHRO_SPELL_ID = 'XEL_DESYNCHRO';
-  private static readonly DESYNCHRO_DIAL_BONUS_USAGE_KEY = 'XEL_DESYNCHRO_DIAL_BONUS';
 
   /**
    * Exécute un effet selon son type (correspond à effect_type dans la table spell_effect)
@@ -69,9 +67,13 @@ export class XelorExecuteEffectService {
         this.executeDealAroundMechanism(effect, context);
         break;
 
+      case 'MOVE_DIAL_TO_CURRENT_HOUR':
+        this.dial.moveDialToCurrentHour(context);
+        break;
+
       default:
-        console.warn(`[XELOR MAITRE_CADRAN] ⚠️ Unknown effect type: ${effect.effectType}`);
-        console.warn(`[XELOR MAITRE_CADRAN]    Params: ${JSON.stringify(effect.params)}`);
+        console.warn(`[XELOR EFFECT] ⚠️ Unknown effect type: ${effect.effectType}`);
+        console.warn(`[XELOR EFFECT]    Params: ${JSON.stringify(effect.params)}`);
     }
   }
 
@@ -82,8 +84,8 @@ export class XelorExecuteEffectService {
     const amount = effect.params['amount'] || 0;
     const element = effect.params['element'] || 'LIGHT';
 
-    console.log(`[XELOR MAITRE_CADRAN] ⚔️ DEAL_DAMAGE: ${amount} ${element}`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope} at (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
+    console.log(`[XELOR EFFECT] ⚔️ DEAL_DAMAGE: ${amount} ${element}`);
+    console.log(`[XELOR EFFECT]    Target: ${effect.targetScope} at (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
 
     // TODO: Appliquer les dégâts via DamageCalculatorService
   }
@@ -95,8 +97,8 @@ export class XelorExecuteEffectService {
     const amount = effect.params['amount'] || 0;
     const percentMissing = effect.params['percentMissingPerCharge'] || 0;
 
-    console.log(`[XELOR MAITRE_CADRAN] 💚 HEAL: ${amount > 0 ? amount : percentMissing + '% missing HP per charge'}`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+    console.log(`[XELOR EFFECT] 💚 HEAL: ${amount > 0 ? amount : percentMissing + '% missing HP per charge'}`);
+    console.log(`[XELOR EFFECT]    Target: ${effect.targetScope}`);
 
     // TODO: Appliquer les soins
   }
@@ -107,8 +109,8 @@ export class XelorExecuteEffectService {
   private executeTeleport(effect: DelayedEffect): void {
     const to = effect.params['to'] || 'CAST_POS';
 
-    console.log(`[XELOR MAITRE_CADRAN] 🌀 TELEPORT: to ${to}`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+    console.log(`[XELOR EFFECT] 🌀 TELEPORT: to ${to}`);
+    console.log(`[XELOR EFFECT]    Target: ${effect.targetScope}`);
 
     // TODO: Effectuer la téléportation
   }
@@ -120,8 +122,8 @@ export class XelorExecuteEffectService {
     const status = effect.params['status'];
     const duration = effect.params['duration'];
 
-    console.log(`[XELOR MAITRE_CADRAN] 📌 APPLY_STATUS: ${status} (duration: ${duration || 'infinite'})`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+    console.log(`[XELOR EFFECT] 📌 APPLY_STATUS: ${status} (duration: ${duration || 'infinite'})`);
+    console.log(`[XELOR EFFECT]    Target: ${effect.targetScope}`);
 
     // TODO: Appliquer le statut
   }
@@ -133,20 +135,21 @@ export class XelorExecuteEffectService {
   private executeAddAp(effect: DelayedEffect, context: SimulationContext): void {
     const amount = effect.params['amount'] || effect.params['amountPerStep'] || 1;
 
-    console.log(`[XELOR MAITRE_CADRAN] ➕ ADD_AP: +${amount} AP`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target scope: ${effect.targetScope}`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target position: (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
-    console.log(`[XELOR MAITRE_CADRAN]    Caster position at cast time: (${effect.casterPosition.x}, ${effect.casterPosition.y})`);
+    console.log(`[XELOR EFFECT] ➕ ADD_AP: +${amount} AP`);
+    console.log(`[XELOR EFFECT]    Target scope: ${effect.targetScope}`);
+    console.log(`[XELOR EFFECT]    Target position: (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
+    console.log(`[XELOR EFFECT]    Caster position at cast time: (${effect.casterPosition.x}, ${effect.casterPosition.y})`);
 
     const wasAutocast = effect.targetPosition.x === effect.casterPosition.x &&
       effect.targetPosition.y === effect.casterPosition.y;
 
-    console.log(`[XELOR MAITRE_CADRAN]    Was autocast (self-targeted)? ${wasAutocast}`);
+    console.log(`[XELOR EFFECT]    Was autocast (self-targeted)? ${wasAutocast}`);
 
-    const regenerationSource = this.getRegenerationSourceForSpell(effect.spellId, effect.spellName);
+    // Source de régén pilotée par les données (effect.params.regenSource), défaut générique.
+    const regenerationSource = effect.params['regenSource'] ?? 'SPELL_EFFECT';
 
     if (effect.targetScope === 'SELF' || (effect.targetScope === 'TARGET' && wasAutocast)) {
-      console.log(`[XELOR MAITRE_CADRAN] ✅ Applying +${amount} AP to player (from ${effect.spellName}, source: ${regenerationSource})`);
+      console.log(`[XELOR EFFECT] ✅ Applying +${amount} AP to player (from ${effect.spellName}, source: ${regenerationSource})`);
       this.regenerationService.regeneratePA(
         context,
         amount,
@@ -166,7 +169,7 @@ export class XelorExecuteEffectService {
           effect.targetPosition.y === playerPositionFromContext.y);
 
       if (isTargetPlayerNow) {
-        console.log(`[XELOR MAITRE_CADRAN] ✅ Target is now player position, applying +${amount} AP (source: ${regenerationSource})`);
+        console.log(`[XELOR EFFECT] ✅ Target is now player position, applying +${amount} AP (source: ${regenerationSource})`);
         this.regenerationService.regeneratePA(
           context,
           amount,
@@ -175,7 +178,7 @@ export class XelorExecuteEffectService {
           { spellId: effect.spellId, spellName: effect.spellName, trigger: 'ON_HOUR_WRAPPED' }
         );
       } else {
-        console.log(`[XELOR MAITRE_CADRAN] ℹ️ ADD_AP to non-player TARGET at (${effect.targetPosition.x}, ${effect.targetPosition.y}) - effect logged but not applied to context`);
+        console.log(`[XELOR EFFECT] ℹ️ ADD_AP to non-player TARGET at (${effect.targetPosition.x}, ${effect.targetPosition.y}) - effect logged but not applied to context`);
       }
     }
   }
@@ -186,8 +189,8 @@ export class XelorExecuteEffectService {
   private executeSubAp(effect: DelayedEffect): void {
     const amount = effect.params['amount'] || 1;
 
-    console.log(`[XELOR MAITRE_CADRAN] ➖ SUB_AP: -${amount} AP`);
-    console.log(`[XELOR MAITRE_CADRAN]    Target: ${effect.targetScope}`);
+    console.log(`[XELOR EFFECT] ➖ SUB_AP: -${amount} AP`);
+    console.log(`[XELOR EFFECT]    Target: ${effect.targetScope}`);
 
     // TODO: Retirer les PA à la cible
   }
@@ -198,10 +201,10 @@ export class XelorExecuteEffectService {
   private executeAdvanceDial(effect: DelayedEffect, context: SimulationContext): void {
     const hours = effect.params['hours'] || effect.params['by'] || 1;
 
-    console.log(`[XELOR MAITRE_CADRAN] ⏰ ADVANCE_DIAL: +${hours} hour(s)`);
+    console.log(`[XELOR EFFECT] ⏰ ADVANCE_DIAL: +${hours} hour(s)`);
 
     if (!getXelorState(context, true).dialId || getXelorState(context, true).currentDialHour === undefined) {
-      console.log('[XELOR MAITRE_CADRAN]    ℹ️ No active dial in context - ADVANCE_DIAL ignored');
+      console.log('[XELOR EFFECT]    ℹ️ No active dial in context - ADVANCE_DIAL ignored');
       return;
     }
 
@@ -213,7 +216,7 @@ export class XelorExecuteEffectService {
 
     if (newHour !== undefined) {
       this.boardService.setCurrentDialHour(newHour, getXelorState(context, true).dialId);
-      console.log(`[XELOR MAITRE_CADRAN]    ✅ Dial hour: ${oldHour} → ${newHour}`);
+      console.log(`[XELOR EFFECT]    ✅ Dial hour: ${oldHour} → ${newHour}`);
     }
   }
 
@@ -226,33 +229,18 @@ export class XelorExecuteEffectService {
     const perChargeAmount = effect.params['perChargeAmount'] || 0;
     const area = effect.params['area'];
 
-    console.log(`[XELOR MAITRE_CADRAN] 💥 DEAL_AROUND_MECHANISM: ${kind}`);
-    console.log(`[XELOR MAITRE_CADRAN]    Element: ${element}, Area: ${area}`);
-    console.log(`[XELOR MAITRE_CADRAN]    Damage per charge: ${perChargeAmount}`);
+    console.log(`[XELOR EFFECT] 💥 DEAL_AROUND_MECHANISM: ${kind}`);
+    console.log(`[XELOR EFFECT]    Element: ${element}, Area: ${area}`);
+    console.log(`[XELOR EFFECT]    Damage per charge: ${perChargeAmount}`);
 
     const mechanisms = this.boardService.getMechanismsByType(kind.toLowerCase());
     mechanisms.forEach(mechanism => {
       const charges = getXelorState(context, true).mechanismCharges?.get(mechanism.id) || 0;
       const damage = charges * perChargeAmount;
-      console.log(`[XELOR MAITRE_CADRAN]    ${kind} at (${mechanism.position.x}, ${mechanism.position.y}): ${charges} charges → ${damage} ${element} damage`);
+      console.log(`[XELOR EFFECT]    ${kind} at (${mechanism.position.x}, ${mechanism.position.y}): ${charges} charges → ${damage} ${element} damage`);
     });
   }
 
-  /**
-   * Détermine la source de régénération appropriée pour un sort donné
-   */
-  private getRegenerationSourceForSpell(spellId: string, spellName: string): any {
-    const spellIdLower = spellId.toLowerCase();
-
-    if (spellIdLower.includes('devouement') || spellName.toLowerCase().includes('dévouement')) {
-      return 'DEVOUEMENT';
-    }
-    if (spellIdLower.includes('pointe_heure') || spellName.toLowerCase().includes('pointe-heure')) {
-      return 'POINTE_HEURE';
-    }
-
-    return 'SPELL_EFFECT';
-  }
 
   /**
    * Exécute le sort "Retour Spontané"
@@ -365,30 +353,18 @@ export class XelorExecuteEffectService {
   }
 
   /**
-   * Exécute les effets conditionnels ON_CAST d'un sort quand leurs conditions sont remplies.
-   * Cas géré ici: Désynchronisation sur cadran (centre/heure), limité à 1 fois par tour.
+   * Exécute les effets conditionnels ON_CAST d'un sort lancé "sur le cadran".
+   *
+   * Data-driven : tout sort possédant des effets ON_CAST conditionnés par `ON_DIAL_CELL`
+   * est géré ici (Désynchronisation : +6h/+2 PA ; Tempus Fugit : +2 PA + déplace le cadran ; ...).
+   * Le déclenchement est limité à 1 fois par tour et par sort (préserve Désynchronisation).
    */
   public processConditionalOnCastEffects(
     spell: Spell,
     action: TimelineAction,
     context: SimulationContext
   ): void {
-    if (spell.id !== XelorExecuteEffectService.DESYNCHRO_SPELL_ID || !action.targetPosition) {
-      return;
-    }
-
-    const targetMechanism = this.boardService.getMechanismAtPosition(action.targetPosition);
-    const isDialCenter = targetMechanism?.type === 'dial';
-    const isDialHour = this.boardService.isPositionOnDialHour(action.targetPosition, getXelorState(context, true).dialId);
-    if (!isDialCenter && !isDialHour) {
-      return;
-    }
-
-    context.spellUsageThisTurn ??= new Map<string, number>();
-
-    const bonusUsage = context.spellUsageThisTurn.get(XelorExecuteEffectService.DESYNCHRO_DIAL_BONUS_USAGE_KEY) || 0;
-    if (bonusUsage >= 1) {
-      console.log('[XELOR DESYNCHRO] ℹ️ Bonus cadran déjà déclenché ce tour (1/1)');
+    if (!action.targetPosition) {
       return;
     }
 
@@ -403,6 +379,22 @@ export class XelorExecuteEffectService {
       .sort((a, b) => a.ordinal - b.ordinal);
 
     if (conditionalEffects.length === 0) {
+      return; // le sort n'a aucun effet conditionnel "sur cadran"
+    }
+
+    const targetMechanism = this.boardService.getMechanismAtPosition(action.targetPosition);
+    const isDialCenter = targetMechanism?.type === 'dial';
+    const isDialHour = this.boardService.isPositionOnDialHour(action.targetPosition, getXelorState(context, true).dialId);
+    if (!isDialCenter && !isDialHour) {
+      return;
+    }
+
+    // Garde "1 fois par tour", par sort.
+    context.spellUsageThisTurn ??= new Map<string, number>();
+    const usageKey = `${spell.id}_DIAL_BONUS`;
+    const bonusUsage = context.spellUsageThisTurn.get(usageKey) || 0;
+    if (bonusUsage >= 1) {
+      console.log(`[XELOR] ℹ️ Bonus cadran déjà déclenché ce tour pour ${spell.name} (1/1)`);
       return;
     }
 
@@ -421,7 +413,7 @@ export class XelorExecuteEffectService {
       }
 
       this.executeEffect({
-        id: `desynchro_dial_${spell.id}_${effect.id}_${Date.now()}`,
+        id: `dial_bonus_${spell.id}_${effect.id}_${Date.now()}`,
         spellId: spell.id,
         spellName: spell.name,
         originalPhase: 'ON_CAST',
@@ -434,7 +426,7 @@ export class XelorExecuteEffectService {
       }, context);
     });
 
-    context.spellUsageThisTurn.set(XelorExecuteEffectService.DESYNCHRO_DIAL_BONUS_USAGE_KEY, bonusUsage + 1);
-    console.log('[XELOR DESYNCHRO] ✅ Bonus cadran appliqué (avance +6h, +2 PA)');
+    context.spellUsageThisTurn.set(usageKey, bonusUsage + 1);
+    console.log(`[XELOR] ✅ Bonus cadran appliqué pour ${spell.name} (${conditionalEffects.length} effet(s))`);
   }
 }

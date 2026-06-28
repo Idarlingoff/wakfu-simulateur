@@ -64,6 +64,17 @@ export class SpellCastingValidatorService {
       isValidDirection: false
     };
 
+    // Recharge (cooldown) du sort : bloque le lancement tant que la recharge n'est pas écoulée.
+    const cooldownRemaining = context.spellCooldowns?.get(spell.id) ?? 0;
+    if (cooldownRemaining > 0) {
+      console.log(`⏳ [COOLDOWN] ${spell.name} en recharge (${cooldownRemaining} tour(s) restant(s))`);
+      return {
+        canCast: false,
+        reason: `${spell.name} en recharge (${cooldownRemaining} tour(s) restant(s))`,
+        details
+      };
+    }
+
     if (context.availablePa < spell.paCost) {
       return {
         canCast: false,
@@ -99,7 +110,10 @@ export class SpellCastingValidatorService {
       console.log(`   🎯 Portée du joueur: +${playerRange} → Portée effective: ${spell.poMin}-${effectiveMaxRange}`);
     }
 
-    if (distance < spell.poMin || distance > effectiveMaxRange) {
+    // "Lançable sur soi" : autorise la distance 0 même si poMin > 0 (pas de flag self-cast dans le modèle sinon).
+    const isSelfCast = distance === 0 && spell.selfCastable === true;
+
+    if (!isSelfCast && (distance < spell.poMin || distance > effectiveMaxRange)) {
       const rangeInfo = spell.poModifiable && playerRange > 0
         ? `${spell.poMin}-${spell.poMax} (+${playerRange} PO) = ${spell.poMin}-${effectiveMaxRange}`
         : `${spell.poMin}-${spell.poMax}`;
@@ -361,6 +375,10 @@ export class SpellCastingValidatorService {
 
       case 'LINE':
         return dx === 0 || dy === 0;
+
+      case 'AREA':
+        // Ciblage libre (toute case dans la portée), AoE ou non.
+        return true;
 
       case 'CROSS':
         return dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);

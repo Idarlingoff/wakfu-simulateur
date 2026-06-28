@@ -11,6 +11,14 @@ export interface XelorState {
   mechanismsPlacedThisTurn: Map<string, number>;
   distorsionActive: boolean;
   distorsionCooldownRemaining: number;
+  /** Niveau de "tour de cadran" accumulé pour la prochaine Distorsion (0..4). Reset au cast de Distorsion. */
+  distortionPower: number;
+  /** Le +2 PA "tour de cadran" du Cadran a-t-il déjà été accordé ce tour (cap 1x/tour) ? */
+  dialPaBonusGrantedThisTurn: boolean;
+  /** Permutation momentanée : l'échange Xélor<->Cadran a-t-il déjà eu lieu ce tour (garde-fou 1x/tour) ? */
+  permutationDoneThisTurn: boolean;
+  /** Prémonition : TP différé du Xélor enregistré sur une case vide, résolu au tour suivant. */
+  premonitionTeleport?: { position: { x: number; y: number }; turn: number };
   triggeredActions: SimulationActionResult[];
 }
 
@@ -48,6 +56,9 @@ function createDefaultXelorState(): XelorState {
     mechanismsPlacedThisTurn: new Map<string, number>(),
     distorsionActive: false,
     distorsionCooldownRemaining: 0,
+    distortionPower: 0,
+    dialPaBonusGrantedThisTurn: false,
+    permutationDoneThisTurn: false,
     triggeredActions: []
   };
 }

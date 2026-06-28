@@ -7,7 +7,7 @@
  * - Sinistro (mécanisme): 1 PA / 5 charges, max 15 charges = 3 PA max
  * - Régulateur (mécanisme): +1 PW si le régulateur est en vie à la fin de chaque tour
  *   (prend en compte les tours de cadran via Maître du Cadran)
- * - Connaissance du passé (passif)
+ * - Cadran (régén par défaut au tour de cadran : +2 PW, +2 PA 1x/tour)
  * - Cours du temps (passif)
  * - Pointe-heure (sort): rembourse 1 PA si échange effectué
  */
@@ -30,7 +30,6 @@ export type RegenerationSource =
   | 'REGULATEUR'
 
   // Passifs
-  | 'CONNAISSANCE_PASSE'
   | 'COURS_DU_TEMPS'
 
   // Effets de sort génériques
@@ -137,10 +136,12 @@ export class ResourceRegenerationService {
     sinistros.forEach(sinistro => {
       const distanceToPlayer = Math.abs(sinistro.position.x - playerPosition.x) + Math.abs(sinistro.position.y - playerPosition.y);
 
-      if (distanceToPlayer !== 1) {
+      // Refonte: la zone d'effet du Sinistro augmente de 1 (rayon 1 -> 2).
+      const SINISTRO_AURA_RADIUS = 2;
+      if (distanceToPlayer < 1 || distanceToPlayer > SINISTRO_AURA_RADIUS) {
         console.log(
-          `[REGEN] Sinistro ${sinistro.id} ignoré: joueur trop loin ` +
-          `(distance ${distanceToPlayer}, requis: 1)`
+          `[REGEN] Sinistro ${sinistro.id} ignoré: joueur hors zone ` +
+          `(distance ${distanceToPlayer}, rayon ${SINISTRO_AURA_RADIUS})`
         );
         return;
       }
@@ -371,7 +372,6 @@ export class ResourceRegenerationService {
       'POINTE_HEURE': 'Sort Pointe-heure',
       'SINISTRO': 'Mécanisme Sinistro',
       'REGULATEUR': 'Mécanisme Régulateur',
-      'CONNAISSANCE_PASSE': 'Passif Connaissance du passé',
       'COURS_DU_TEMPS': 'Passif Cours du temps',
       'SPELL_EFFECT': 'Effet de sort',
       'REFUND': 'Remboursement',

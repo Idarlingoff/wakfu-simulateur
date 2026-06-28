@@ -1,10 +1,11 @@
-import {inject, Injectable} from '@angular/core';
+import {inject, Injectable, Injector} from '@angular/core';
 import {SimulationContext} from '../../calculators/simulation-engine.service';
 import {Position} from '../../../models/timeline.model';
 import {BoardService} from '../../board.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorMechanismsService} from './xelor-mechanisms.service';
 import {XelorDelayedEffectsService} from './xelor-delayed-effects.service';
+import {XelorTeleportService} from './xelor-teleport.service';
 import { getXelorState } from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
@@ -14,6 +15,11 @@ private readonly boardService = inject(BoardService);
 private readonly xelorPassiveService = inject(XelorPassivesService);
 private readonly xelorMechanismsService = inject(XelorMechanismsService);
 private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
+private readonly injector = inject(Injector);
+
+private get teleport(): XelorTeleportService {
+  return this.injector.get(XelorTeleportService);
+}
 
 
   /**
@@ -179,6 +185,65 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
   }
 
   /**
+   * Déplace le cadran (mécanisme) sur la case de l'heure courante, puis translate
+   * ses 12 heures en conséquence.
+   * Les autres mécanismes posés sur des cases du cadran (ex: Régulateur) NE sont PAS
+   * déplacés : seuls le cadran et ses zones d'heures bougent.
+   * Utilisé par Tempus Fugit (lancé sur le cadran).
+   */
+  public moveDialToCurrentHour(context: SimulationContext): void {
+    const state = getXelorState(context, true);
+    if (!state.dialId || state.currentDialHour === undefined) {
+      console.warn('[XELOR DIAL] ⚠️ moveDialToCurrentHour ignoré : aucun cadran actif');
+      return;
+    }
+
+    const destination = this.boardService.getDialHourPosition(state.currentDialHour, state.dialId);
+    if (!destination) {
+      console.warn(`[XELOR DIAL] ⚠️ Heure courante (${state.currentDialHour}) introuvable - déplacement annulé`);
+      return;
+    }
+
+    const dial = this.boardService.getMechanism(state.dialId);
+    if (!dial || dial.type !== 'dial') {
+      console.warn(`[XELOR DIAL] ⚠️ Cadran introuvable (${state.dialId})`);
+      return;
+    }
+
+    const dialOldPos = { x: dial.position.x, y: dial.position.y };
+    if (dialOldPos.x === destination.x && dialOldPos.y === destination.y) {
+      console.log("[XELOR DIAL] ℹ️ Cadran déjà sur l'heure courante");
+      return;
+    }
+
+    // Si l'heure courante est occupée (entité ennemie/alliée/joueur OU mécanisme), le Cadran ÉCHANGE
+    // avec l'occupant : l'occupant prend l'ancienne place du Cadran. Sinon, simple déplacement.
+    const occupantEntity = this.boardService.getEntityAtPosition(destination);
+    const occupantMechanism = this.boardService.getMechanismAtPosition(destination);
+
+    if (occupantEntity) {
+      console.log(`[XELOR DIAL] 🔄 Heure courante occupée par ${occupantEntity.name} - échange Cadran <-> entité`);
+      // Échange entité <-> cadran : entité -> ancienne position du cadran, cadran -> heure courante.
+      this.boardService.swapEntityWithMechanism(occupantEntity.id, state.dialId);
+      if (occupantEntity.type === 'player') {
+        context.playerPosition = { ...dialOldPos };
+        context.currentPosition = { ...dialOldPos };
+      }
+      const entInCtx = context.entities?.find(e => e.id === occupantEntity.id);
+      if (entInCtx) entInCtx.position = { ...dialOldPos };
+    } else if (occupantMechanism && occupantMechanism.id !== state.dialId) {
+      console.log(`[XELOR DIAL] 🔄 Heure courante occupée par ${occupantMechanism.type} - échange Cadran <-> mécanisme`);
+      this.boardService.swapMechanismPositions(state.dialId, occupantMechanism.id);
+    } else {
+      console.log(`[XELOR DIAL] 🧭 Déplacement du cadran sur l'heure courante (${state.currentDialHour}) -> (${destination.x}, ${destination.y})`);
+      this.boardService.updateMechanismPosition(state.dialId, destination);
+    }
+
+    // Translate les 12 heures autour du nouveau centre du cadran.
+    this.updateDialHoursAfterSwap(state.dialId);
+  }
+
+  /**
    * Avance l'heure du cadran selon le coût en PW d'un sort
    * L'heure courante avance de 1 par PW dépensé
    */
@@ -215,6 +280,15 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       getXelorState(context, true).dialFirstLoopCompleted = true;
     }
 
+    // Tour de cadran RÉEL (hors premier "tour" de la pose) : ordre métier
+    // permutation -> prémonition -> horlogerie -> dégâts indirects (Rouage). Le tout premier wrap
+    // (pose à 12h -> 1h au 1er PW) ne déclenche aucun de ces effets.
+    if (!isFirstLoop) {
+      this.xelorPassiveService.applyPermutationMomentanee(context);  // a) échange Xélor <-> Cadran
+      this.teleport.resolvePremonitionDeferredTeleport(context);     // b) Prémonition : TP différé du Xélor
+      this.xelorPassiveService.applyHorlogerie(context);             // c) Horlogerie : TP sur l'heure courante
+    }
+
     if (getXelorState(context, true).activeAuras?.has('ROUAGE_AURA')) {
       this.xelorMechanismsService.applyRouageDamage(context);
     }
@@ -223,12 +297,17 @@ private readonly xelorDelayedEffectService = inject(XelorDelayedEffectsService);
       this.xelorMechanismsService.applySinistroHealing(context);
     }
 
-    if (this.xelorPassiveService.hasConnaissancePassePassive(context)) {
-      if (isFirstLoop) {
-        console.log('[XELOR CONNAISSANCE_PASSE] ⏳ First loop after dial placement - Connaissance du passé does NOT trigger');
-      } else {
-        this.xelorPassiveService.applyConnaissancePasseRegeneration(context);
-      }
+    // Comportement par défaut du Cadran (refonte : ex-"Connaissance du passé") :
+    // à chaque tour de cadran -> +2 PW ; +2 PA (1x/tour). Ignoré au tout premier tour après la pose.
+    if (isFirstLoop) {
+      console.log('[XELOR CADRAN] ⏳ Premier tour de cadran après la pose - régén par défaut ignorée');
+    } else {
+      this.xelorPassiveService.applyDialDefaultRegeneration(context);
+
+      // Niveau de "tour de cadran" pour le coût dynamique de Distorsion (cap 4).
+      const state = getXelorState(context, true);
+      state.distortionPower = Math.min((state.distortionPower ?? 0) + 1, 4);
+      console.log(`[XELOR] ⏫ Niveau tour de cadran (Distorsion): ${state.distortionPower}`);
     }
 
     if (this.xelorPassiveService.hasMaitreDuCadranPassive(context)) {

@@ -124,4 +124,16 @@ export abstract class ClassSimulationStrategy {
    * @returns Objet avec les coûts supplémentaires { extraPaCost, extraPwCost }
    */
   getSpellExtraCost?(spell: Spell, context: SimulationContext): { extraPaCost: number; extraPwCost: number };
+
+  /**
+   * Hook optionnel appelé au DÉBUT de chaque tour (chaque TimelineStep = un tour).
+   * Permet d'appliquer les effets de début de tour (ex: téléportations de passifs).
+   */
+  onTurnStart?(context: SimulationContext): void;
+
+  /**
+   * Hook optionnel appelé à la FIN de chaque tour (chaque TimelineStep = un tour).
+   * Permet d'appliquer les effets de fin de tour (ticks de mécanismes, échanges, etc.).
+   */
+  cleanupTurn?(context: SimulationContext): void;
 }

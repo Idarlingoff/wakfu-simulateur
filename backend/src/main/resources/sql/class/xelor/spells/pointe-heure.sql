@@ -15,7 +15,7 @@ INSERT INTO spell (
 ) VALUES (
              'XEL_POINTE_HEURE', 'XEL', 'Pointe-heure', 'AIR', 'ELEMENTAL',
              2, 0, 2, 4, TRUE, TRUE,
-             0, 2, 1, 'LINE', 'STEP', 767, FALSE
+             0, 2, 1, 'AREA', 'STEP', 767, FALSE
          );
 
 INSERT INTO spell_ratio_breakpoint (spell_id, kind, lvl, ratio)
@@ -35,7 +35,7 @@ FROM spell_variant v
 WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}'
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK", "diagonalCells":1, "swapPaBonus":true}'
 FROM spell_variant v
 WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='NORMAL';
 
@@ -46,6 +46,6 @@ FROM spell_variant v
 WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';
 
 INSERT INTO spell_effect (variant_id, phase, order_index, effect_type, target_scope, params_json)
-SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK"}'
+SELECT v.id, 'ON_CAST', 1, 'TELEPORT', 'TARGET', '{"cells":2, "direction":"BACK", "diagonalCells":1, "swapPaBonus":true}'
 FROM spell_variant v
 WHERE v.spell_id='XEL_POINTE_HEURE' AND v.kind='CRIT';

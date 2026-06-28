@@ -60,7 +60,7 @@ export interface DelayedEffect {
 
 export interface MovementRecord {
   id: string;
-  type: 'teleport' | 'push' | 'pull' | 'swap' | 'swap_mechanism';
+  type: 'teleport' | 'push' | 'pull' | 'swap' | 'swap_mechanism' | 'move';
   targetId: string;
   targetType: 'entity' | 'mechanism';
   targetName: string;
@@ -97,6 +97,8 @@ export interface SimulationContext {
   spellUsagePerTarget?: Map<string, Map<string, number>>;
   movementHistory?: MovementRecord[];
   freeplay?: boolean;
+  /** Recharge restante par sort, en tours de jeu (0/absent = disponible). */
+  spellCooldowns?: Map<string, number>;
 }
 
 export interface SpellEffectResult {
@@ -207,6 +209,7 @@ export class SimulationEngineService {
           ])
         )
         : undefined,
+      spellCooldowns: context.spellCooldowns ? new Map(context.spellCooldowns) : undefined,
       movementHistory: context.movementHistory?.map(movement => ({
         ...movement,
         fromPosition: this.clonePosition(movement.fromPosition),
@@ -379,7 +382,8 @@ export class SimulationEngineService {
     context: SimulationContext,
     build: Build,
     buildStats: TotalStats,
-    stepNumber: number
+    stepNumber: number,
+    runTurnLifecycle: boolean = true
   ): Promise<SimulationStepResult> {
     console.log('');
     console.log('┌───────────────────────────────────────────────────────┐');
@@ -394,6 +398,15 @@ export class SimulationEngineService {
     let currentContext = this.cloneContext(context);
     let stepSuccess = true;
 
+    // Cycle de tour : pour une timeline pré-écrite, chaque step = un tour (runTurnLifecycle=true).
+    // En jeu interactif (executeSingleStep), une action != un tour -> pas de cycle de tour ici,
+    // il est déclenché explicitement via endInteractiveTurn().
+    if (runTurnLifecycle) {
+      currentContext.turn = stepNumber;
+      this.decrementSpellCooldowns(currentContext);
+      this.currentClassStrategy?.onTurnStart?.(currentContext);
+    }
+
     for (const action of step.actions) {
       console.log(`▶️  Action ${action.type}...`);
       currentContext.currentActionId = action.id;
@@ -407,12 +420,21 @@ export class SimulationEngineService {
         currentContext.availableMp -= actionResult.mpCost;
 
         if (action.type === 'Move' && action.targetPosition) {
-          this.updateContextPosition(currentContext, action.targetPosition);
+          // Position RÉELLE du joueur après le déplacement : un hook onMoveExecuted a pu le
+          // repositionner (ex: tour de cadran déclenché par ce déplacement -> échange Permutation
+          // puis téléportation Horlogerie). Sinon on retombe sur la case d'arrivée du déplacement.
+          const finalPlayerPos = this.boardService.player()?.position ?? action.targetPosition;
+          this.updateContextPosition(currentContext, finalPlayerPos);
         }
       } else {
         stepSuccess = false;
         break;
       }
+    }
+
+    // Fin de tour : effets de fin de tour de la classe (uniquement si step = tour).
+    if (runTurnLifecycle) {
+      this.currentClassStrategy?.cleanupTurn?.(currentContext);
     }
 
     const triggeredActions = this.consumeTriggeredActions(currentContext);
@@ -780,6 +802,23 @@ export class SimulationEngineService {
         console.log(`📊 [USAGE] ${spell.name} sur position (${targetPosition.x}, ${targetPosition.y}): ${currentTargetUsage + 1} utilisation(s) sur cette cible`);
       }
     }
+
+    // Recharge (cooldown) : déclenchée à la réussite du cast, décrémentée à chaque début de tour.
+    if (spell.cooldown && spell.cooldown > 0) {
+      context.spellCooldowns ??= new Map<string, number>();
+      context.spellCooldowns.set(spell.id, spell.cooldown);
+      console.log(`⏳ [COOLDOWN] ${spell.name} en recharge pour ${spell.cooldown} tour(s)`);
+    }
+  }
+
+  /** Décrémente d'1 la recharge de tous les sorts en cooldown (appelé à chaque début de tour). */
+  private decrementSpellCooldowns(context: SimulationContext): void {
+    if (!context.spellCooldowns) return;
+    for (const [spellId, remaining] of context.spellCooldowns) {
+      if (remaining > 0) {
+        context.spellCooldowns.set(spellId, remaining - 1);
+      }
+    }
   }
 
 
@@ -1064,6 +1103,21 @@ export class SimulationEngineService {
       console.log(`${entityToMove.name} orienté vers ${action.targetFacing.direction}`);
     }
 
+    // Trace le déplacement classique (PM/PW) pour Retour Spontané : "annule le dernier mouvement effectué".
+    context.movementHistory ??= [];
+    context.movementHistory.push({
+      id: `move_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+      type: 'move',
+      targetId: entityToMove.id,
+      targetType: 'entity',
+      targetName: entityToMove.name,
+      fromPosition: { ...currentPosition },
+      toPosition: { ...action.targetPosition },
+      sourceActionId: context.currentActionId,
+      timestamp: Date.now(),
+    });
+    console.log(`[MOVE] 📝 Déplacement tracé: ${entityToMove.name} (${currentPosition.x}, ${currentPosition.y}) → (${action.targetPosition.x}, ${action.targetPosition.y})`);
+
     const moveResult: SimulationActionResult = {
       success: true,
       actionId: action.id || '',
@@ -1097,7 +1151,38 @@ export class SimulationEngineService {
       buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, context);
     }
 
-    return await this.executeStep(step, context, build, buildStats, stepNumber);
+    // Jeu interactif : une action n'est PAS un tour -> pas de cycle de tour automatique.
+    return await this.executeStep(step, context, build, buildStats, stepNumber, false);
+  }
+
+  /**
+   * Termine explicitement le tour courant en jeu interactif :
+   * applique les effets de fin de tour (Permutation, ticks mécanismes, purge des mouvements)
+   * puis le début du tour suivant (Horlogerie, TP différé Prémonition, reset des gardes).
+   * Retourne un step result contenant les actions déclenchées (pour l'affichage).
+   */
+  endInteractiveTurn(context: SimulationContext, build: Build): SimulationStepResult {
+    this.currentClassStrategy ??= this.classStrategyFactory.getStrategyForBuild(build);
+
+    const ctx = this.cloneContext(context);
+
+    // Fin du tour courant
+    this.currentClassStrategy?.cleanupTurn?.(ctx);
+
+    // Début du tour suivant
+    ctx.turn = (ctx.turn || 1) + 1;
+    this.decrementSpellCooldowns(ctx);
+    this.currentClassStrategy?.onTurnStart?.(ctx);
+
+    const triggeredActions = this.consumeTriggeredActions(ctx);
+
+    return {
+      stepId: `turn_end_${Date.now()}`,
+      stepNumber: ctx.turn,
+      actions: triggeredActions,
+      contextAfter: this.cloneContext(ctx),
+      success: true
+    };
   }
 
 
