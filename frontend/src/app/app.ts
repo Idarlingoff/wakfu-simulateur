@@ -1,27 +1,14 @@
 import { Component, inject } from '@angular/core';
-import { DashboardComponent } from './components/dashboard.component';
-import { ThemeToggleComponent } from './ui/theme-toggle.component';
+import { AppShellComponent } from './layout/app-shell.component';
 import { ThemeService } from './services/theme.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [DashboardComponent, ThemeToggleComponent],
-  template: `
-    <div class="app-toolbar">
-      <ui-theme-toggle></ui-theme-toggle>
-    </div>
-    <app-dashboard></app-dashboard>
-  `,
-  styles: [`
-    .app-toolbar {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      padding: 8px 12px;
-    }
-  `],
+  imports: [AppShellComponent],
+  template: `<app-shell></app-shell>`,
 })
 export class App {
+  // Injecté pour appliquer le thème (data-theme) dès le bootstrap via son constructeur.
   private readonly theme = inject(ThemeService);
 }
