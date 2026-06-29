@@ -105,26 +105,15 @@ interface ResourceSummary {
     </div>
   `,
   styles: [`
-    :root {
-      --bg: #0f1115;
-      --panel: #181b22;
-      --panel-2: #1d2230;
-      --muted: #8c9bb3;
-      --accent: #4cc9f0;
-      --good: #7bd88f;
-      --bad: #ef476f;
-      --stroke: #2a2f3a;
-    }
-
     .timeline-summary {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 12px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .summary-header {
@@ -132,23 +121,23 @@ interface ResourceSummary {
       justify-content: space-between;
       align-items: center;
       padding-bottom: 10px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .summary-header h3 {
       margin: 0;
       font-size: 14px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 1px;
     }
 
     .current-step {
       font-size: 11px;
-      color: var(--accent);
+      color: var(--app-accent);
       font-weight: 600;
-      background: rgba(76, 201, 240, 0.1);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
       padding: 3px 10px;
       border-radius: 12px;
     }
@@ -160,8 +149,8 @@ interface ResourceSummary {
     }
 
     .resource-card {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 10px;
       display: flex;
@@ -169,7 +158,7 @@ interface ResourceSummary {
       gap: 6px;
     }
 
-    .resource-card.ap { border-top: 2px solid #4cc9f0; }
+    .resource-card.ap { border-top: 2px solid var(--app-accent); }
     .resource-card.mp { border-top: 2px solid #7bd88f; }
     .resource-card.wp { border-top: 2px solid #a78bfa; }
 
@@ -188,7 +177,7 @@ interface ResourceSummary {
     .resource-label {
       font-size: 13px;
       font-weight: 700;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .resource-stats {
@@ -202,35 +191,35 @@ interface ResourceSummary {
       justify-content: space-between;
       align-items: center;
       padding: 3px 6px;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 4px;
       font-size: 11px;
     }
 
     .stat-item.highlight {
-      background: rgba(76, 201, 240, 0.1);
-      border: 1px solid rgba(76, 201, 240, 0.3);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border: 1px solid color-mix(in srgb, var(--app-accent) 30%, transparent);
       font-weight: 700;
     }
 
-    .stat-label { color: var(--muted); }
+    .stat-label { color: var(--app-text-muted); }
 
     .stat-value {
-      color: #e8ecf3;
+      color: var(--app-text);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
     }
 
-    .stat-value.negative { color: var(--bad); }
-    .stat-value.positive { color: var(--good); }
+    .stat-value.negative { color: var(--app-danger); }
+    .stat-value.positive { color: var(--app-success); }
 
     .no-timeline {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       padding: 24px;
       text-align: center;
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-style: italic;
       font-size: 12px;
     }

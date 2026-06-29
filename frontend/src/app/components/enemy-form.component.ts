@@ -77,8 +77,8 @@ interface EnemyForm {
     }
 
     .modal {
-      background: #181b22;
-      border: 1px solid #2a2f3a;
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       width: 500px;
       max-width: 90vw;
@@ -92,20 +92,20 @@ interface EnemyForm {
       justify-content: space-between;
       align-items: center;
       padding: 20px;
-      border-bottom: 1px solid #2a2f3a;
+      border-bottom: 1px solid var(--app-border);
       background: linear-gradient(135deg, rgba(239, 71, 111, 0.1), rgba(239, 71, 111, 0.05));
     }
 
     .modal-header h2 {
       margin: 0;
       font-size: 20px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .close {
       background: transparent;
-      border: 1px solid #2a2f3a;
-      color: #8c9bb3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text-muted);
       font-size: 20px;
       width: 32px;
       height: 32px;
@@ -157,9 +157,9 @@ interface EnemyForm {
 
     .form-group input,
     .form-group select {
-      background: #1d2230;
-      border: 1px solid #2a2f3a;
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 10px 12px;
       border-radius: 6px;
       font-size: 14px;
@@ -183,7 +183,7 @@ interface EnemyForm {
       gap: 12px;
       margin-top: 24px;
       padding-top: 20px;
-      border-top: 1px solid #2a2f3a;
+      border-top: 1px solid var(--app-border);
     }
 
     .btn-primary,
@@ -212,9 +212,9 @@ interface EnemyForm {
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid #2a2f3a;
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
     }
 
     .btn-secondary:hover {

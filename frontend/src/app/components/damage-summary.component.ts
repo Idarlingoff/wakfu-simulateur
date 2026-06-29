@@ -113,22 +113,11 @@ import { Spell } from '../models/spell.model';
     </div>
   `,
   styles: [`
-    :root {
-      --bg: #0f1115;
-      --panel: #181b22;
-      --panel-2: #1d2230;
-      --muted: #8c9bb3;
-      --accent: #4cc9f0;
-      --good: #7bd88f;
-      --bad: #ef476f;
-      --stroke: #2a2f3a;
-    }
-
     .damage-summary {
       display: flex;
       flex-direction: column;
       gap: 12px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .summary-title {
@@ -137,7 +126,7 @@ import { Spell } from '../models/spell.model';
       gap: 8px;
       font-size: 14px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 1px;
     }
@@ -165,7 +154,7 @@ import { Spell } from '../models/spell.model';
 
     .total-label {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-weight: 600;
     }
 
@@ -181,7 +170,7 @@ import { Spell } from '../models/spell.model';
     }
 
     .total-value.heal {
-      color: var(--good);
+      color: var(--app-success);
       font-size: 16px;
     }
 
@@ -199,7 +188,7 @@ import { Spell } from '../models/spell.model';
 
     .progress-label {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       white-space: nowrap;
@@ -208,21 +197,21 @@ import { Spell } from '../models/spell.model';
     .progress-bar {
       flex: 1;
       height: 4px;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       border-radius: 2px;
       overflow: hidden;
     }
 
     .progress-fill {
       height: 100%;
-      background: linear-gradient(90deg, var(--accent), #5ad7f0);
+      background: linear-gradient(90deg, var(--app-accent), #5ad7f0);
       border-radius: 2px;
       transition: width 0.4s ease;
     }
 
     .progress-text {
       font-size: 11px;
-      color: var(--accent);
+      color: var(--app-accent);
       font-weight: 600;
       font-variant-numeric: tabular-nums;
       white-space: nowrap;
@@ -247,22 +236,22 @@ import { Spell } from '../models/spell.model';
     }
 
     .steps-list::-webkit-scrollbar-thumb {
-      background: var(--stroke);
+      background: var(--app-border);
       border-radius: 2px;
     }
 
     .step-card {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 8px;
       transition: all 0.2s;
     }
 
     .step-card.current {
-      border-color: var(--accent);
-      background: rgba(76, 201, 240, 0.08);
-      box-shadow: 0 0 8px rgba(76, 201, 240, 0.15);
+      border-color: var(--app-accent);
+      background: color-mix(in srgb, var(--app-accent) 8%, transparent);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 15%, transparent);
     }
 
     .step-header {
@@ -273,8 +262,8 @@ import { Spell } from '../models/spell.model';
     }
 
     .step-number {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       padding: 1px 7px;
       border-radius: 4px;
       font-size: 10px;
@@ -299,7 +288,7 @@ import { Spell } from '../models/spell.model';
       justify-content: space-between;
       align-items: center;
       padding: 4px 6px;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 4px;
       font-size: 11px;
     }
@@ -321,8 +310,8 @@ import { Spell } from '../models/spell.model';
     }
 
     .action-icon.spell-icon {
-      border: 1px solid var(--stroke);
-      background: var(--panel-2);
+      border: 1px solid var(--app-border);
+      background: var(--app-surface-2);
     }
 
     .action-icon.mp-icon {
@@ -347,7 +336,7 @@ import { Spell } from '../models/spell.model';
 
     .action-spell-name {
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -359,7 +348,7 @@ import { Spell } from '../models/spell.model';
     }
 
     .action-spell-name.Move {
-      color: var(--good);
+      color: var(--app-success);
     }
 
     .action-spell-name.TriggerExplosion {
@@ -389,7 +378,7 @@ import { Spell } from '../models/spell.model';
     }
 
     .val.heal {
-      color: var(--good);
+      color: var(--app-success);
     }
 
     .val.shield {
@@ -397,7 +386,7 @@ import { Spell } from '../models/spell.model';
     }
 
     .val.pa-regen {
-      color: #e8ecf3;
+      color: var(--app-text);
       display: flex;
       align-items: center;
       gap: 2px;
@@ -411,7 +400,7 @@ import { Spell } from '../models/spell.model';
     }
 
     .val.muted {
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-weight: 400;
     }
 
@@ -422,7 +411,7 @@ import { Spell } from '../models/spell.model';
       align-items: center;
       gap: 8px;
       padding: 32px 16px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-style: italic;
       font-size: 12px;
       text-align: center;

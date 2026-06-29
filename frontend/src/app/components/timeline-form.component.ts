@@ -226,8 +226,8 @@ interface FormStep {
     }
 
     .modal {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 16px;
       width: 90%;
       max-width: 700px;
@@ -242,19 +242,19 @@ interface FormStep {
       justify-content: space-between;
       align-items: center;
       padding: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .modal-header h2 {
       margin: 0;
-      color: #cfe3ff;
+      color: var(--app-text);
       font-size: 18px;
     }
 
     .close {
       background: transparent;
       border: none;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 20px;
       cursor: pointer;
       padding: 0;
@@ -272,7 +272,7 @@ interface FormStep {
 
     .form-section h3 {
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       margin: 0 0 12px 0;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -286,7 +286,7 @@ interface FormStep {
 
     .form-group label {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       margin-bottom: 6px;
       font-weight: 500;
     }
@@ -294,9 +294,9 @@ interface FormStep {
     .form-group input,
     .form-group select,
     .form-group textarea {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 8px 10px;
       font-family: inherit;
@@ -307,8 +307,8 @@ interface FormStep {
     .form-group select:focus,
     .form-group textarea:focus {
       outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 8px rgba(76, 201, 240, 0.2);
+      border-color: var(--app-accent);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 20%, transparent);
     }
 
     .form-row {
@@ -327,8 +327,8 @@ interface FormStep {
     }
 
     .step-card {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       padding: 12px;
     }
@@ -339,12 +339,12 @@ interface FormStep {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .step-number {
       font-weight: 600;
-      color: var(--accent);
+      color: var(--app-accent);
       font-size: 13px;
     }
 
@@ -356,8 +356,8 @@ interface FormStep {
 
     .btn-move {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 4px 8px;
       cursor: pointer;
@@ -366,9 +366,9 @@ interface FormStep {
     }
 
     .btn-move:hover:not(:disabled) {
-      background: var(--accent);
-      color: #0b1220;
-      border-color: var(--accent);
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .btn-move:disabled {
@@ -378,8 +378,8 @@ interface FormStep {
 
     .btn-remove {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 4px 8px;
       cursor: pointer;
@@ -387,9 +387,9 @@ interface FormStep {
     }
 
     .btn-remove:hover {
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
-      border-color: var(--bad);
+      border-color: var(--app-danger);
     }
 
     .step-form {
@@ -399,9 +399,9 @@ interface FormStep {
     }
 
     .btn-add-step {
-      background: #253044;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 8px 12px;
       cursor: pointer;
@@ -409,16 +409,16 @@ interface FormStep {
     }
 
     .btn-add-step:hover {
-      background: var(--accent);
-      color: #0b1220;
-      border-color: var(--accent);
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .form-actions {
       display: flex;
       gap: 8px;
       padding-top: 16px;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
       margin-top: 24px;
     }
 
@@ -436,7 +436,7 @@ interface FormStep {
 
     .btn-primary {
       background: linear-gradient(135deg, #7aa2f7, #5ad7f0);
-      color: #0b1220;
+      color: var(--app-accent-contrast);
       flex: 1;
     }
 
@@ -445,17 +445,17 @@ interface FormStep {
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
     }
 
     .btn-secondary:hover {
-      background: #2d3a4f;
+      background: var(--app-surface-2);
     }
 
     .btn-danger {
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
     }
 
