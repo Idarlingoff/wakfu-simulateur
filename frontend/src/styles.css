@@ -52,21 +52,21 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--stroke);
+  background: var(--app-border);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a4555;
+  background: var(--app-border-strong);
 }
 
 /* Base Form Elements */
 input,
 select,
 textarea {
-  background: var(--panel-2);
-  border: 1px solid var(--stroke);
-  color: #e8ecf3;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   border-radius: var(--radius-sm);
   padding: 8px;
   font-family: inherit;
@@ -77,19 +77,19 @@ input:focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 8px rgba(76, 201, 240, 0.2);
+  border-color: var(--app-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 25%, transparent);
 }
 
 input::placeholder {
-  color: var(--muted);
+  color: var(--app-text-muted);
 }
 
 /* Buttons */
 button:not([ui-button]):not(.ui-theme-toggle) {
-  background: #253044;
-  border: 1px solid var(--stroke);
-  color: #e8ecf3;
+  background: var(--app-surface-2);
+  border: 1px solid var(--app-border);
+  color: var(--app-text);
   border-radius: var(--radius-sm);
   padding: 8px 12px;
   cursor: pointer;
@@ -99,8 +99,7 @@ button:not([ui-button]):not(.ui-theme-toggle) {
 }
 
 button:hover:not([ui-button]):not(.ui-theme-toggle) {
-  background: #2d3a4f;
-  opacity: 0.9;
+  background: var(--app-border);
 }
 
 button:active:not([ui-button]):not(.ui-theme-toggle) {
