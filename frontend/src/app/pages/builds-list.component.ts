@@ -39,7 +39,7 @@ import { Build } from '../models/build.model';
                 <span>{{ build.stats.wp }} PW</span>
               </div>
               <div class="card-actions">
-                <button ui-button variant="ghost" (click)="selectBuild(build)">Sélectionner</button>
+                <button ui-button variant="ghost" (click)="selectBuild(build)" [attr.aria-label]="'Sélectionner ' + build.name">Sélectionner</button>
                 <button ui-button variant="ghost" (click)="editBuild(build)" [attr.aria-label]="'Modifier ' + build.name">Modifier</button>
                 <button ui-button variant="danger" (click)="deleteBuild(build)" [attr.aria-label]="'Supprimer ' + build.name">Supprimer</button>
               </div>
