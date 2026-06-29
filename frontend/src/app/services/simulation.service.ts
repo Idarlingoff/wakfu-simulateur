@@ -252,7 +252,10 @@ export class SimulationService {
       steps: timeline.steps.slice(0, stepIndex + 1)
     };
 
-    const result = await this.simulationEngine.runSimulation(build, partialTimeline);
+    // Navigation pas-à-pas : on N'applique PAS le cycle de tour automatiquement (cohérent avec le
+    // chemin incrémental `executeSingleStep` utilisé pour les étapes suivantes). Les effets de fin de
+    // tour (Permutation momentanée, explosion Rouage, etc.) sont déclenchés explicitement via endTurn().
+    const result = await this.simulationEngine.runSimulation(build, partialTimeline, false);
 
     this.simulationResultsCache = result;
     this.currentTimelineId = timeline.id || '';
@@ -311,6 +314,25 @@ export class SimulationService {
       console.error('💥 [executeStep] Erreur lors de l\'exécution du step:', error);
       return false;
     }
+  }
+
+  /**
+   * Termine explicitement le tour courant en navigation timeline : applique les effets de fin de tour
+   * (Permutation momentanée, ticks mécanismes…) puis le début du tour suivant (Horlogerie, TP Prémonition)
+   * sur le contexte courant du cache. Le board est muté par le moteur ; les actions déclenchées sont
+   * ajoutées à l'affichage. N'altère PAS le découpage des steps de la timeline (pas de désync de la nav).
+   */
+  endTimelineTurn(build: Build): SimulationStepResult | null {
+    if (!this.simulationResultsCache) {
+      console.warn('[SimulationService] endTimelineTurn: aucun cache de simulation actif');
+      return null;
+    }
+
+    const result = this.simulationEngine.endInteractiveTurn(this.simulationResultsCache.finalContext, build);
+    this.simulationResultsCache.finalContext = result.contextAfter;
+    this.appendInteractiveStep(result);
+    console.log(`⏭️ [SimulationService] Fin de tour timeline → tour ${result.contextAfter.turn}`);
+    return result;
   }
 
   /**

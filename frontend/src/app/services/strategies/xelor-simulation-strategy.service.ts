@@ -44,6 +44,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
   private readonly executeEffect = inject(XelorExecuteEffectService);
 
   private static readonly DISTORSION_SPELL_ID = 'XEL_DISTO';
+  private static readonly VOL_DU_TEMPS_SPELL_ID = 'XEL_VDT';
 
   /**
    * Vérifie les conditions de lancement spécifiques au Xelor
@@ -75,6 +76,22 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
 
     if (actionResult.success && spell.id === XelorSimulationStrategy.DISTORSION_SPELL_ID) {
       this.activateDistorsion(context);
+    }
+
+    // Vol du Temps : convertit les PW dépensés en PA. Le PW (stacks + 1) est déjà décompté via le coût
+    // dynamique (getSpellExtraCost) ; ici on rend le MÊME montant en PA, puis on incrémente les stacks.
+    if (actionResult.success && spell.id === XelorSimulationStrategy.VOL_DU_TEMPS_SPELL_ID) {
+      const state = getXelorState(context, true);
+      const paGain = (state.timeStealStacks ?? 0) + 1;
+      this.regenerationService.regeneratePA(
+        context,
+        paGain,
+        'SPELL_EFFECT',
+        `Vol du Temps: +${paGain} PA (${paGain} PW converti(s))`,
+        { spellId: spell.id, spellName: spell.name, stacks: state.timeStealStacks ?? 0 }
+      );
+      state.timeStealStacks = (state.timeStealStacks ?? 0) + 1;
+      console.log(`[XELOR VOL_DU_TEMPS] ⚡ +${paGain} PA — stacks: ${state.timeStealStacks}`);
     }
 
     const mechanismType = getSpellMechanismType(spell.id);
@@ -358,6 +375,16 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
       console.log(`[XELOR] 💰 Surcoût ${spell.name}: +${extra} ${data['resource'] ?? 'PW'} (passif ${passiveId})`);
     }
 
+    // Vol du Temps : coût dynamique = base (1 PW) + 1 PW par stack TIME_STEAL déjà accumulé,
+    // soit (stacks + 1) PW au total. Le gain de PA équivalent est appliqué dans processClassSpecificEffects.
+    if (spell.id === XelorSimulationStrategy.VOL_DU_TEMPS_SPELL_ID) {
+      const stacks = getXelorState(context, true).timeStealStacks ?? 0;
+      if (stacks > 0) {
+        extraPwCost += stacks;
+        console.log(`[XELOR VOL_DU_TEMPS] 💰 Coût dynamique: +${stacks} PW (${stacks} stack(s), total ${spell.pwCost + extraPwCost} PW)`);
+      }
+    }
+
     // Distorsion : coût dynamique = +1 PW par niveau de "tour de cadran". Reste basé sur l'identifiant
     // de sort car le compteur (distortionPower) est un état de classe (pas de système de stacks générique).
     if (spell.id === XelorSimulationStrategy.DISTORSION_SPELL_ID) {
@@ -409,6 +436,7 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     getXelorState(context, true).distortionPower = 0;
     getXelorState(context, true).dialPaBonusGrantedThisTurn = false;
     getXelorState(context, true).permutationDoneThisTurn = false;
+    getXelorState(context, true).timeStealStacks = 0;
 
     const mechanisms = this.boardService.mechanisms();
     mechanisms.forEach(mechanism => {
@@ -498,8 +526,17 @@ export class XelorSimulationStrategy extends ClassSimulationStrategy {
     // 3. Appliquer le bonus PW du Régulateur en fin de tour
     this.applyRegulatorPwBonus(context);
 
-    // 4. Décrémenter le cooldown de Distorsion
+    // 4. Décrémenter le cooldown de Distorsion (relance en cours d'un tour précédent).
     this.decrementDistorsionCooldown(context);
+
+    // 4b. Fin de l'état Distorsion : il ne dure que le tour COMPLET où il a été lancé
+    //     (pas un tour de cadran). À la vraie fin de tour, Distorsion se désactive -> Cours du temps
+    //     repasse en +1 PW, et la relance (3 tours) démarre. Gardé pour ne pas réarmer le cooldown
+    //     sur les tours où Distorsion n'était pas active. Placé APRÈS le décrément pour que la relance
+    //     fraîchement posée (3) ne soit pas décrémentée dès ce tour.
+    if (getXelorState(context, true).distorsionActive) {
+      this.deactivateDistorsion(context);
+    }
 
     // 5. Effacer l'historique des mouvements (pour "Retour Spontané")
     this.clearMovementHistory(context);

@@ -10,6 +10,7 @@ import { BoardEntity, Mechanism } from '../models/board.model';
 import { Position, TimelineAction } from '../models/timeline.model';
 import { Build } from '../models/build.model';
 import { Spell } from '../models/spell.model';
+import { Passive } from '../models/passive.model';
 import { DataCacheService } from '../services/data-cache.service';
 import { StatsCalculatorService } from '../services/calculators/stats-calculator.service';
 import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
@@ -66,6 +67,17 @@ interface BoardCell {
 
           <div class="divider"></div>
 
+          <!-- Fin de tour explicite : déclenche Permutation momentanée, explosions Rouage/Sinistro, etc. -->
+          <button
+            (click)="onEndTurn()"
+            [disabled]="currentStepIndex() === 0 || isSimulating()"
+            class="btn-end-turn"
+            title="Terminer le tour : effets de fin de tour (Permutation momentanée, explosion Rouage…) puis début du tour suivant (Horlogerie, Prémonition)">
+            ⏭ Fin de tour
+          </button>
+
+          <div class="divider"></div>
+
           <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">Réinitialiser</button>
         </div>
       </div>
@@ -117,20 +129,52 @@ interface BoardCell {
             }
           </button>
 
-          <!-- Toggle Rémanence (visible uniquement quand le mode Xel Freeplay est actif) -->
-          <button
-            *ngIf="isXelorFreeplayActive() && interactivePlay.isActive()"
-            class="btn-remanence-toggle"
-            [class.enabled]="xelorRemanenceEnabled()"
-            (click)="toggleXelorRemanence()"
-            title="{{ xelorRemanenceEnabled() ? 'Rémanence active (cliquer pour désactiver)' : 'Rémanence inactive (cliquer pour activer)' }}"
-          >
-            @if (xelorRemanenceEnabled()) {
-              <span>Rémanence ✓</span>
-            } @else {
-              <span>Rémanence ✗</span>
+          <!-- Menu Passifs (visible uniquement quand le mode Xel Freeplay est actif) -->
+          <div class="passives-menu-wrapper" *ngIf="isXelorFreeplayActive() && interactivePlay.isActive()">
+            <button
+              class="btn-passives-menu"
+              [class.open]="xelorPassivesMenuOpen()"
+              (click)="toggleXelorPassivesMenu()"
+              title="Configurer les passifs actifs du Freeplay Xel Rouage"
+            >⚙ Passifs ({{ activeXelorOptionalCount() }})</button>
+
+            @if (xelorPassivesMenuOpen()) {
+              <div class="passives-menu-backdrop" (click)="xelorPassivesMenuOpen.set(false)"></div>
+              <div class="passives-menu-panel">
+                <div class="passives-menu-title">Passifs Xel Rouage</div>
+
+                <div class="passives-menu-section">Obligatoires</div>
+                @for (p of mandatoryXelorPassives(); track p.id) {
+                  <div class="passive-row mandatory" [title]="getXelorPassiveDescription(p.id)">
+                    <span class="passive-lock">🔒</span>
+                    <img *ngIf="getXelorPassiveIconId(p.id)" class="passive-row-icon"
+                         [src]="'assets/images/spells/' + getXelorPassiveIconId(p.id) + '.png'"
+                         [alt]="getXelorPassiveName(p.id)" (error)="onSpellImgError($event)" />
+                    <span class="passive-row-name">{{ getXelorPassiveName(p.id) }}</span>
+                  </div>
+                }
+
+                <div class="passives-menu-separator"></div>
+                <div class="passives-menu-section">Optionnels</div>
+                @for (p of optionalXelorPassives(); track p.id) {
+                  <button
+                    class="passive-row optional"
+                    [class.enabled]="isXelorOptionalEnabled(p.id)"
+                    [title]="getXelorPassiveDescription(p.id)"
+                    (click)="toggleXelorOptionalPassive(p.id)"
+                  >
+                    <img *ngIf="getXelorPassiveIconId(p.id)" class="passive-row-icon"
+                         [src]="'assets/images/spells/' + getXelorPassiveIconId(p.id) + '.png'"
+                         [alt]="getXelorPassiveName(p.id)" (error)="onSpellImgError($event)" />
+                    <span class="passive-row-name">{{ getXelorPassiveName(p.id) }}</span>
+                    <span class="passive-switch" [class.on]="isXelorOptionalEnabled(p.id)">
+                      <span class="passive-switch-knob"></span>
+                    </span>
+                  </button>
+                }
+              </div>
             }
-          </button>
+          </div>
 
           <button
             *ngIf="interactivePlay.isActive()"
@@ -483,7 +527,7 @@ interface BoardCell {
       flex-wrap: wrap;
     }
 
-    .btn-nav, .btn-reset, .btn-run-full {
+    .btn-nav, .btn-reset, .btn-run-full, .btn-end-turn {
       background: #253044;
       border: 1px solid var(--stroke);
       color: #e8ecf3;
@@ -492,6 +536,23 @@ interface BoardCell {
       cursor: pointer;
       font-size: 12px;
       transition: all 0.2s;
+    }
+
+    .btn-end-turn {
+      background: rgba(255, 209, 102, 0.12);
+      border-color: rgba(255, 209, 102, 0.5);
+      color: #ffd166;
+      font-weight: 600;
+    }
+
+    .btn-end-turn:hover:not(:disabled) {
+      background: rgba(255, 209, 102, 0.25);
+      border-color: #ffd166;
+    }
+
+    .btn-end-turn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .btn-run-full {
@@ -1598,8 +1659,13 @@ interface BoardCell {
       color: #0b1220 !important;
     }
 
-    /* ── Bouton toggle Rémanence ── */
-    .btn-remanence-toggle {
+    /* ── Menu Passifs (Freeplay Xel Rouage) ── */
+    .passives-menu-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+
+    .btn-passives-menu {
       background: #1a1e2a;
       border: 1px solid #555a6e;
       color: #8c9bb3;
@@ -1611,16 +1677,133 @@ interface BoardCell {
       transition: all 0.2s;
     }
 
-    .btn-remanence-toggle.enabled {
-      background: rgba(167, 139, 250, 0.15);
-      border-color: #a78bfa;
-      color: #a78bfa;
-    }
-
-    .btn-remanence-toggle:hover {
-      background: rgba(167, 139, 250, 0.25);
+    .btn-passives-menu:hover,
+    .btn-passives-menu.open {
+      background: rgba(167, 139, 250, 0.2);
       border-color: #a78bfa;
       color: #c4b5fd;
+    }
+
+    .passives-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+    }
+
+    .passives-menu-panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      z-index: 50;
+      min-width: 248px;
+      background: #161a26;
+      border: 1px solid #555a6e;
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+
+    .passives-menu-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffd166;
+      padding: 2px 4px 6px;
+    }
+
+    .passives-menu-section {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #6b7280;
+      padding: 4px 4px 2px;
+    }
+
+    .passives-menu-separator {
+      height: 1px;
+      background: #2a2f3e;
+      margin: 6px 2px;
+    }
+
+    .passive-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 5px 6px;
+      border-radius: 6px;
+      text-align: left;
+      font-size: 12px;
+      color: #c7cdda;
+      background: transparent;
+      border: 1px solid transparent;
+    }
+
+    .passive-row.mandatory {
+      color: #8c9bb3;
+      cursor: default;
+    }
+
+    .passive-row.optional {
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+    .passive-row.optional:hover {
+      background: rgba(167, 139, 250, 0.1);
+      border-color: rgba(167, 139, 250, 0.4);
+    }
+
+    .passive-row.optional.enabled {
+      color: #e8ebf2;
+    }
+
+    .passive-row-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    .passive-lock {
+      font-size: 11px;
+      width: 16px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .passive-row-name {
+      flex: 1;
+    }
+
+    .passive-switch {
+      width: 34px;
+      height: 18px;
+      border-radius: 9px;
+      background: #3a3f4e;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    .passive-switch.on {
+      background: #a78bfa;
+    }
+
+    .passive-switch-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+
+    .passive-switch.on .passive-switch-knob {
+      transform: translateX(16px);
     }
 
     /* ── Bandeau Xel Rouage actif ── */
@@ -1781,8 +1964,34 @@ export class BoardComponent {
   hoveredPlayerId = signal<string | null>(null);
 
   /** Mode Freeplay Xel Rouage */
-  xelorRemanenceEnabled = signal<boolean>(true);
   isXelorFreeplayActive = signal<boolean>(false);
+
+  /**
+   * Passifs proposés dans le menu du Freeplay Xel Rouage.
+   * `mandatory` = imposé (verrouillé, toujours actif) ; sinon togglable.
+   * L'ordre définit l'affichage du menu.
+   */
+  readonly xelorFreeplayPassives: ReadonlyArray<{ id: string; mandatory: boolean }> = [
+    { id: 'XEL_MAITRE_CADRAN', mandatory: true },
+    { id: 'XEL_MECANISMES_SPECIALISES', mandatory: true },
+    { id: 'XEL_COURS_TEMPS', mandatory: true },
+    { id: 'XEL_REMANENCE', mandatory: false },
+    { id: 'XEL_HORLOGERIE', mandatory: false },
+    { id: 'XEL_PERMUTATION_MOMENTANEE', mandatory: false },
+  ];
+
+  /** État activé des passifs optionnels du Freeplay Xel Rouage (défaut : tous ON). */
+  xelorOptionalPassivesEnabled = signal<Record<string, boolean>>({
+    XEL_REMANENCE: true,
+    XEL_HORLOGERIE: true,
+    XEL_PERMUTATION_MOMENTANEE: true,
+  });
+
+  /** Ouverture du panneau de configuration des passifs. */
+  xelorPassivesMenuOpen = signal<boolean>(false);
+
+  /** Données passifs Xélor (nom/icône/description) résolues depuis Passives.json. */
+  xelorPassivesData = signal<Passive[]>([]);
 
   /** Tooltip portal */
   tooltipSpell = signal<Spell | null>(null);
@@ -1832,6 +2041,18 @@ export class BoardComponent {
         }
       }
     });
+
+    // Précharge les passifs Xélor pour alimenter le menu du Freeplay Xel Rouage.
+    this.loadXelorPassivesData();
+  }
+
+  /** Charge les passifs Xélor (nom/icône/description) depuis le cache de données. */
+  private async loadXelorPassivesData(): Promise<void> {
+    try {
+      this.xelorPassivesData.set(await this.dataCacheService.getPassives('XEL'));
+    } catch {
+      // Données indisponibles : le menu retombera sur les ids bruts.
+    }
   }
 
   /** Classe effective : build sélectionné ou joueur par défaut sur le board */
@@ -2124,10 +2345,16 @@ export class BoardComponent {
 
     const state = this.boardService.state();
 
-    const build = this.buildService.selectedBuildA();
-    const hasRemanence = build?.passiveBar.passives.some(p =>
-      p && p.passiveId.toLowerCase().replace(/é/g, 'e').includes('remanence')
-    ) ?? false;
+    // En session interactive (dont Freeplay Xel Rouage), les passifs actifs vivent
+    // dans le contexte de la session ; sinon on retombe sur le build sélectionné.
+    const sessionPassiveIds = this.interactivePlay.context()?.activePassiveIds;
+    const buildPassiveIds = this.buildService.selectedBuildA()?.passiveBar.passives
+      .filter((p): p is NonNullable<typeof p> => !!p)
+      .map(p => p.passiveId);
+    const activePassiveIds = sessionPassiveIds ?? buildPassiveIds ?? [];
+    const hasRemanence = activePassiveIds.some(id =>
+      id.toLowerCase().replace(/é/g, 'e').includes('remanence')
+    );
 
     const blockers = new Set<string>();
 
@@ -2264,29 +2491,77 @@ export class BoardComponent {
     }
 
     this.boardService.saveInitialState();
-    this.interactivePlay.startSessionXelorFreeplay(this.xelorRemanenceEnabled());
+    this.interactivePlay.startSessionXelorFreeplay(this.enabledOptionalXelorPassiveIds());
     this.isXelorFreeplayActive.set(true);
 
     // Charger les sorts du Xelor
     this.loadSpells('XEL');
   }
 
-  toggleXelorRemanence(): void {
-    const newValue = !this.xelorRemanenceEnabled();
-    this.xelorRemanenceEnabled.set(newValue);
+  /** Passifs imposés du Freeplay Xel Rouage (toujours actifs). */
+  mandatoryXelorPassives(): ReadonlyArray<{ id: string; mandatory: boolean }> {
+    return this.xelorFreeplayPassives.filter(p => p.mandatory);
+  }
 
-    // Si la session Xelor est active, relancer avec le nouvel état de Rémanence
+  /** Passifs optionnels du Freeplay Xel Rouage (togglables dans le menu). */
+  optionalXelorPassives(): ReadonlyArray<{ id: string; mandatory: boolean }> {
+    return this.xelorFreeplayPassives.filter(p => !p.mandatory);
+  }
+
+  /** Ids des passifs optionnels actuellement activés. */
+  enabledOptionalXelorPassiveIds(): string[] {
+    const enabled = this.xelorOptionalPassivesEnabled();
+    return this.optionalXelorPassives()
+      .filter(p => enabled[p.id])
+      .map(p => p.id);
+  }
+
+  /** Indique si un passif optionnel donné est activé. */
+  isXelorOptionalEnabled(id: string): boolean {
+    return !!this.xelorOptionalPassivesEnabled()[id];
+  }
+
+  /** Nombre de passifs optionnels actifs (affiché sur le bouton du menu). */
+  activeXelorOptionalCount(): number {
+    return this.enabledOptionalXelorPassiveIds().length;
+  }
+
+  getXelorPassiveName(id: string): string {
+    return this.xelorPassivesData().find(p => p.id === id)?.name ?? id;
+  }
+
+  getXelorPassiveIconId(id: string): number | undefined {
+    return this.xelorPassivesData().find(p => p.id === id)?.iconId;
+  }
+
+  getXelorPassiveDescription(id: string): string {
+    return this.xelorPassivesData().find(p => p.id === id)?.description ?? '';
+  }
+
+  toggleXelorPassivesMenu(): void {
+    this.xelorPassivesMenuOpen.update(open => !open);
+  }
+
+  /**
+   * Active/désactive un passif optionnel. Si une session Xel Rouage est en cours,
+   * elle est relancée avec le nouvel ensemble de passifs (le board revient à son
+   * état initial, comme pour l'ancien toggle Rémanence).
+   */
+  toggleXelorOptionalPassive(id: string): void {
+    const current = this.xelorOptionalPassivesEnabled();
+    this.xelorOptionalPassivesEnabled.set({ ...current, [id]: !current[id] });
+
     if (this.interactivePlay.isActive() && this.isXelorFreeplayActive()) {
       this.boardService.restoreInitialState();
       this.boardService.saveInitialState();
-      this.interactivePlay.startSessionXelorFreeplay(newValue);
+      this.interactivePlay.startSessionXelorFreeplay(this.enabledOptionalXelorPassiveIds());
     }
   }
 
   resetInteractiveMode(): void {
     this.boardService.restoreInitialState();
     if (this.isXelorFreeplayActive()) {
-      this.interactivePlay.startSessionXelorFreeplay(this.xelorRemanenceEnabled());
+      this.interactivePlay.startSessionXelorFreeplay(this.enabledOptionalXelorPassiveIds());
     } else {
       const build = this.buildService.selectedBuildA();
       this.interactivePlay.resetSession(build ?? null);
@@ -2634,6 +2909,38 @@ export class BoardComponent {
         console.log(`  ✅ Hour ${hour} created at (${hourPosition.x}, ${hourPosition.y})`);
       }
     });
+  }
+
+  /**
+   * Fin de tour explicite en navigation timeline : applique les effets de fin de tour
+   * (Permutation momentanée, explosions Rouage/Sinistro, Régulateur) puis le début du tour suivant
+   * (Horlogerie, TP Prémonition) sur l'état courant. Le moteur mute le board directement ;
+   * on resynchronise la position du joueur depuis le contexte renvoyé.
+   */
+  onEndTurn(): void {
+    const build = this.buildService.selectedBuildA();
+    if (!build) {
+      console.warn('⚠️ [onEndTurn] Build manquant');
+      return;
+    }
+    if (this.currentStepIndex() === 0) {
+      return; // aucun tour en cours (état initial)
+    }
+
+    const result = this.simulationService.endTimelineTurn(build);
+    if (!result) {
+      return;
+    }
+
+    // Le board a été muté par le moteur (échanges, explosions) ; on aligne la position du joueur.
+    const player = this.boardService.player();
+    const ctxPlayer = result.contextAfter.entities?.find(e => e.type === 'player');
+    if (player && ctxPlayer &&
+        (ctxPlayer.position.x !== player.position.x || ctxPlayer.position.y !== player.position.y)) {
+      this.boardService.updateEntityPosition(player.id, ctxPlayer.position);
+    }
+
+    console.log(`⏭️ [onEndTurn] Fin de tour appliquée → tour ${result.contextAfter.turn}`);
   }
 
   onPreviousStep(): void {

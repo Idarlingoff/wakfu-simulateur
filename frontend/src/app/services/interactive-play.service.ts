@@ -55,6 +55,7 @@ export class InteractivePlayService {
     const ctx: SimulationContext = {
       availablePa: stats.ap,
       availablePw: stats.wp,
+      maxPw: stats.wp,
       availableMp: stats.mp,
       currentPosition: player?.position ?? { x: 0, y: 0 },
       playerPosition: player?.position ?? { x: 0, y: 0 },
@@ -91,6 +92,7 @@ export class InteractivePlayService {
     const ctx: SimulationContext = {
       availablePa: INFINITE,
       availablePw: INFINITE,
+      maxPw: INFINITE,
       availableMp: INFINITE,
       currentPosition: player?.position ?? { x: 0, y: 0 },
       playerPosition: player?.position ?? { x: 0, y: 0 },
@@ -114,22 +116,32 @@ export class InteractivePlayService {
   }
 
   /**
-   * Démarre une session Freeplay Xél Rouage :
-   * ressources infinies + passifs Xélor actifs (Maître du Cadran, Cours du Temps,
-   * Connaissance du Passé, Mécanisme Spécialisé, Rémanence optionnelle).
+   * Passifs imposés en Freeplay Xél Rouage : toujours actifs, non désactivables.
+   * (Maître du Cadran, Mécanisme spécialisé, Cours du temps.)
    */
-  startSessionXelorFreeplay(withRemanence: boolean = true): void {
+  static readonly XELOR_FREEPLAY_MANDATORY_PASSIVES: ReadonlyArray<string> = [
+    'XEL_MAITRE_CADRAN',
+    'XEL_MECANISMES_SPECIALISES',
+    'XEL_COURS_TEMPS',
+  ];
+
+  /**
+   * Démarre une session Freeplay Xél Rouage : ressources infinies + passifs Xélor.
+   * Les passifs imposés ({@link XELOR_FREEPLAY_MANDATORY_PASSIVES}) sont toujours actifs ;
+   * `enabledOptionalPassiveIds` ajoute les passifs optionnels choisis dans le menu
+   * (Rémanence, Horlogerie, Permutation momentanée).
+   */
+  startSessionXelorFreeplay(enabledOptionalPassiveIds: ReadonlyArray<string> = []): void {
     const INFINITE = 999;
     const player = this.boardService.player();
     const entities = this.boardService.state().entities;
     const mechanisms: Mechanism[] = this.boardService.mechanisms();
 
     const activePassiveIds = [
-      'XEL_MAITRE_CADRAN',
-      'XEL_COURS_TEMPS',
-      'XEL_CONNAISSANCE_PASSE',
-      'XEL_MECANISMES_SPECIALISES',
-      ...(withRemanence ? ['XEL_REMANENCE'] : []),
+      ...new Set([
+        ...InteractivePlayService.XELOR_FREEPLAY_MANDATORY_PASSIVES,
+        ...enabledOptionalPassiveIds,
+      ]),
     ];
 
     this._build = {
@@ -156,6 +168,7 @@ export class InteractivePlayService {
     const ctx: SimulationContext = {
       availablePa: INFINITE,
       availablePw: INFINITE,
+      maxPw: INFINITE,
       availableMp: INFINITE,
       currentPosition: player?.position ?? { x: 0, y: 0 },
       playerPosition: player?.position ?? { x: 0, y: 0 },
