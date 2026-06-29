@@ -218,7 +218,7 @@ interface EnemyForm {
     }
 
     .btn-secondary:hover {
-      background: #2c3a5a;
+      background: var(--app-border);
       border-color: #ef476f;
     }
   `]

@@ -360,9 +360,9 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .error-message {
       text-align: center;
-      color: #ff6b6b;
-      background: rgba(255, 107, 107, 0.1);
-      border: 1px solid rgba(255, 107, 107, 0.3);
+      color: var(--app-danger);
+      background: color-mix(in srgb, var(--app-danger) 10%, transparent);
+      border: 1px solid color-mix(in srgb, var(--app-danger) 30%, transparent);
       border-radius: 8px;
       padding: 20px;
       margin: 16px;

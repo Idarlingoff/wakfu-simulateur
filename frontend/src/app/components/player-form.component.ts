@@ -242,7 +242,7 @@ interface PlayerForm {
     }
 
     .btn-secondary:hover {
-      background: #2c3a5a;
+      background: var(--app-border);
       border-color: var(--app-accent);
     }
   `]
