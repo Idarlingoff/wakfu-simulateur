@@ -120,3 +120,49 @@ button:active {
   border-width: 0;
 }
 
+/* ============================================================
+   Design tokens — Bloc A (themes clair/sombre)
+   Prefixe --app-* pour cohabiter avec les variables heritees
+   (--bg, --panel...) sans les ecraser pendant la migration.
+   ============================================================ */
+:root,
+[data-theme='dark'] {
+  --app-bg: #0f1115;
+  --app-surface: #181b22;
+  --app-surface-2: #1d2230;
+  --app-text: #e8ecf3;
+  --app-text-muted: #8c9bb3;
+  --app-text-subtle: #5c6678;
+  --app-border: #2a2f3a;
+  --app-border-strong: #3a4150;
+  --app-accent: #a78bfa;
+  --app-accent-strong: #c4b5fd;
+  --app-accent-contrast: #0f1115;
+  --app-accent-2: #ffd166;
+  --app-danger: #ef476f;
+  --app-success: #7bd88f;
+  --app-warning: #ffd166;
+  --app-info: #4cc9f0;
+  --app-focus: #a78bfa;
+}
+
+[data-theme='light'] {
+  --app-bg: #f6f7f9;
+  --app-surface: #ffffff;
+  --app-surface-2: #eceff4;
+  --app-text: #1a1d24;
+  --app-text-muted: #586074;
+  --app-text-subtle: #8a93a6;
+  --app-border: #e2e6ec;
+  --app-border-strong: #cbd2dc;
+  --app-accent: #7c3aed;
+  --app-accent-strong: #6d28d9;
+  --app-accent-contrast: #ffffff;
+  --app-accent-2: #b87503;
+  --app-danger: #d12c54;
+  --app-success: #2f9e5e;
+  --app-warning: #b7791f;
+  --app-info: #1f86a8;
+  --app-focus: #7c3aed;
+}
+
