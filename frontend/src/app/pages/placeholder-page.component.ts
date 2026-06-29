@@ -27,14 +27,6 @@ export class PlaceholderPageComponent {
 }
 
 @Component({
-  selector: 'app-builds-page',
-  standalone: true,
-  imports: [PlaceholderPageComponent],
-  template: `<app-placeholder-page title="Builds" message="La gestion des builds arrive dans la prochaine étape."></app-placeholder-page>`,
-})
-export class BuildsPageComponent {}
-
-@Component({
   selector: 'app-comparaison-page',
   standalone: true,
   imports: [PlaceholderPageComponent],
