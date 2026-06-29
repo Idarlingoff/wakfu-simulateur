@@ -34,8 +34,8 @@ html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--bg);
-  color: #e8ecf3;
+  background: var(--app-bg);
+  color: var(--app-text);
   font-family: Inter, Segoe UI, system-ui, -apple-system, Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
@@ -86,7 +86,7 @@ input::placeholder {
 }
 
 /* Buttons */
-button {
+button:not([ui-button]):not(.ui-theme-toggle) {
   background: #253044;
   border: 1px solid var(--stroke);
   color: #e8ecf3;
@@ -98,12 +98,12 @@ button {
   transition: all 0.2s ease;
 }
 
-button:hover {
+button:hover:not([ui-button]):not(.ui-theme-toggle) {
   background: #2d3a4f;
   opacity: 0.9;
 }
 
-button:active {
+button:active:not([ui-button]):not(.ui-theme-toggle) {
   transform: scale(0.98);
 }
 
