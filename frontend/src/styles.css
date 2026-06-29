@@ -3,17 +3,6 @@
  */
 
 :root {
-  /* Theme Colors */
-  --bg: #0f1115;
-  --panel: #181b22;
-  --panel-2: #1d2230;
-  --muted: #8c9bb3;
-  --accent: #4cc9f0;
-  --good: #7bd88f;
-  --warn: #ffd166;
-  --bad: #ef476f;
-  --stroke: #2a2f3a;
-
   /* Spacing */
   --gap-xs: 4px;
   --gap-sm: 8px;
