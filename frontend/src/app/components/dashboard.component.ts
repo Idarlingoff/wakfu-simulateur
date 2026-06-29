@@ -27,7 +27,6 @@ import {SimulationService} from '../services/simulation.service';
     <div class="dashboard">
       <!-- Header -->
       <header class="header">
-        <h1>Wakfu Simulator</h1>
         <div class="header-selectors">
           <!-- Build selector -->
           <div class="selector-group">
@@ -158,27 +157,18 @@ import {SimulationService} from '../services/simulation.service';
     </app-enemy-form>
   `,
   styles: [`
-    :root {
-      --bg: #0f1115;
-      --panel: #181b22;
-      --panel-2: #1d2230;
-      --muted: #8c9bb3;
-      --accent: #4cc9f0;
-      --good: #7bd88f;
-      --bad: #ef476f;
-      --stroke: #2a2f3a;
-    }
+    /* Design tokens are provided globally via --app-* variables */
 
     .dashboard {
-      background: var(--bg);
-      color: #e8ecf3;
+      background: var(--app-bg);
+      color: var(--app-text);
       min-height: 100vh;
       font-family: Inter, Segoe UI, system-ui, -apple-system, Arial;
     }
 
     .header {
-      background: var(--panel);
-      border-bottom: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border-bottom: 1px solid var(--app-border);
       padding: 12px 20px;
       display: flex;
       justify-content: space-between;
@@ -212,7 +202,7 @@ import {SimulationService} from '../services/simulation.service';
     .selector-label {
       font-size: 11px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       white-space: nowrap;
@@ -222,8 +212,8 @@ import {SimulationService} from '../services/simulation.service';
       display: flex;
       align-items: center;
       gap: 6px;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 6px 12px;
       cursor: pointer;
@@ -233,15 +223,15 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .selector-dropdown:hover {
-      border-color: var(--accent);
-      background: #252f3d;
+      border-color: var(--app-accent);
+      background: var(--app-surface-2);
     }
 
     .selector-value {
       flex: 1;
       font-size: 12px;
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -249,7 +239,7 @@ import {SimulationService} from '../services/simulation.service';
 
     .selector-arrow {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       transition: transform 0.2s;
     }
 
@@ -263,8 +253,8 @@ import {SimulationService} from '../services/simulation.service';
       left: 0;
       right: 0;
       margin-top: 4px;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 4px;
       z-index: 1000;
@@ -286,23 +276,23 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .dropdown-item:hover {
-      background: #252f3d;
+      background: var(--app-surface-2);
     }
 
     .dropdown-item.active {
-      background: rgba(76, 201, 240, 0.15);
-      border-left: 3px solid var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 15%, transparent);
+      border-left: 3px solid var(--app-accent);
     }
 
     .dropdown-item-name {
       font-size: 12px;
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .dropdown-item-meta {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .dropdown-item-actions {
@@ -322,8 +312,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-mini {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 2px 6px;
       cursor: pointer;
@@ -332,22 +322,22 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-mini:hover {
-      background: var(--accent);
-      color: #0b1220;
-      border-color: var(--accent);
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .btn-mini-danger:hover {
-      background: var(--bad);
-      border-color: var(--bad);
+      background: var(--app-danger);
+      border-color: var(--app-danger);
       color: white;
     }
 
     .dropdown-add {
       width: 100%;
       background: transparent;
-      border: 1px dashed var(--stroke);
-      color: var(--accent);
+      border: 1px dashed var(--app-border);
+      color: var(--app-accent);
       border-radius: 6px;
       padding: 8px;
       cursor: pointer;
@@ -358,8 +348,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .dropdown-add:hover {
-      background: rgba(76, 201, 240, 0.1);
-      border-color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border-color: var(--app-accent);
     }
 
     .dropdown-backdrop {
@@ -369,8 +359,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     button {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       border: none;
       border-radius: 8px;
       padding: 8px 16px;
@@ -388,13 +378,13 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
     }
 
     .btn-danger {
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
     }
 
@@ -408,8 +398,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .header-actions {
       margin: 12px;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 12px;
     }
@@ -421,8 +411,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .panel {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 16px;
       overflow-y: auto;
@@ -432,7 +422,7 @@ import {SimulationService} from '../services/simulation.service';
     .panel h2 {
       margin: 0 0 12px 0;
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 1px;
     }
@@ -440,7 +430,7 @@ import {SimulationService} from '../services/simulation.service';
     .panel h3 {
       margin: 16px 0 8px 0;
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .builds-list, .timelines-list {
@@ -450,8 +440,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .build-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 8px;
       cursor: pointer;
@@ -462,14 +452,14 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .build-item:hover {
-      border-color: var(--accent);
-      background: #252f3d;
+      border-color: var(--app-accent);
+      background: var(--app-surface-2);
     }
 
     .build-item.active {
-      border-color: var(--accent);
+      border-color: var(--app-accent);
       background: #2c3a5a;
-      box-shadow: 0 0 8px rgba(76, 201, 240, 0.3);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 30%, transparent);
     }
 
     .build-actions {
@@ -485,8 +475,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-edit, .btn-delete {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 4px 8px;
       cursor: pointer;
@@ -494,22 +484,22 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-edit:hover {
-      background: #4cc9f0;
-      color: #0b1220;
-      border-color: #4cc9f0;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .btn-delete:hover {
-      background: #ef476f;
+      background: var(--app-danger);
       color: white;
-      border-color: #ef476f;
+      border-color: var(--app-danger);
     }
 
     .btn-add {
       width: 100%;
-      background: #253044;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 8px 12px;
       cursor: pointer;
@@ -518,14 +508,14 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-add:hover {
-      background: #4cc9f0;
-      color: #0b1220;
-      border-color: #4cc9f0;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .timeline-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 8px;
       cursor: pointer;
@@ -536,18 +526,18 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .timeline-item.active {
-      background: linear-gradient(135deg, rgba(76, 201, 240, 0.2), rgba(90, 215, 240, 0.15));
-      border-color: var(--accent);
-      box-shadow: 0 0 12px rgba(76, 201, 240, 0.3);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 20%, transparent), rgba(90, 215, 240, 0.15));
+      border-color: var(--app-accent);
+      box-shadow: 0 0 12px color-mix(in srgb, var(--app-accent) 30%, transparent);
     }
 
     .timeline-item:hover {
-      border-color: var(--accent);
-      background: #252f3d;
+      border-color: var(--app-accent);
+      background: var(--app-surface-2);
     }
 
     .timeline-item.active:hover {
-      box-shadow: 0 0 16px rgba(76, 201, 240, 0.5);
+      box-shadow: 0 0 16px color-mix(in srgb, var(--app-accent) 50%, transparent);
     }
 
     .timeline-info {
@@ -571,7 +561,7 @@ import {SimulationService} from '../services/simulation.service';
     .active-badge {
       display: inline-block;
       margin-left: 8px;
-      color: var(--accent);
+      color: var(--app-accent);
       font-size: 12px;
       animation: pulse-badge 1.5s ease-in-out infinite;
     }
@@ -583,7 +573,7 @@ import {SimulationService} from '../services/simulation.service';
 
     .timeline-name, .timeline-meta {
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 13px;
     }
 
@@ -593,13 +583,13 @@ import {SimulationService} from '../services/simulation.service';
 
     .build-name {
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 13px;
     }
 
     hr {
       border: none;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
       margin: 12px 0;
     }
 
@@ -612,8 +602,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .section {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 16px;
     }
@@ -621,13 +611,13 @@ import {SimulationService} from '../services/simulation.service';
     .section h2 {
       margin: 0 0 12px 0;
       font-size: 16px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .section h3 {
       margin: 12px 0 8px 0;
       font-size: 13px;
-      color: var(--accent);
+      color: var(--app-accent);
     }
 
     .section-header {
@@ -644,8 +634,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-toggle-section {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: var(--accent);
+      border: 1px solid var(--app-border);
+      color: var(--app-accent);
       border-radius: 4px;
       padding: 6px 10px;
       font-size: 14px;
@@ -659,18 +649,18 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-toggle-section:hover {
-      background: rgba(76, 201, 240, 0.1);
-      border-color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border-color: var(--app-accent);
     }
 
     .btn-toggle-section.collapsed {
-      color: var(--muted);
-      border-color: var(--stroke);
+      color: var(--app-text-muted);
+      border-color: var(--app-border);
     }
 
     .btn-toggle-section.collapsed:hover {
-      background: rgba(76, 201, 240, 0.05);
-      color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 5%, transparent);
+      color: var(--app-accent);
     }
 
     .section-content {
@@ -696,31 +686,31 @@ import {SimulationService} from '../services/simulation.service';
     .info-item {
       display: flex;
       flex-direction: column;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       padding: 12px;
       border-radius: 8px;
       gap: 8px;
       transition: all 0.3s ease;
-      border: 1px solid rgba(76, 201, 240, 0.1);
+      border: 1px solid color-mix(in srgb, var(--app-accent) 10%, transparent);
     }
 
     .info-item:hover {
-      border-color: rgba(76, 201, 240, 0.3);
-      background: linear-gradient(135deg, rgba(76, 201, 240, 0.05), rgba(90, 215, 240, 0.02));
-      box-shadow: 0 4px 12px rgba(76, 201, 240, 0.1);
+      border-color: color-mix(in srgb, var(--app-accent) 30%, transparent);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 5%, transparent), rgba(90, 215, 240, 0.02));
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 10%, transparent);
     }
 
     .info-item label {
       display: inline-block;
-      background: linear-gradient(135deg, var(--accent), #5ad5f0);
-      color: #0b1220;
+      background: linear-gradient(135deg, var(--app-accent), #5ad5f0);
+      color: var(--app-accent-contrast);
       padding: 4px 12px;
       border-radius: 20px;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      box-shadow: 0 4px 12px rgba(76, 201, 240, 0.25);
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 25%, transparent);
       width: fit-content;
       transition: all 0.3s ease;
     }
@@ -734,28 +724,28 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .info-item:hover label {
-      box-shadow: 0 6px 16px rgba(76, 201, 240, 0.35);
+      box-shadow: 0 6px 16px color-mix(in srgb, var(--app-accent) 35%, transparent);
       transform: translateY(-2px);
     }
 
     .build-meta, .timeline-meta {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       margin-top: 4px;
     }
 
     .info-item span {
       font-size: 15px;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-weight: 600;
       padding: 6px 8px;
-      background: rgba(76, 201, 240, 0.08);
+      background: color-mix(in srgb, var(--app-accent) 8%, transparent);
       border-radius: 6px;
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid var(--app-accent);
     }
 
     .no-data {
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-style: italic;
       text-align: center;
       padding: 20px;
@@ -790,15 +780,15 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-cancel-placement {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 6px 8px;
       border-radius: 6px;
       font-size: 11px;
     }
 
     .stats {
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       padding: 12px;
       border-radius: 6px;
       font-size: 12px;
@@ -819,8 +809,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .badge.valid {
-      background: var(--good);
-      color: #0b1220;
+      background: var(--app-success);
+      color: var(--app-accent-contrast);
     }
 
     @media (max-width: 1200px) {
@@ -844,8 +834,8 @@ import {SimulationService} from '../services/simulation.service';
       width: min(900px, 95vw);
       max-height: 80vh;
       overflow: auto;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       padding: 16px;
     }
