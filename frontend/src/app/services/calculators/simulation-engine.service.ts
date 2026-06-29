@@ -82,6 +82,8 @@ export interface SimulationContext {
   availablePa: number;
   availablePw: number;
   availableMp: number;
+  /** PW maximum (les PW régénérés ne peuvent pas dépasser ce plafond ; absent = pas de plafond). */
+  maxPw?: number;
   currentPosition: Position;
   playerPosition: Position;
   range: number;
@@ -230,7 +232,7 @@ export class SimulationEngineService {
   /**
    * Exécute une simulation complète
    */
-  async runSimulation(build: Build, timeline: Timeline): Promise<SimulationResult> {
+  async runSimulation(build: Build, timeline: Timeline, runTurnLifecycle: boolean = true): Promise<SimulationResult> {
     console.log('CALLED runSimulation');
 
     this.regenerationService.clearHistory();
@@ -277,6 +279,7 @@ export class SimulationEngineService {
     const initialContext: SimulationContext = {
       availablePa: buildStats.ap,
       availablePw: buildStats.wp,
+      maxPw: buildStats.wp,
       availableMp: buildStats.mp,
       currentPosition: playerPosition,
       playerPosition: playerPosition,
@@ -319,7 +322,8 @@ export class SimulationEngineService {
         currentContext,
         build,
         buildStats,
-        i + 1
+        i + 1,
+        runTurnLifecycle
       );
 
       steps.push(stepResult);

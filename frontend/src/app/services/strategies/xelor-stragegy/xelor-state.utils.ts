@@ -19,6 +19,8 @@ export interface XelorState {
   permutationDoneThisTurn: boolean;
   /** Prémonition : TP différé du Xélor enregistré sur une case vide, résolu au tour suivant. */
   premonitionTeleport?: { position: { x: number; y: number }; turn: number };
+  /** Vol du Temps : nombre de stacks TIME_STEAL accumulés (coût PW et gain PA = stacks + 1). */
+  timeStealStacks: number;
   triggeredActions: SimulationActionResult[];
 }
 
@@ -59,6 +61,7 @@ function createDefaultXelorState(): XelorState {
     distortionPower: 0,
     dialPaBonusGrantedThisTurn: false,
     permutationDoneThisTurn: false,
+    timeStealStacks: 0,
     triggeredActions: []
   };
 }

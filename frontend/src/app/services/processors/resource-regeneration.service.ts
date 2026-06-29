@@ -113,10 +113,24 @@ export class ResourceRegenerationService {
     details?: Record<string, any>
   ): RegenerationEvent {
     const before = context.availablePw;
-    context.availablePw += amount;
+
+    // Les PW ne peuvent pas dépasser leur maximum (contrairement aux PA). Si le joueur est déjà
+    // au max (ex: 1ère action = pose du Cadran, ou 15/15 PW), la régén PW est perdue.
+    const grantable = context.maxPw !== undefined
+      ? Math.max(0, Math.min(amount, context.maxPw - before))
+      : amount;
+
+    if (grantable < amount) {
+      console.log(
+        `💧 [REGEN PW] Plafonné: +${amount} demandé, +${grantable} accordé ` +
+        `(PW ${before}/${context.maxPw}) — source ${source}`
+      );
+    }
+
+    context.availablePw += grantable;
     const after = context.availablePw;
 
-    const event = this.createEvent('PW', amount, source, description, context.turn || 1, details);
+    const event = this.createEvent('PW', grantable, source, description, context.turn || 1, details);
     this.regenerationHistory.push(event);
 
     this.logRegeneration(event, before, after);

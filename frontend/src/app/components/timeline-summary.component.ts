@@ -9,6 +9,7 @@ import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
 import { DataCacheService } from '../services/data-cache.service';
 import { SimulationService } from '../services/simulation.service';
+import { StatsCalculatorService } from '../services/calculators/stats-calculator.service';
 import { Spell } from '../models/spell.model';
 
 interface ResourceSummary {
@@ -240,6 +241,7 @@ export class TimelineSummaryComponent {
   buildService = inject(BuildService);
   dataCacheService = inject(DataCacheService);
   simulationService = inject(SimulationService);
+  private readonly statsCalculator = inject(StatsCalculatorService);
 
   // Cache local des sorts pour récupérer les coûts
   private spellsCache = signal<Map<string, Spell>>(new Map());
@@ -319,12 +321,17 @@ export class TimelineSummaryComponent {
       };
     }
 
+    // Ressources MAX = stats totales calculées (avec passifs/innés/sublis), comme le moteur
+    // (simulation-engine: availablePa = calculateTotalStats(build).ap). Utiliser build.stats brut
+    // sous-estimait le max (ex: 12 au lieu de 13) et fabriquait une régén fantôme dans le bilan.
+    const totalStats = this.statsCalculator.calculateTotalStats(build);
+
     let apUsed = 0;
     let mpUsed = 0;
     let wpUsed = 0;
-    let apRemaining = build.stats.ap;
-    let mpRemaining = build.stats.mp;
-    let wpRemaining = build.stats.wp;
+    let apRemaining = totalStats.ap;
+    let mpRemaining = totalStats.mp;
+    let wpRemaining = totalStats.wp;
 
     // Parcourir les étapes exécutées
     for (let i = 0; i < currentIndex && i < timeline.steps.length; i++) {
@@ -357,13 +364,13 @@ export class TimelineSummaryComponent {
         }
       });
 
-      apRemaining = Math.max(0, build.stats.ap - apUsed);
-      mpRemaining = Math.max(0, build.stats.mp - mpUsed);
-      wpRemaining = Math.max(0, build.stats.wp - wpUsed);
+      apRemaining = Math.max(0, totalStats.ap - apUsed);
+      mpRemaining = Math.max(0, totalStats.mp - mpUsed);
+      wpRemaining = Math.max(0, totalStats.wp - wpUsed);
     }
 
-    const apRegenerated = Math.max(0, apUsed - (build.stats.ap - apRemaining));
-    const wpRegenerated = Math.max(0, wpUsed - (build.stats.wp - wpRemaining));
+    const apRegenerated = Math.max(0, apUsed - (totalStats.ap - apRemaining));
+    const wpRegenerated = Math.max(0, wpUsed - (totalStats.wp - wpRemaining));
 
     return {
       apUsed,
