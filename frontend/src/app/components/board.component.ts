@@ -462,25 +462,14 @@ interface BoardCell {
     </div>
   `,
   styles: [`
-    :root {
-      --bg: #0f1115;
-      --panel: #181b22;
-      --panel-2: #1d2230;
-      --muted: #8c9bb3;
-      --accent: #4cc9f0;
-      --good: #7bd88f;
-      --bad: #ef476f;
-      --stroke: #2a2f3a;
-    }
-
     .board-container {
       display: flex;
       flex-direction: column;
       gap: 16px;
       padding: 16px;
-      background: var(--bg);
+      background: var(--app-bg);
       border-radius: 12px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .board-header {
@@ -493,7 +482,7 @@ interface BoardCell {
     .board-header h2 {
       margin: 0;
       font-size: 18px;
-      color: #cfe3ff;
+      color: var(--app-text);
     }
 
     .header-left {
@@ -510,14 +499,14 @@ interface BoardCell {
     }
 
     .timeline-badge {
-      background: linear-gradient(135deg, var(--accent), #5ad7f0);
-      color: #0b1220;
+      background: linear-gradient(135deg, var(--app-accent), #5ad7f0);
+      color: var(--app-accent-contrast);
       padding: 4px 12px;
       border-radius: 6px;
       font-size: 12px;
       font-weight: 600;
       white-space: nowrap;
-      box-shadow: 0 0 12px rgba(76, 201, 240, 0.4);
+      box-shadow: 0 0 12px color-mix(in srgb, var(--app-accent) 40%, transparent);
     }
 
     .board-controls {
@@ -528,9 +517,9 @@ interface BoardCell {
     }
 
     .btn-nav, .btn-reset, .btn-run-full, .btn-end-turn {
-      background: #253044;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 8px 12px;
       cursor: pointer;
@@ -576,9 +565,9 @@ interface BoardCell {
     }
 
     .btn-nav:hover:not(:disabled) {
-      background: var(--accent);
-      color: #0b1220;
-      border-color: var(--accent);
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .btn-nav:disabled {
@@ -588,7 +577,7 @@ interface BoardCell {
 
     .btn-reset:hover:not(:disabled) {
       background: #4cc9f0;
-      color: #0b1220;
+      color: var(--app-accent-contrast);
     }
 
     .btn-reset:disabled {
@@ -599,13 +588,13 @@ interface BoardCell {
     .divider {
       width: 1px;
       height: 24px;
-      background: var(--stroke);
+      background: var(--app-border);
       margin: 0 4px;
     }
 
     .step-indicator {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       min-width: 80px;
       text-align: center;
     }
@@ -638,9 +627,9 @@ interface BoardCell {
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 12px;
       padding: 12px;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 8px;
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
       font-size: 12px;
       position: sticky;
       top: 0;
@@ -663,15 +652,15 @@ interface BoardCell {
       flex-shrink: 0;
       flex-grow: 0;
       border-radius: 3px;
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
     }
 
     .legend-color.player {
-      background: linear-gradient(135deg, var(--good), #5ad7f0);
+      background: linear-gradient(135deg, var(--app-success), #5ad7f0);
     }
 
     .legend-color.enemy {
-      background: var(--bad);
+      background: var(--app-danger);
     }
 
     .legend-color.mechanism {
@@ -704,9 +693,9 @@ interface BoardCell {
       width: 58%;
       justify-content: center;
       padding: 10px;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 12px;
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
       overflow: auto;
       min-height: 420px;
       box-sizing: border-box;
@@ -716,8 +705,8 @@ interface BoardCell {
     .spells-panel {
       flex: 1 1 0;
       min-width: 0;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 10px;
       padding: 14px;
       position: sticky;
@@ -799,7 +788,7 @@ interface BoardCell {
     }
 
     .spell-icon-card:hover .spell-icon-wrapper {
-      box-shadow: 0 0 10px rgba(76, 201, 240, 0.5);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--app-accent) 50%, transparent);
     }
 
     .spell-icon-img {
@@ -873,7 +862,7 @@ interface BoardCell {
       border-radius: 8px;
       padding: 8px 10px;
       box-shadow: 0 6px 24px rgba(0, 0, 0, 0.8);
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 11px;
       pointer-events: none;
     }
@@ -885,7 +874,7 @@ interface BoardCell {
     .tooltip-name {
       font-size: 12px;
       font-weight: 700;
-      color: #cfe3ff;
+      color: var(--app-text);
       margin-bottom: 6px;
       border-bottom: 1px solid #2e3d58;
       padding-bottom: 5px;
@@ -901,7 +890,7 @@ interface BoardCell {
     }
 
     .tooltip-label {
-      color: #8c9bb3;
+      color: var(--app-text-muted);
       white-space: nowrap;
       font-size: 10px;
     }
@@ -934,7 +923,7 @@ interface BoardCell {
 
     .tooltip-desc {
       font-size: 10px;
-      color: #8c9bb3;
+      color: var(--app-text-muted);
       margin-top: 6px;
       border-top: 1px solid #2e3d58;
       padding-top: 6px;
@@ -956,7 +945,7 @@ interface BoardCell {
     .tooltip-ratio-title {
       font-size: 10px;
       text-transform: uppercase;
-      color: #8c9bb3;
+      color: var(--app-text-muted);
       letter-spacing: 0.5px;
       margin-bottom: 4px;
     }
@@ -989,25 +978,25 @@ interface BoardCell {
       align-items: center;
       justify-content: center;
       gap: 16px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       text-align: center;
     }
 
     .no-timeline h3 {
       margin: 0;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 16px;
     }
 
     .no-timeline p {
       margin: 0;
       font-size: 13px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .no-timeline-steps {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 16px;
       text-align: left;
@@ -1021,7 +1010,7 @@ interface BoardCell {
 
     .no-timeline-steps li {
       margin-bottom: 8px;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 13px;
     }
 
@@ -1036,7 +1025,7 @@ interface BoardCell {
     }
 
     .no-spells-hint {
-      color: var(--muted);
+      color: var(--app-text-muted);
       padding: 8px;
       font-size: 13px;
     }
@@ -1045,7 +1034,7 @@ interface BoardCell {
     .innate-spells-section {
       margin-top: 12px;
       padding-top: 10px;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
     }
 
     .innate-spells-label {
@@ -1075,7 +1064,7 @@ interface BoardCell {
 
     .cell {
       background: linear-gradient(135deg, #141a24, #0f151f);
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
       border-radius: 4px;
       display: flex;
       align-items: center;
@@ -1093,7 +1082,7 @@ interface BoardCell {
 
     .cell.pending-placement:hover {
       box-shadow: 0 0 12px rgba(123, 216, 143, 0.8);
-      border-color: var(--good);
+      border-color: var(--app-success);
     }
 
     .cell.has-entity {
@@ -1125,7 +1114,7 @@ interface BoardCell {
       top: 10%;
       left: 10%;
       font-size: 0.5em;
-      color: var(--muted);
+      color: var(--app-text-muted);
       opacity: 0.5;
     }
 
@@ -1142,7 +1131,7 @@ interface BoardCell {
 
     .entity-label {
       font-size: 0.4em;
-      color: #e8ecf3;
+      color: var(--app-text);
       background: rgba(0, 0, 0, 0.7);
       padding: 0.25em 0.3em;
       border-radius: 0.2em;
@@ -1150,11 +1139,11 @@ interface BoardCell {
     }
 
     .entity.player {
-      filter: drop-shadow(0 0 4px var(--good));
+      filter: drop-shadow(0 0 4px var(--app-success));
     }
 
     .entity.enemy {
-      filter: drop-shadow(0 0 4px var(--bad));
+      filter: drop-shadow(0 0 4px var(--app-danger));
     }
 
     /* Mechanism */
@@ -1199,7 +1188,7 @@ interface BoardCell {
       bottom: 2px;
       right: 2px;
       background: linear-gradient(135deg, #4cc9f0, #00b4d8);
-      color: #0b1220;
+      color: var(--app-accent-contrast);
       font-size: 10px;
       font-weight: bold;
       min-width: 16px;
@@ -1340,8 +1329,8 @@ interface BoardCell {
     }
 
     .timeline-display {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 12px;
     }
@@ -1349,7 +1338,7 @@ interface BoardCell {
     .timeline-display h3 {
       margin: 0 0 8px 0;
       font-size: 13px;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
     }
 
@@ -1365,7 +1354,7 @@ interface BoardCell {
       gap: 12px;
       align-items: center;
       padding: 8px;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       border-radius: 6px;
       border-left: 3px solid transparent;
       font-size: 12px;
@@ -1373,7 +1362,7 @@ interface BoardCell {
 
     .action-type {
       background: #2b344a;
-      color: #cfe3ff;
+      color: var(--app-text);
       padding: 4px 8px;
       border-radius: 4px;
       font-weight: 500;
@@ -1387,13 +1376,13 @@ interface BoardCell {
     }
 
     .spell-info, .pos-info, .facing-info {
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .entities-info,
     .mechanisms-info {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 12px;
     }
@@ -1402,7 +1391,7 @@ interface BoardCell {
     .mechanisms-info h3 {
       margin: 0 0 12px 0;
       font-size: 13px;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
     }
 
@@ -1413,8 +1402,8 @@ interface BoardCell {
     }
 
     .entity-info {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 8px;
       display: flex;
@@ -1442,8 +1431,8 @@ interface BoardCell {
 
     .btn-edit, .btn-delete {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 2px 6px;
       cursor: pointer;
@@ -1453,7 +1442,7 @@ interface BoardCell {
 
     .btn-edit:hover {
       background: #4cc9f0;
-      color: #0b1220;
+      color: var(--app-accent-contrast);
       border-color: #4cc9f0;
     }
 
@@ -1472,12 +1461,12 @@ interface BoardCell {
     }
 
     .entity-type.player {
-      background: var(--good);
-      color: #0b1220;
+      background: var(--app-success);
+      color: var(--app-accent-contrast);
     }
 
     .entity-type.enemy {
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
     }
 
@@ -1489,17 +1478,17 @@ interface BoardCell {
     }
 
     .entity-details strong {
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .entity-details span {
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .entity-class {
       display: inline-block;
-      background: linear-gradient(135deg, var(--accent), #5ad5f0);
-      color: #0b1220;
+      background: linear-gradient(135deg, var(--app-accent), #5ad5f0);
+      color: var(--app-accent-contrast);
       padding: 2px 8px;
       border-radius: 12px;
       font-size: 10px;
@@ -1521,8 +1510,8 @@ interface BoardCell {
       gap: 12px;
       align-items: flex-start;
       padding: 8px;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
     }
 
@@ -1550,11 +1539,11 @@ interface BoardCell {
     }
 
     .mech-details strong {
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .mech-details span {
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     @media (max-width: 1400px) {
@@ -1595,8 +1584,8 @@ interface BoardCell {
       gap: 12px;
       padding: 8px 14px;
       border-radius: 10px;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       transition: all 0.3s;
       flex-wrap: wrap;
     }
@@ -1614,9 +1603,9 @@ interface BoardCell {
     }
 
     .btn-interactive {
-      background: #253044;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 7px 14px;
       cursor: pointer;
@@ -1649,14 +1638,14 @@ interface BoardCell {
     .btn-xelor-freeplay.on {
       background: linear-gradient(135deg, #b8860b, #ffd166) !important;
       border-color: #ffd166 !important;
-      color: #0b1220 !important;
+      color: var(--app-accent-contrast) !important;
       box-shadow: 0 0 12px rgba(255, 209, 102, 0.6) !important;
     }
 
     .btn-xelor-freeplay:hover:not(:disabled) {
       background: linear-gradient(135deg, #b8860b, #ffd166) !important;
       border-color: #ffd166 !important;
-      color: #0b1220 !important;
+      color: var(--app-accent-contrast) !important;
     }
 
     /* ── Menu Passifs (Freeplay Xel Rouage) ── */
@@ -1668,7 +1657,7 @@ interface BoardCell {
     .btn-passives-menu {
       background: #1a1e2a;
       border: 1px solid #555a6e;
-      color: #8c9bb3;
+      color: var(--app-text-muted);
       border-radius: 6px;
       padding: 4px 10px;
       cursor: pointer;
@@ -1740,7 +1729,7 @@ interface BoardCell {
     }
 
     .passive-row.mandatory {
-      color: #8c9bb3;
+      color: var(--app-text-muted);
       cursor: default;
     }
 
@@ -1892,7 +1881,7 @@ interface BoardCell {
     .interactive-hint {
       flex: 1;
       font-size: 12px;
-      color: #8c9bb3;
+      color: var(--app-text-muted);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
