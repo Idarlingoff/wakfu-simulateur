@@ -143,15 +143,15 @@ import { DataCacheService } from '../services/data-cache.service';
 
     h4 {
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       margin: 0;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
 
     .btn-open {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       border: none;
       border-radius: 8px;
       padding: 8px 16px;
@@ -177,8 +177,8 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .modal {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 16px;
       width: 90%;
       max-width: 600px;
@@ -192,18 +192,18 @@ import { DataCacheService } from '../services/data-cache.service';
       justify-content: space-between;
       align-items: center;
       padding: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .modal-header h3 {
       margin: 0;
-      color: #cfe3ff;
+      color: var(--app-text);
     }
 
     .modal-header button {
       background: transparent;
       border: none;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 20px;
       cursor: pointer;
     }
@@ -222,7 +222,7 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-slot {
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       overflow: hidden;
     }
@@ -233,17 +233,17 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .slot-level {
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       padding: 4px 8px;
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       text-align: center;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .passive-card {
       height: 100px;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -255,7 +255,7 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-card:hover {
-      background: var(--panel);
+      background: var(--app-surface);
     }
 
     .passive-icon {
@@ -268,7 +268,7 @@ import { DataCacheService } from '../services/data-cache.service';
 
     .passive-name {
       font-size: 10px;
-      color: #e8ecf3;
+      color: var(--app-text);
       text-align: center;
       padding: 0 4px;
       max-width: 100%;
@@ -281,7 +281,7 @@ import { DataCacheService } from '../services/data-cache.service';
       position: absolute;
       top: 2px;
       right: 2px;
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
       border: none;
       border-radius: 4px;
@@ -299,32 +299,32 @@ import { DataCacheService } from '../services/data-cache.service';
 
     .empty-slot {
       height: 100px;
-      background: var(--panel-2);
-      border: 2px dashed var(--stroke);
+      background: var(--app-surface-2);
+      border: 2px dashed var(--app-border);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       transition: all 0.2s;
       font-size: 24px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .empty-slot:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--panel);
+      border-color: var(--app-accent);
+      color: var(--app-accent);
+      background: var(--app-surface);
     }
 
     .locked-slot {
       height: 100px;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .lock-icon {
@@ -338,7 +338,7 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .available-section {
-      border-top: 2px solid var(--stroke);
+      border-top: 2px solid var(--app-border);
       padding-top: 16px;
     }
 
@@ -354,9 +354,9 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .btn-refresh {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       width: 32px;
       height: 32px;
       border-radius: 8px;
@@ -369,8 +369,8 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .btn-refresh:hover:not(:disabled) {
-      background: var(--panel);
-      border-color: var(--accent);
+      background: var(--app-surface);
+      border-color: var(--app-accent);
     }
 
     .btn-refresh:disabled {
@@ -388,9 +388,9 @@ import { DataCacheService } from '../services/data-cache.service';
 
     .search-box input {
       width: 100%;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 8px 12px;
       border-radius: 8px;
       font-size: 14px;
@@ -398,7 +398,7 @@ import { DataCacheService } from '../services/data-cache.service';
 
     .loading, .no-results {
       text-align: center;
-      color: var(--muted);
+      color: var(--app-text-muted);
       padding: 32px;
     }
 
@@ -422,8 +422,8 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 12px;
       display: flex;
@@ -434,14 +434,14 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-item:hover {
-      background: var(--panel);
-      border-color: var(--accent);
+      background: var(--app-surface);
+      border-color: var(--app-accent);
     }
 
     .passive-item.selected {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      border-color: var(--app-accent);
+      color: var(--app-accent-contrast);
     }
 
     .passive-icon-large {
@@ -451,7 +451,7 @@ import { DataCacheService } from '../services/data-cache.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 8px;
       object-fit: contain;
       flex-shrink: 0;
@@ -463,7 +463,7 @@ import { DataCacheService } from '../services/data-cache.service';
 
     .passive-title {
       font-size: 14px;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-weight: 600;
       margin-bottom: 4px;
       display: flex;
@@ -472,8 +472,8 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .badge-selected {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       font-size: 10px;
       font-weight: 700;
       padding: 2px 6px;
@@ -483,8 +483,8 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-item.selected {
-      background: rgba(76, 201, 240, 0.1);
-      border-color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border-color: var(--app-accent);
       opacity: 0.6;
       cursor: not-allowed;
     }
@@ -495,44 +495,44 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-item.selected .passive-title {
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .passive-meta {
       display: flex;
       gap: 12px;
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       margin-bottom: 4px;
     }
 
     .passive-item.selected .passive-meta {
-      color: #0b1220;
+      color: var(--app-accent-contrast);
       opacity: 0.8;
     }
 
     .passive-desc {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       line-height: 1.4;
     }
 
     .passive-item.selected .passive-desc {
-      color: #0b1220;
+      color: var(--app-accent-contrast);
       opacity: 0.8;
     }
 
     .modal-footer {
       padding: 16px;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
       display: flex;
       justify-content: flex-end;
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
       padding: 10px 16px;
       border-radius: 8px;
       cursor: pointer;
@@ -541,7 +541,7 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .btn-secondary:hover {
-      background: #2d3a4f;
+      background: var(--app-surface-2);
     }
   `]
 })

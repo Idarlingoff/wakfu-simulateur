@@ -291,8 +291,8 @@ interface FormBuild {
     }
 
     .modal {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 16px;
       width: 90%;
       max-width: 600px;
@@ -307,19 +307,19 @@ interface FormBuild {
       justify-content: space-between;
       align-items: center;
       padding: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .modal-header h2 {
       margin: 0;
-      color: #cfe3ff;
+      color: var(--app-text);
       font-size: 18px;
     }
 
     .close {
       background: transparent;
       border: none;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 20px;
       cursor: pointer;
       padding: 0;
@@ -337,7 +337,7 @@ interface FormBuild {
 
     .form-section h3 {
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       margin: 0 0 12px 0;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -351,7 +351,7 @@ interface FormBuild {
 
     .form-group label {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       margin-bottom: 6px;
       font-weight: 500;
     }
@@ -359,9 +359,9 @@ interface FormBuild {
     .form-group input,
     .form-group select,
     .form-group textarea {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 8px 10px;
       font-family: inherit;
@@ -372,8 +372,8 @@ interface FormBuild {
     .form-group select:focus,
     .form-group textarea:focus {
       outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 8px rgba(76, 201, 240, 0.2);
+      border-color: var(--app-accent);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 20%, transparent);
     }
 
     .stat-icon {
@@ -394,7 +394,7 @@ interface FormBuild {
       display: flex;
       gap: 8px;
       padding-top: 16px;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
       margin-top: 24px;
     }
 
@@ -412,7 +412,7 @@ interface FormBuild {
 
     .btn-primary {
       background: linear-gradient(135deg, #7aa2f7, #5ad7f0);
-      color: #0b1220;
+      color: var(--app-accent-contrast);
       flex: 1;
     }
 
@@ -421,17 +421,17 @@ interface FormBuild {
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
     }
 
     .btn-secondary:hover {
-      background: #2d3a4f;
+      background: var(--app-surface-2);
     }
 
     .btn-danger {
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
     }
 

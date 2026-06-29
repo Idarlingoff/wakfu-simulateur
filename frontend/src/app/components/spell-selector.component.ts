@@ -136,7 +136,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     h4 {
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       margin: 0;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -145,15 +145,15 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     .innate-note {
       margin-left: 8px;
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-weight: 500;
       text-transform: none;
       letter-spacing: normal;
     }
 
     .btn-open {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       border: none;
       border-radius: 8px;
       padding: 8px 16px;
@@ -171,7 +171,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     .spell-slots-section {
       margin-bottom: 16px;
       padding-bottom: 16px;
-      border-bottom: 2px solid var(--stroke);
+      border-bottom: 2px solid var(--app-border);
     }
 
     .spell-slots-section h4 {
@@ -184,16 +184,16 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .picker-search input {
       width: 100%;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 8px 12px;
       border-radius: 8px;
       font-size: 14px;
     }
 
     .spell-list-section {
-      border-top: 2px solid var(--stroke);
+      border-top: 2px solid var(--app-border);
       padding-top: 16px;
     }
 
@@ -206,7 +206,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .spell-slot {
       aspect-ratio: 1;
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       overflow: hidden;
     }
@@ -214,7 +214,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     .spell-card {
       width: 100%;
       height: 100%;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -226,8 +226,8 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .spell-card:hover {
-      background: var(--panel);
-      border-color: var(--accent);
+      background: var(--app-surface);
+      border-color: var(--app-accent);
     }
 
     .spell-icon {
@@ -240,7 +240,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .spell-name {
       font-size: 10px;
-      color: #e8ecf3;
+      color: var(--app-text);
       text-align: center;
       padding: 0 4px;
       max-width: 100%;
@@ -253,7 +253,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       position: absolute;
       top: 2px;
       right: 2px;
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
       border: none;
       border-radius: 4px;
@@ -272,21 +272,21 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     .empty-slot {
       width: 100%;
       height: 100%;
-      background: var(--panel-2);
-      border: 2px dashed var(--stroke);
+      background: var(--app-surface-2);
+      border: 2px dashed var(--app-border);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       transition: all 0.2s;
       font-size: 24px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .empty-slot:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--panel);
+      border-color: var(--app-accent);
+      color: var(--app-accent);
+      background: var(--app-surface);
     }
 
     .picker-overlay {
@@ -300,8 +300,8 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .picker-modal {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 16px;
       width: 90%;
       max-width: 600px;
@@ -315,32 +315,32 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       justify-content: space-between;
       align-items: center;
       padding: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .picker-header h3 {
       margin: 0;
-      color: #cfe3ff;
+      color: var(--app-text);
     }
 
     .picker-header button {
       background: transparent;
       border: none;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 20px;
       cursor: pointer;
     }
 
     .picker-search {
       padding: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .picker-search input {
       width: 100%;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 8px 12px;
       border-radius: 8px;
       font-size: 14px;
@@ -354,7 +354,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .loading, .no-results {
       text-align: center;
-      color: var(--muted);
+      color: var(--app-text-muted);
       padding: 32px;
     }
 
@@ -376,8 +376,8 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .spell-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 12px;
       display: flex;
@@ -388,13 +388,13 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .spell-item:hover {
-      background: var(--panel);
-      border-color: var(--accent);
+      background: var(--app-surface);
+      border-color: var(--app-accent);
     }
 
     .spell-item.already-selected {
-      background: rgba(76, 201, 240, 0.1);
-      border-color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border-color: var(--app-accent);
       opacity: 0.6;
       cursor: not-allowed;
     }
@@ -411,7 +411,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 8px;
       object-fit: contain;
       flex-shrink: 0;
@@ -423,7 +423,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
 
     .spell-title {
       font-size: 14px;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-weight: 600;
       margin-bottom: 4px;
       display: flex;
@@ -432,8 +432,8 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .badge-selected {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       font-size: 10px;
       font-weight: 700;
       padding: 2px 6px;
@@ -446,12 +446,12 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       display: flex;
       gap: 8px;
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       flex-wrap: wrap;
     }
 
     .spell-meta .cost-pa {
-      color: #4cc9f0;
+      color: var(--app-accent);
       font-weight: 600;
     }
 
@@ -461,9 +461,9 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .spell-meta .cost-total {
-      color: var(--accent);
+      color: var(--app-accent);
       font-weight: 700;
-      background: rgba(76, 201, 240, 0.1);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
       padding: 2px 6px;
       border-radius: 4px;
     }

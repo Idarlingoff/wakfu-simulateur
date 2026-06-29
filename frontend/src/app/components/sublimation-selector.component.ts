@@ -184,7 +184,7 @@ import { Sublimation } from '../models/build.model';
 
     h4 {
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       margin: 0;
       text-transform: uppercase;
       letter-spacing: 1px;
@@ -218,8 +218,8 @@ import { Sublimation } from '../models/build.model';
     }
 
     .modal {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 16px;
       width: 90%;
       max-width: 600px;
@@ -233,18 +233,18 @@ import { Sublimation } from '../models/build.model';
       justify-content: space-between;
       align-items: center;
       padding: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .modal-header h3 {
       margin: 0;
-      color: #cfe3ff;
+      color: var(--app-text);
     }
 
     .modal-header button {
       background: transparent;
       border: none;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 20px;
       cursor: pointer;
     }
@@ -258,7 +258,7 @@ import { Sublimation } from '../models/build.model';
     .sublimation-section {
       margin-bottom: 20px;
       padding-bottom: 16px;
-      border-bottom: 1px solid var(--stroke);
+      border-bottom: 1px solid var(--app-border);
     }
 
     .sublimation-section h4 {
@@ -272,7 +272,7 @@ import { Sublimation } from '../models/build.model';
     }
 
     .sublimation-slot {
-      border: 1px solid var(--stroke);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       overflow: hidden;
       aspect-ratio: 1;
@@ -288,7 +288,7 @@ import { Sublimation } from '../models/build.model';
 
     .sublimation-card {
       height: 100%;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -300,7 +300,7 @@ import { Sublimation } from '../models/build.model';
     }
 
     .sublimation-card:hover {
-      background: var(--panel);
+      background: var(--app-surface);
     }
 
     .sublimation-card.epic {
@@ -317,7 +317,7 @@ import { Sublimation } from '../models/build.model';
 
     .sublimation-name {
       font-size: 9px;
-      color: #e8ecf3;
+      color: var(--app-text);
       text-align: center;
       padding: 0 4px;
       max-width: 100%;
@@ -330,7 +330,7 @@ import { Sublimation } from '../models/build.model';
       position: absolute;
       top: 2px;
       right: 2px;
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
       border: none;
       border-radius: 4px;
@@ -348,25 +348,25 @@ import { Sublimation } from '../models/build.model';
 
     .empty-slot {
       height: 100%;
-      background: var(--panel-2);
-      border: 2px dashed var(--stroke);
+      background: var(--app-surface-2);
+      border: 2px dashed var(--app-border);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       transition: all 0.2s;
       font-size: 24px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .empty-slot:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: var(--panel);
+      border-color: var(--app-accent);
+      color: var(--app-accent);
+      background: var(--app-surface);
     }
 
     .available-section {
-      border-top: 2px solid var(--stroke);
+      border-top: 2px solid var(--app-border);
       padding-top: 16px;
     }
 
@@ -377,9 +377,9 @@ import { Sublimation } from '../models/build.model';
     }
 
     .filter-tabs button {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 6px 12px;
       border-radius: 6px;
       cursor: pointer;
@@ -388,13 +388,13 @@ import { Sublimation } from '../models/build.model';
     }
 
     .filter-tabs button:hover {
-      background: var(--panel);
+      background: var(--app-surface);
     }
 
     .filter-tabs button.active {
-      background: var(--accent);
-      color: #0b1220;
-      border-color: var(--accent);
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .search-box {
@@ -403,9 +403,9 @@ import { Sublimation } from '../models/build.model';
 
     .search-box input {
       width: 100%;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 8px 12px;
       border-radius: 8px;
       font-size: 14px;
@@ -413,7 +413,7 @@ import { Sublimation } from '../models/build.model';
 
     .loading, .no-results {
       text-align: center;
-      color: var(--muted);
+      color: var(--app-text-muted);
       padding: 32px;
     }
 
@@ -425,8 +425,8 @@ import { Sublimation } from '../models/build.model';
     }
 
     .sublimation-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 12px;
       display: flex;
@@ -437,8 +437,8 @@ import { Sublimation } from '../models/build.model';
     }
 
     .sublimation-item:hover {
-      background: var(--panel);
-      border-color: var(--accent);
+      background: var(--app-surface);
+      border-color: var(--app-accent);
     }
 
     .sublimation-item.epic {
@@ -460,7 +460,7 @@ import { Sublimation } from '../models/build.model';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--panel);
+      background: var(--app-surface);
       border-radius: 8px;
     }
 
@@ -470,14 +470,14 @@ import { Sublimation } from '../models/build.model';
 
     .sublimation-title {
       font-size: 14px;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-weight: 600;
       margin-bottom: 4px;
     }
 
     .sublimation-rarity {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       margin-bottom: 4px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -485,7 +485,7 @@ import { Sublimation } from '../models/build.model';
 
     .sublimation-desc {
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       line-height: 1.4;
       margin-bottom: 6px;
     }
@@ -497,24 +497,24 @@ import { Sublimation } from '../models/build.model';
     }
 
     .stat {
-      background: var(--panel);
+      background: var(--app-surface);
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 11px;
-      color: var(--accent);
+      color: var(--app-accent);
     }
 
     .modal-footer {
       padding: 16px;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
       display: flex;
       justify-content: flex-end;
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
       padding: 10px 16px;
       border-radius: 8px;
       cursor: pointer;
@@ -523,7 +523,7 @@ import { Sublimation } from '../models/build.model';
     }
 
     .btn-secondary:hover {
-      background: #2d3a4f;
+      background: var(--app-surface-2);
     }
   `]
 })
