@@ -3,7 +3,7 @@
  * Affiche le résumé des dégâts par étape de la timeline dans le panneau gauche
  */
 
-import { Component, inject, computed, signal, effect, ElementRef, ViewChild } from '@angular/core';
+import { Component, inject, computed, signal, effect, ElementRef, ViewChild, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SimulationService } from '../services/simulation.service';
 import { TimelineService } from '../services/timeline.service';
@@ -16,10 +16,12 @@ import { Spell } from '../models/spell.model';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="damage-summary">
+    <div class="damage-summary" [class.compact]="compact()">
+      @if (!compact()) {
       <div class="summary-title">
         <span>Résumé des Dégâts</span>
       </div>
+      }
 
       <!-- Total damage banner -->
       <div class="total-damage-banner">
@@ -37,6 +39,7 @@ import { Spell } from '../models/spell.model';
         </div>
       </div>
 
+      @if (!compact()) {
       <!-- Step indicator -->
       <div class="step-progress" *ngIf="currentTimeline()">
         <span class="progress-label">Progression</span>
@@ -110,6 +113,7 @@ import { Spell } from '../models/spell.model';
       <div class="empty-state" *ngIf="stepsSummary().length === 0">
         <span>Lancez la simulation pour voir les dégâts</span>
       </div>
+      }
     </div>
   `,
   styles: [`
@@ -421,6 +425,19 @@ import { Spell } from '../models/spell.model';
       font-size: 32px;
       opacity: 0.5;
     }
+
+    /* ── Compact mode (toolbar strip) ── */
+    .damage-summary.compact { gap: 0; }
+    .damage-summary.compact .total-damage-banner {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 16px;
+      padding: 6px 12px;
+      margin: 0;
+    }
+    .damage-summary.compact .total-row { gap: 8px; }
+    .damage-summary.compact .total-value { font-size: 16px; }
   `]
 })
 export class DamageSummaryComponent {
@@ -428,6 +445,8 @@ export class DamageSummaryComponent {
   private readonly timelineService = inject(TimelineService);
   private readonly buildService = inject(BuildService);
   private readonly dataCacheService = inject(DataCacheService);
+
+  readonly compact = input<boolean>(false);
 
   @ViewChild('stepsList') stepsListRef?: ElementRef<HTMLElement>;
 
