@@ -8,6 +8,7 @@ const ICON_PATHS: Record<string, string> = {
   play: 'M8 5v14l11-7z',
   chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   menu: 'M4 6h16M4 12h16M4 18h16',
+  activity: 'M22 12h-4l-3 9L9 3l-3 9H2',
 };
 
 @Component({
