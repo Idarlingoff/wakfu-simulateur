@@ -46,6 +46,7 @@ export class HomeComponent {
     { path: '/builds', label: 'Builds', icon: 'user', desc: 'Gérer tes personnages et équipements' },
     { path: '/timelines', label: 'Timelines', icon: 'clock', desc: 'Composer une suite d\'actions' },
     { path: '/freeplay', label: 'Freeplay', icon: 'play', desc: 'Tester librement sur la map' },
+    { path: '/resultats', label: 'Résultats', icon: 'activity', desc: 'Voir les dégâts et le déroulé' },
     { path: '/comparaison', label: 'Comparaison', icon: 'chart', desc: 'Comparer plusieurs builds' },
   ];
 }

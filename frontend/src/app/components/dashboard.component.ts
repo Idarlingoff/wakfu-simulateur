@@ -14,15 +14,13 @@ import {TimelineFormComponent} from './timeline-form.component';
 import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
-import {TimelineSummaryComponent} from './timeline-summary.component';
-import {DamageSummaryComponent} from './damage-summary.component';
 import { Timeline } from '../models/timeline.model';
 import {SimulationService} from '../services/simulation.service';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent],
+  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -94,11 +92,6 @@ import {SimulationService} from '../services/simulation.service';
       </section>
 
       <div class="container">
-        <!-- Left Panel: Damage Summary -->
-        <aside class="panel">
-          <app-damage-summary></app-damage-summary>
-        </aside>
-
         <!-- Main Content -->
         <main class="content">
           <!-- Board Component - Interactive Map -->
@@ -110,11 +103,6 @@ import {SimulationService} from '../services/simulation.service';
               [placementMode]="placementMode()"
               (boardCellClick)="onBoardCellClick($event)"
             ></app-board>
-          </section>
-
-          <!-- Timeline Summary -->
-          <section class="section timeline-summary-section">
-            <app-timeline-summary></app-timeline-summary>
           </section>
         </main>
       </div>
@@ -388,7 +376,7 @@ import {SimulationService} from '../services/simulation.service';
 
     .container {
       display: grid;
-      grid-template-columns: 300px 1fr;
+      grid-template-columns: 1fr;
       gap: 12px;
       padding: 12px;
       min-height: calc(100vh - 72px);

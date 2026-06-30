@@ -12,6 +12,6 @@ describe('HomeComponent', () => {
     const fixture = TestBed.createComponent(HomeComponent);
     fixture.detectChanges();
     const cards = fixture.nativeElement.querySelectorAll('a.card');
-    expect(cards.length).toBe(4);
+    expect(cards.length).toBe(5);
   });
 });
