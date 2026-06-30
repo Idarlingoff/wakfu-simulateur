@@ -6,10 +6,10 @@
 import {Component, inject, signal, ViewChild, input} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
+import {Router} from '@angular/router';
 import {BuildService} from '../services/build.service';
 import {TimelineService} from '../services/timeline.service';
 import {BoardService} from '../services/board.service';
-import {BuildFormComponent} from './build-form.component';
 import {TimelineFormComponent} from './timeline-form.component';
 import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
@@ -22,7 +22,7 @@ import {SimulationService} from '../services/simulation.service';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent],
+  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -136,9 +136,6 @@ import {SimulationService} from '../services/simulation.service';
           </div>
         </div>
       </div>
-
-    <!-- Build Form Modal -->
-    <app-build-form #buildForm></app-build-form>
 
     <!-- Timeline Form Modal -->
     <app-timeline-form #timelineForm></app-timeline-form>
@@ -849,6 +846,7 @@ export class DashboardComponent {
   timelineService = inject(TimelineService);
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
+  private readonly router = inject(Router);
 
   showActionsMenu = signal<boolean>(false);
   showBuildDropdown = signal<boolean>(false);
@@ -1101,18 +1099,17 @@ export class DashboardComponent {
     alert('✓ Plateau et timeline complètement effacés !');
   }
 
-  @ViewChild('buildForm') buildForm!: BuildFormComponent;
   @ViewChild('timelineForm') timelineForm!: TimelineFormComponent;
   @ViewChild('playerForm') playerForm!: PlayerFormComponent;
   @ViewChild('enemyForm') enemyForm!: EnemyFormComponent;
 
   onCreateBuild(): void {
-    this.buildForm.openNew();
+    this.router.navigate(['/builds/nouveau']);
   }
 
   onEditBuild(event: any, build: any): void {
-    event.stopPropagation();
-    this.buildForm.openEdit(build);
+    event?.stopPropagation?.();
+    this.router.navigate(['/builds', build.id, 'edition']);
   }
 
   onDeleteBuild(event: any, build: any): void {
