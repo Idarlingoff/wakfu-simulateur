@@ -1,7 +1,6 @@
-import { Component, computed, inject, viewChild } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { BuildService } from '../services/build.service';
-import { BuildFormComponent } from '../components/build-form.component';
 import { UiButtonComponent } from '../ui/ui-button.component';
 import { IconComponent } from '../ui/icon.component';
 import { Build } from '../models/build.model';
@@ -9,7 +8,7 @@ import { Build } from '../models/build.model';
 @Component({
   selector: 'app-builds-list',
   standalone: true,
-  imports: [BuildFormComponent, UiButtonComponent, IconComponent],
+  imports: [UiButtonComponent, IconComponent],
   template: `
     <section class="builds">
       <header class="builds-head">
@@ -48,8 +47,6 @@ import { Build } from '../models/build.model';
         </div>
       }
     </section>
-
-    <app-build-form #buildForm></app-build-form>
   `,
   styles: [`
     .builds { max-width: 1000px; margin: 0 auto; padding: 24px 20px; color: var(--app-text); }
@@ -70,17 +67,16 @@ import { Build } from '../models/build.model';
 export class BuildsListComponent {
   private readonly buildService = inject(BuildService);
   private readonly router = inject(Router);
-  private readonly buildForm = viewChild.required(BuildFormComponent);
 
   protected readonly builds = this.buildService.allBuilds;
   protected readonly selectedId = computed(() => this.buildService.selectedBuildA()?.id ?? null);
 
   createBuild(): void {
-    this.buildForm().openNew();
+    this.router.navigate(['/builds/nouveau']);
   }
 
   editBuild(build: Build): void {
-    this.buildForm().openEdit(build);
+    this.router.navigate(['/builds', build.id, 'edition']);
   }
 
   selectBuild(build: Build): void {

@@ -1,9 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { By } from '@angular/platform-browser';
 import { BuildsListComponent } from './builds-list.component';
-import { BuildFormComponent } from '../components/build-form.component';
 import { BuildService } from '../services/build.service';
 import { Build } from '../models/build.model';
 
@@ -38,10 +36,6 @@ describe('BuildsListComponent', () => {
       imports: [BuildsListComponent],
       providers: [provideRouter([]), { provide: BuildService, useValue: stub }],
     });
-    // Neutralise le template du formulaire modal (qui embarque les sélecteurs sorts/passifs/
-    // sublimations → HttpClient/DataCacheService) pour que le test reste isolé sur BuildService.
-    // La classe est conservée : viewChild.required(BuildFormComponent) résout toujours.
-    TestBed.overrideComponent(BuildFormComponent, { set: { template: '', imports: [] } });
   });
 
   it('rend une carte par build', () => {
@@ -88,22 +82,21 @@ describe('BuildsListComponent', () => {
     expect(navSpy).toHaveBeenCalledWith(['/timelines']);
   });
 
-  it('ouvre le formulaire en creation', () => {
+  it('navigue vers l editeur en creation', () => {
     const fixture = TestBed.createComponent(BuildsListComponent);
+    const router = TestBed.inject(Router);
+    const nav = spyOn(router, 'navigate');
     fixture.detectChanges();
-    const form = fixture.debugElement.query(By.directive(BuildFormComponent)).componentInstance as BuildFormComponent;
-    const openNewSpy = spyOn(form, 'openNew');
     fixture.componentInstance.createBuild();
-    expect(openNewSpy).toHaveBeenCalled();
+    expect(nav).toHaveBeenCalledWith(['/builds/nouveau']);
   });
 
-  it('ouvre le formulaire en edition avec le build cible', () => {
+  it('navigue vers l editeur en edition avec l id du build', () => {
     const fixture = TestBed.createComponent(BuildsListComponent);
+    const router = TestBed.inject(Router);
+    const nav = spyOn(router, 'navigate');
     fixture.detectChanges();
-    const form = fixture.debugElement.query(By.directive(BuildFormComponent)).componentInstance as BuildFormComponent;
-    const openEditSpy = spyOn(form, 'openEdit');
-    const build = stub.allBuilds()[1];
-    fixture.componentInstance.editBuild(build);
-    expect(openEditSpy).toHaveBeenCalledWith(build);
+    fixture.componentInstance.editBuild(stub.allBuilds()[1]);
+    expect(nav).toHaveBeenCalledWith(['/builds', 'b2', 'edition']);
   });
 });
