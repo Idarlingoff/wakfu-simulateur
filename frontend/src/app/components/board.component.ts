@@ -38,6 +38,7 @@ interface BoardCell {
             <span class="timeline-badge">{{ currentTimeline()!.name }}</span>
           </div>
         </div>
+        @if (mode() === 'timeline') {
         <div class="board-controls">
           <!-- Nouveau : Bouton pour lancer toute la simulation -->
           <button
@@ -80,6 +81,7 @@ interface BoardCell {
 
           <button (click)="onReset()" class="btn-reset" [disabled]="isSimulating()">Réinitialiser</button>
         </div>
+        }
       </div>
 
       <div class="board-setup-warning" *ngIf="currentTimeline() && !hasMinimumBoardSetup()">
@@ -91,6 +93,7 @@ interface BoardCell {
       </div>
 
       <!-- ═══ BANDEAU MODE INTERACTIF ═══ -->
+      @if (mode() === 'freeplay') {
       <div class="interactive-bar"
            [class.active]="interactivePlay.isActive()"
            [class.freeplay]="interactivePlay.isActive() && interactivePlay.isFreeplay() && !isXelorFreeplayActive()"
@@ -215,6 +218,7 @@ interface BoardCell {
           <span *ngIf="!selectedSpellId()">Cliquez sur une case pour déplacer le joueur</span>
         </div>
       </div>
+      }
 
       <!-- Map + Panneau sorts côte à côte — toujours affiché -->
       <div class="board-and-spells">
@@ -1931,6 +1935,8 @@ interface BoardCell {
   `]
 })
 export class BoardComponent {
+  readonly mode = input<'timeline' | 'freeplay'>('timeline');
+
   timelineService = inject(TimelineService);
   buildService = inject(BuildService);
   boardService = inject(BoardService);
