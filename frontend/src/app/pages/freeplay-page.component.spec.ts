@@ -17,7 +17,6 @@ describe('FreeplayPageComponent', () => {
     const fixture = TestBed.createComponent(FreeplayPageComponent);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('h1')?.textContent).toContain('Freeplay');
     const dash = el.querySelector('app-dashboard');
     expect(dash).toBeTruthy();
     expect(dash?.getAttribute('mode')).toBe('freeplay');

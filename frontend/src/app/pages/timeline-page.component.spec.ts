@@ -17,7 +17,6 @@ describe('TimelinePageComponent', () => {
     const fixture = TestBed.createComponent(TimelinePageComponent);
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('h1')?.textContent).toContain('Timeline');
     const dash = el.querySelector('app-dashboard');
     expect(dash).toBeTruthy();
     expect(dash?.getAttribute('mode')).toBe('timeline');

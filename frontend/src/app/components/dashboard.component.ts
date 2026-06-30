@@ -16,11 +16,12 @@ import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
 import { Timeline } from '../models/timeline.model';
 import {SimulationService} from '../services/simulation.service';
+import {DamageSummaryComponent} from './damage-summary.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent],
+  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, DamageSummaryComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -74,6 +75,7 @@ import {SimulationService} from '../services/simulation.service';
           </div>
         </div>
         <button class="btn-secondary" (click)="toggleActionsMenu()">Action</button>
+        <app-damage-summary [compact]="true" class="header-damage"></app-damage-summary>
       </header>
 
       <!-- Backdrop to close dropdowns -->
@@ -157,11 +159,13 @@ import {SimulationService} from '../services/simulation.service';
       border-bottom: 1px solid var(--app-border);
       padding: 12px 20px;
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
     }
+
+    .header-damage { margin-left: auto; }
 
     .header h1 {
       margin: 0;
