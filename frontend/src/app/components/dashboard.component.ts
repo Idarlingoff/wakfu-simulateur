@@ -3,7 +3,7 @@
  * Demonstrates working services and data binding
  */
 
-import {Component, inject, signal, ViewChild} from '@angular/core';
+import {Component, inject, signal, ViewChild, input} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
 import {BuildService} from '../services/build.service';
@@ -104,6 +104,7 @@ import {SimulationService} from '../services/simulation.service';
           <!-- Board Component - Interactive Map -->
           <section class="section board-section">
             <app-board
+              [mode]="mode()"
               (editPlayer)="onEditPlayerFromBoard($event)"
               (editEnemy)="onEditEnemyFromBoard($event)"
               [placementMode]="placementMode()"
@@ -842,6 +843,8 @@ import {SimulationService} from '../services/simulation.service';
   `]
 })
 export class DashboardComponent {
+  readonly mode = input<'timeline' | 'freeplay'>('timeline');
+
   buildService = inject(BuildService);
   timelineService = inject(TimelineService);
   boardService = inject(BoardService);
