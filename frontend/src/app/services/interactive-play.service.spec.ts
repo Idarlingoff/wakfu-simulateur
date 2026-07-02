@@ -77,3 +77,70 @@ describe('InteractivePlayService – Freeplay Xel Rouage passifs', () => {
     expect(ids).toContain('XEL_REMANENCE');
   });
 });
+
+describe('InteractivePlayService — enregistrement', () => {
+  let service: InteractivePlayService;
+
+  beforeEach(() => {
+    const engine = {
+      executeSingleStep: jasmine.createSpy('executeSingleStep').and.returnValue(
+        Promise.resolve({ success: true, contextAfter: { playerPosition: { x: 3, y: 4 }, mechanisms: [], entities: [] }, actions: [] })
+      ),
+    };
+    const simSvc = {
+      appendInteractiveStep: jasmine.createSpy('appendInteractiveStep'),
+      clearInteractiveSteps: jasmine.createSpy('clearInteractiveSteps'),
+    };
+    const stats = { calculateTotalStats: jasmine.createSpy('calc').and.returnValue({ ap: 12, mp: 3, wp: 6 }) };
+    const board = {
+      player: () => undefined,
+      players: () => [],
+      enemies: () => [],
+      mechanisms: () => [],
+      state: () => ({ entities: [], mechanisms: [] }),
+      updateEntityPosition: jasmine.createSpy('updateEntityPosition'),
+      updateEntity: jasmine.createSpy('updateEntity'),
+      addEntity: jasmine.createSpy('addEntity'),
+      removeEntity: jasmine.createSpy('removeEntity'),
+      getEntity: () => undefined,
+    };
+    TestBed.configureTestingModule({
+      providers: [
+        InteractivePlayService,
+        { provide: SimulationEngineService, useValue: engine },
+        { provide: SimulationService, useValue: simSvc },
+        { provide: StatsCalculatorService, useValue: stats },
+        { provide: BoardService, useValue: board },
+      ],
+    });
+    service = TestBed.inject(InteractivePlayService);
+  });
+
+  it('démarre avec une séquence vide', () => {
+    expect(service.recordedSteps()).toEqual([]);
+  });
+
+  it('enregistre un sort joué dans recordedSteps', async () => {
+    service.startSessionFreeplay();
+    await service.castSpell('spell_x', { x: 3, y: 4 });
+    const steps = service.recordedSteps();
+    expect(steps.length).toBe(1);
+    expect(steps[0].actions[0].type).toBe('CastSpell');
+    expect(steps[0].actions[0].spellId).toBe('spell_x');
+    expect(steps[0].actions[0].targetPosition).toEqual({ x: 3, y: 4 });
+  });
+
+  it('clearRecording vide la séquence', async () => {
+    service.startSessionFreeplay();
+    await service.castSpell('spell_x', { x: 3, y: 4 });
+    service.clearRecording();
+    expect(service.recordedSteps()).toEqual([]);
+  });
+
+  it('un nouveau démarrage de session repart d une séquence vide', async () => {
+    service.startSessionFreeplay();
+    await service.castSpell('spell_x', { x: 3, y: 4 });
+    service.startSessionFreeplay();
+    expect(service.recordedSteps()).toEqual([]);
+  });
+});

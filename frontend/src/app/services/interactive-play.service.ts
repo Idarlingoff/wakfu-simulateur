@@ -37,11 +37,22 @@ export class InteractivePlayService {
   private _freeplay = false;
   private _stepCount = 0;
 
+  private readonly _recordedSteps = signal<TimelineStep[]>([]);
+  /** Séquence des actions jouées dans la session courante (pour créer une timeline). */
+  public readonly recordedSteps = computed(() => this._recordedSteps());
+  public readonly recordedCount = computed(() => this._recordedSteps().length);
+
+  /** Vide la séquence enregistrée (sans arrêter la session). */
+  clearRecording(): void {
+    this._recordedSteps.set([]);
+  }
+
   /** Active le mode interactif et initialise le contexte depuis le build */
   startSession(build: Build): void {
     this._build = build;
     this._freeplay = false;
     this._stepCount = 0;
+    this._recordedSteps.set([]);
 
     const stats = this.statsCalculator.calculateTotalStats(build);
     const player = this.boardService.player();
@@ -83,6 +94,7 @@ export class InteractivePlayService {
     this._build = null;
     this._freeplay = true;
     this._stepCount = 0;
+    this._recordedSteps.set([]);
 
     const INFINITE = 999;
     const player = this.boardService.player();
@@ -164,6 +176,7 @@ export class InteractivePlayService {
     };
     this._freeplay = true;
     this._stepCount = 0;
+    this._recordedSteps.set([]);
 
     const ctx: SimulationContext = {
       availablePa: INFINITE,
@@ -198,6 +211,7 @@ export class InteractivePlayService {
     this._build = null;
     this._freeplay = false;
     this._stepCount = 0;
+    this._recordedSteps.set([]);
     console.log('[InteractivePlay] Session arrêtée');
   }
 
@@ -264,6 +278,7 @@ export class InteractivePlayService {
         console.log(`[InteractivePlay] Sort exécuté – dégâts: ${dmg}`);
         this.syncPlayerPositionFromContext(result.contextAfter);
         this.syncMechanismsFromContext(result.contextAfter, spellId);
+        this._recordedSteps.update(s => [...s, step]);
       }
 
       return result;
@@ -323,6 +338,7 @@ export class InteractivePlayService {
           this.boardService.updateEntityPosition(player.id, finalPos);
         }
         console.log(`[InteractivePlay] Déplacement ${via} vers (${targetPosition.x}, ${targetPosition.y})`);
+        this._recordedSteps.update(s => [...s, step]);
       } else {
         const err = result.actions.find(a => !a.success)?.message ?? 'Déplacement impossible';
         console.warn('[InteractivePlay] Déplacement échoué:', err);
