@@ -75,7 +75,7 @@ input::placeholder {
 }
 
 /* Buttons */
-button:not([ui-button]):not(.ui-theme-toggle) {
+button:not([ui-button]):not(.ui-theme-toggle):not(.tool-btn) {
   background: var(--app-surface-2);
   border: 1px solid var(--app-border);
   color: var(--app-text);
@@ -87,11 +87,11 @@ button:not([ui-button]):not(.ui-theme-toggle) {
   transition: all 0.2s ease;
 }
 
-button:hover:not([ui-button]):not(.ui-theme-toggle) {
+button:hover:not([ui-button]):not(.ui-theme-toggle):not(.tool-btn) {
   background: var(--app-border);
 }
 
-button:active:not([ui-button]):not(.ui-theme-toggle) {
+button:active:not([ui-button]):not(.ui-theme-toggle):not(.tool-btn) {
   transform: scale(0.98);
 }
 

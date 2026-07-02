@@ -34,9 +34,11 @@ interface BoardCell {
       <div class="board-header">
         <div class="header-left">
           <h2>🗺️ Carte de Combat</h2>
+          @if (mode() === 'timeline') {
           <div class="timeline-indicator" *ngIf="currentTimeline()">
             <span class="timeline-badge">{{ currentTimeline()!.name }}</span>
           </div>
+          }
         </div>
         @if (mode() === 'timeline') {
         <div class="board-controls">

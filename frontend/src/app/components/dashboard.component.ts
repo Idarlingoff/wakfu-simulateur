@@ -17,11 +17,12 @@ import {EnemyFormComponent} from './enemy-form.component';
 import { Timeline } from '../models/timeline.model';
 import {SimulationService} from '../services/simulation.service';
 import {DamageSummaryComponent} from './damage-summary.component';
+import { IconComponent } from '../ui/icon.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, DamageSummaryComponent],
+  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, DamageSummaryComponent, IconComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -51,7 +52,8 @@ import {DamageSummaryComponent} from './damage-summary.component';
             </div>
           </div>
 
-          <!-- Timeline selector -->
+          <!-- Timeline selector (Timeline mode uniquement) -->
+          @if (mode() === 'timeline') {
           <div class="selector-group">
             <label class="selector-label">Timeline</label>
             <div class="selector-dropdown" (click)="toggleTimelineDropdown()">
@@ -73,25 +75,24 @@ import {DamageSummaryComponent} from './damage-summary.component';
               <button class="dropdown-add" (click)="onCreateTimeline(); closeTimelineDropdown()">➕ Nouvelle Timeline</button>
             </div>
           </div>
+          }
         </div>
-        <button class="btn-secondary" (click)="toggleActionsMenu()">Action</button>
+        <div class="header-tools">
+          <button class="tool-btn" (click)="onAddPlayer()" title="Ajouter un allié" aria-label="Ajouter un allié"><ui-icon name="user-plus"></ui-icon></button>
+          <button class="tool-btn" (click)="onAddEnemy()" title="Ajouter un ennemi" aria-label="Ajouter un ennemi"><ui-icon name="target"></ui-icon></button>
+          <button class="tool-btn" (click)="onAddCog()" title="Ajouter un rouage" aria-label="Ajouter un rouage"><ui-icon name="cog"></ui-icon></button>
+          <button class="tool-btn" (click)="onExportBuild()" title="Exporter le build" aria-label="Exporter le build"><ui-icon name="download"></ui-icon></button>
+          @if (mode() === 'timeline') {
+            <button class="tool-btn" (click)="onValidateTimeline()" title="Valider la timeline" aria-label="Valider la timeline"><ui-icon name="check"></ui-icon></button>
+            <button class="tool-btn" (click)="onSaveBoardSetup()" [disabled]="!timelineService.currentTimeline()" title="Sauver la map dans la timeline" aria-label="Sauver la map dans la timeline"><ui-icon name="save"></ui-icon></button>
+          }
+          <button class="tool-btn danger" (click)="onClearBoard()" title="Effacer la map" aria-label="Effacer la map"><ui-icon name="trash"></ui-icon></button>
+        </div>
         <app-damage-summary [compact]="true" class="header-damage"></app-damage-summary>
       </header>
 
       <!-- Backdrop to close dropdowns -->
       <div class="dropdown-backdrop" *ngIf="showBuildDropdown() || showTimelineDropdown()" (click)="closeAllDropdowns()"></div>
-
-      <section class="header-actions" *ngIf="showActionsMenu()">
-        <div class="actions">
-          <button (click)="onValidateTimeline()" class="btn-primary">Validater la timeline</button>
-          <button (click)="onExportBuild()" class="btn-secondary">Export build</button>
-          <button (click)="onAddPlayer()" class="btn-secondary">Ajout allié</button>
-          <button (click)="onAddEnemy()" class="btn-secondary">Ajout ennemie</button>
-          <button (click)="onAddCog()" class="btn-secondary">Ajout rouage</button>
-          <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">Sauvegarder la map dans la timeline</button>
-          <button (click)="onClearBoard()" class="btn-danger">Effacer la map</button>
-        </div>
-      </section>
 
       <div class="container">
         <!-- Main Content -->
@@ -384,20 +385,6 @@ import {DamageSummaryComponent} from './damage-summary.component';
       gap: 12px;
       padding: 12px;
       min-height: calc(100vh - 72px);
-    }
-
-    .header-actions {
-      margin: 12px;
-      background: var(--app-surface);
-      border: 1px solid var(--app-border);
-      border-radius: 8px;
-      padding: 12px;
-    }
-
-    .header-actions .actions {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 8px;
     }
 
     .panel {
@@ -829,6 +816,13 @@ import {DamageSummaryComponent} from './damage-summary.component';
       border-radius: 12px;
       padding: 16px;
     }
+
+    .header-tools { display: flex; align-items: center; gap: 4px; }
+    .tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: transparent; border: 1px solid var(--app-border); color: var(--app-text); cursor: pointer; }
+    .tool-btn:hover { border-color: var(--app-border-strong); background: var(--app-surface-2); }
+    .tool-btn:focus-visible { outline: 2px solid var(--app-focus); outline-offset: 2px; }
+    .tool-btn.danger:hover { border-color: var(--app-danger); color: var(--app-danger); }
+    .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   `]
 })
 export class DashboardComponent {
@@ -840,7 +834,6 @@ export class DashboardComponent {
   simulationService = inject(SimulationService);
   private readonly router = inject(Router);
 
-  showActionsMenu = signal<boolean>(false);
   showBuildDropdown = signal<boolean>(false);
   showTimelineDropdown = signal<boolean>(false);
   statsBuildModal = signal<any | null>(null);
@@ -882,10 +875,6 @@ export class DashboardComponent {
 
   onSelectBuild(build: any): void {
     this.buildService.selectBuildA(build);
-  }
-
-  toggleActionsMenu(): void {
-    this.showActionsMenu.update(v => !v);
   }
 
   onOpenBuildStats(event: Event, build: any): void {
