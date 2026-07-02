@@ -10,7 +10,7 @@ import {Router} from '@angular/router';
 import {BuildService} from '../services/build.service';
 import {TimelineService} from '../services/timeline.service';
 import {BoardService} from '../services/board.service';
-import {TimelineFormComponent} from './timeline-form.component';
+import {TimelineRecorderComponent} from './timeline-recorder.component';
 import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
@@ -22,7 +22,7 @@ import { IconComponent } from '../ui/icon.component';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, DamageSummaryComponent, IconComponent],
+  imports: [CommonModule, FormsModule, TimelineRecorderComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, DamageSummaryComponent, IconComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
@@ -106,6 +106,9 @@ import { IconComponent } from '../ui/icon.component';
               [placementMode]="placementMode()"
               (boardCellClick)="onBoardCellClick($event)"
             ></app-board>
+            @if (mode() === 'freeplay') {
+              <app-timeline-recorder></app-timeline-recorder>
+            }
           </section>
         </main>
       </div>
@@ -127,9 +130,6 @@ import { IconComponent } from '../ui/icon.component';
           </div>
         </div>
       </div>
-
-    <!-- Timeline Form Modal -->
-    <app-timeline-form #timelineForm></app-timeline-form>
 
     <!-- Player Form Modal -->
     <app-player-form
@@ -1080,7 +1080,6 @@ export class DashboardComponent {
     alert('✓ Plateau et timeline complètement effacés !');
   }
 
-  @ViewChild('timelineForm') timelineForm!: TimelineFormComponent;
   @ViewChild('playerForm') playerForm!: PlayerFormComponent;
   @ViewChild('enemyForm') enemyForm!: EnemyFormComponent;
 
@@ -1102,12 +1101,15 @@ export class DashboardComponent {
   }
 
   onCreateTimeline(): void {
-    this.timelineForm.openNew();
+    this.router.navigate(['/freeplay']);
   }
 
   onEditTimeline(event: any, timeline: any): void {
-    event.stopPropagation();
-    this.timelineForm.openEdit(timeline);
+    event?.stopPropagation?.();
+    const name = window.prompt('Nouveau nom de la timeline :', timeline.name);
+    if (name && name.trim()) {
+      this.timelineService.updateTimeline(timeline.id, { name: name.trim() });
+    }
   }
 
   async onDeleteTimeline(event: any, timeline: any): Promise<void> {
