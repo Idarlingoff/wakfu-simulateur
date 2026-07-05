@@ -32,9 +32,9 @@ const LEVELS: ReadonlyArray<number> = [20, 35, 50, 65, 80, 95, 110, 125, 140, 15
 
 function emptyForm(): FormBuild {
   return {
-    name: '', classId: '', characterLevel: 185, description: '',
+    name: '', classId: '', characterLevel: 200, description: '',
     stats: {
-      level: 185, masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
+      level: 200, masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
       masterySecondary: 0, backMastery: 0, dommageInflict: 0, critRate: 0, critMastery: 0,
       resistance: 0, ap: 12, mp: 3, wp: 0, range: 3,
     },
@@ -112,18 +112,18 @@ function emptyForm(): FormBuild {
             <h2>Stats</h2>
             <h3>Maîtrises élémentaires</h3>
             <div class="stat-grid">
-              <div class="field"><label>Feu</label><input type="number" [(ngModel)]="form.stats.masteryFire" name="mFire" /></div>
-              <div class="field"><label>Eau</label><input type="number" [(ngModel)]="form.stats.masteryWater" name="mWater" /></div>
-              <div class="field"><label>Terre</label><input type="number" [(ngModel)]="form.stats.masteryEarth" name="mEarth" /></div>
-              <div class="field"><label>Air</label><input type="number" [(ngModel)]="form.stats.masteryAir" name="mAir" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/DMG_FIRE_PERCENT.png" alt="Feu" />Feu</label><input type="number" [(ngModel)]="form.stats.masteryFire" name="mFire" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/DMG_WATER_PERCENT.png" alt="Eau" />Eau</label><input type="number" [(ngModel)]="form.stats.masteryWater" name="mWater" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/DMG_EARTH_PERCENT.png" alt="Terre" />Terre</label><input type="number" [(ngModel)]="form.stats.masteryEarth" name="mEarth" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/DMG_AIR_PERCENT.png" alt="Air" />Air</label><input type="number" [(ngModel)]="form.stats.masteryAir" name="mAir" /></div>
             </div>
             <h3>Offensif</h3>
             <div class="stat-grid">
-              <div class="field"><label>Dégâts infligés</label><input type="number" [(ngModel)]="form.stats.dommageInflict" name="dmg" /></div>
-              <div class="field"><label>Taux critique (%)</label><input type="number" [(ngModel)]="form.stats.critRate" name="crit" /></div>
-              <div class="field"><label>Maîtrise critique</label><input type="number" [(ngModel)]="form.stats.critMastery" name="critM" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/FINAL_DMG_IN_PERCENT.png" alt="Dégâts infligés" />Dégâts infligés</label><input type="number" [(ngModel)]="form.stats.dommageInflict" name="dmg" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/FEROCITY.png" alt="Taux critique" />Taux critique (%)</label><input type="number" [(ngModel)]="form.stats.critRate" name="crit" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/CRITICAL_BONUS.png" alt="Maîtrise critique" />Maîtrise critique</label><input type="number" [(ngModel)]="form.stats.critMastery" name="critM" /></div>
               <div class="field"><label>Maîtrise secondaire</label><input type="number" [(ngModel)]="form.stats.masterySecondary" name="mSec" /></div>
-              <div class="field"><label>Maîtrise dos</label><input type="number" [(ngModel)]="form.stats.backMastery" name="mBack" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/BACKSTAB_BONUS.png" alt="Maîtrise dos" />Maîtrise dos</label><input type="number" [(ngModel)]="form.stats.backMastery" name="mBack" /></div>
             </div>
             <h3>Défense</h3>
             <div class="stat-grid">
@@ -131,10 +131,10 @@ function emptyForm(): FormBuild {
             </div>
             <h3>Ressources & portée</h3>
             <div class="stat-grid">
-              <div class="field"><label>PA</label><input type="number" [(ngModel)]="form.stats.ap" name="ap" /></div>
-              <div class="field"><label>PM</label><input type="number" [(ngModel)]="form.stats.mp" name="mp" /></div>
-              <div class="field"><label>PW</label><input type="number" [(ngModel)]="form.stats.wp" name="wp" /></div>
-              <div class="field"><label>Portée</label><input type="number" [(ngModel)]="form.stats.range" name="range" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/AP.png" alt="PA" />PA</label><input type="number" [(ngModel)]="form.stats.ap" name="ap" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/MP.png" alt="PM" />PM</label><input type="number" [(ngModel)]="form.stats.mp" name="mp" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/WP.png" alt="PW" />PW</label><input type="number" [(ngModel)]="form.stats.wp" name="wp" /></div>
+              <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/RANGE.png" alt="Portée" />Portée</label><input type="number" [(ngModel)]="form.stats.range" name="range" /></div>
             </div>
           </section>
         </div>
@@ -174,6 +174,7 @@ function emptyForm(): FormBuild {
     .card h3 { margin: 14px 0 8px; font-size: 13px; color: var(--app-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
     .field label { font-size: 13px; color: var(--app-text-muted); }
+    .stat-icon { width: 18px; height: 18px; object-fit: contain; vertical-align: -4px; margin-right: 6px; }
     .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
     .stat-grid .field { margin-bottom: 0; }
     .editor-summary { position: sticky; top: 16px; }

@@ -29,7 +29,6 @@ import { DataCacheService } from '../services/data-cache.service';
           <div class="modal" (click)="$event.stopPropagation()">
             <div class="modal-header">
               <h3>Sélection des Passifs</h3>
-              <button (click)="closeModal()">✕</button>
             </div>
 
             <div class="modal-body">
@@ -46,14 +45,13 @@ import { DataCacheService } from '../services/data-cache.service';
                         <span class="lock-text">Verrouillé</span>
                       </div>
                     } @else if (passive) {
-                      <div class="passive-card" (click)="removePassive(i)">
+                      <div class="passive-card" (click)="removePassive(i)" title="Cliquer pour retirer">
                         @if (getPassiveIconId(passive.passiveId)) {
                           <img class="passive-icon" [src]="'assets/images/spells/' + getPassiveIconId(passive.passiveId) + '.png'" [alt]="getPassiveName(passive.passiveId)" (error)="onImgError($event)" />
                         } @else {
                           <span class="passive-icon">🔮</span>
                         }
                         <span class="passive-name">{{ getPassiveName(passive.passiveId) }}</span>
-                        <button class="remove-btn" title="Retirer">✕</button>
                       </div>
                     } @else {
                       <div class="empty-slot" (click)="selectSlot(i)">
@@ -255,7 +253,8 @@ import { DataCacheService } from '../services/data-cache.service';
     }
 
     .passive-card:hover {
-      background: var(--app-surface);
+      background: color-mix(in srgb, var(--app-danger) 18%, var(--app-surface-2));
+      outline: 1px solid var(--app-danger);
     }
 
     .passive-icon {
@@ -277,25 +276,6 @@ import { DataCacheService } from '../services/data-cache.service';
       white-space: nowrap;
     }
 
-    .remove-btn {
-      position: absolute;
-      top: 2px;
-      right: 2px;
-      background: var(--app-danger);
-      color: white;
-      border: none;
-      border-radius: 4px;
-      width: 20px;
-      height: 20px;
-      font-size: 12px;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .passive-card:hover .remove-btn {
-      opacity: 1;
-    }
 
     .empty-slot {
       height: 100px;

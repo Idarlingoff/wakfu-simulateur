@@ -35,7 +35,6 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
           <div class="picker-modal" (click)="$event.stopPropagation()">
             <div class="picker-header">
               <h3>Choisir les sorts</h3>
-              <button (click)="closePicker()">✕</button>
             </div>
 
             <div class="picker-body">
@@ -49,14 +48,13 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
                     [class.filled]="spell !== null"
                   >
                     @if (spell) {
-                      <div class="spell-card" (click)="removeSpell(i)">
+                      <div class="spell-card" (click)="removeSpell(i)" title="Cliquer pour retirer">
                         @if (getSpellIconId(spell.spellId)) {
                           <img class="spell-icon" [src]="'assets/images/spells/' + getSpellIconId(spell.spellId) + '.png'" [alt]="getSpellName(spell.spellId)" (error)="onImgError($event)" />
                         } @else {
                           <span class="spell-icon">✨</span>
                         }
                         <span class="spell-name">{{ getSpellName(spell.spellId) }}</span>
-                        <button class="remove-btn" title="Retirer">✕</button>
                       </div>
                     } @else {
                       <div class="empty-slot" (click)="openSpellPicker(i)">
@@ -116,6 +114,9 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
                   </div>
                 }
               </div>
+            </div>
+            <div class="picker-footer">
+              <button type="button" class="btn-close" (click)="closePicker()">Fermer</button>
             </div>
           </div>
         </div>
@@ -226,8 +227,8 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
     }
 
     .spell-card:hover {
-      background: var(--app-surface);
-      border-color: var(--app-accent);
+      background: color-mix(in srgb, var(--app-danger) 18%, var(--app-surface-2));
+      outline: 1px solid var(--app-danger);
     }
 
     .spell-icon {
@@ -247,26 +248,6 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-
-    .remove-btn {
-      position: absolute;
-      top: 2px;
-      right: 2px;
-      background: var(--app-danger);
-      color: white;
-      border: none;
-      border-radius: 4px;
-      width: 20px;
-      height: 20px;
-      font-size: 12px;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .spell-card:hover .remove-btn {
-      opacity: 1;
     }
 
     .empty-slot {
@@ -351,6 +332,25 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
       overflow-y: auto;
       padding: 16px;
     }
+
+    .picker-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid var(--app-border);
+    }
+
+    .btn-close {
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .btn-close:hover { border-color: var(--app-border-strong); }
 
     .loading, .no-results {
       text-align: center;

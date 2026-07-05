@@ -27,7 +27,6 @@ import { Sublimation } from '../models/build.model';
           <div class="modal" (click)="$event.stopPropagation()">
             <div class="modal-header">
               <h3>Sélection des Sublimations</h3>
-              <button (click)="closeModal()">✕</button>
             </div>
 
             <div class="modal-body">
@@ -38,10 +37,9 @@ import { Sublimation } from '../models/build.model';
                   @for (subli of getClassicSlots(); track $index; let i = $index) {
                     <div class="sublimation-slot" [class.filled]="subli !== null">
                       @if (subli) {
-                        <div class="sublimation-card classic" (click)="removeSublimation(i)">
+                        <div class="sublimation-card classic" (click)="removeSublimation(i)" title="Cliquer pour retirer">
                           <span class="sublimation-icon">💎</span>
                           <span class="sublimation-name">{{ subli.name }}</span>
-                          <button class="remove-btn" title="Retirer">✕</button>
                         </div>
                       } @else {
                         <div class="empty-slot" (click)="selectSlot(i, 'classic')">
@@ -59,10 +57,9 @@ import { Sublimation } from '../models/build.model';
                 <div class="sublimation-slots">
                   <div class="sublimation-slot epic" [class.filled]="getEpicSlot() !== null">
                     @if (getEpicSlot(); as subli) {
-                      <div class="sublimation-card epic" (click)="removeSublimation(10)">
+                      <div class="sublimation-card epic" (click)="removeSublimation(10)" title="Cliquer pour retirer">
                         <span class="sublimation-icon">💠</span>
                         <span class="sublimation-name">{{ subli.name }}</span>
-                        <button class="remove-btn" title="Retirer">✕</button>
                       </div>
                     } @else {
                       <div class="empty-slot" (click)="selectSlot(10, 'epic')">
@@ -79,10 +76,9 @@ import { Sublimation } from '../models/build.model';
                 <div class="sublimation-slots">
                   <div class="sublimation-slot relic" [class.filled]="getRelicSlot() !== null">
                     @if (getRelicSlot(); as subli) {
-                      <div class="sublimation-card relic" (click)="removeSublimation(11)">
+                      <div class="sublimation-card relic" (click)="removeSublimation(11)" title="Cliquer pour retirer">
                         <span class="sublimation-icon">🔶</span>
                         <span class="sublimation-name">{{ subli.name }}</span>
-                        <button class="remove-btn" title="Retirer">✕</button>
                       </div>
                     } @else {
                       <div class="empty-slot" (click)="selectSlot(11, 'relic')">
@@ -300,7 +296,8 @@ import { Sublimation } from '../models/build.model';
     }
 
     .sublimation-card:hover {
-      background: var(--app-surface);
+      background: color-mix(in srgb, var(--app-danger) 18%, var(--app-surface-2));
+      outline: 1px solid var(--app-danger);
     }
 
     .sublimation-card.epic {
@@ -326,25 +323,6 @@ import { Sublimation } from '../models/build.model';
       white-space: nowrap;
     }
 
-    .remove-btn {
-      position: absolute;
-      top: 2px;
-      right: 2px;
-      background: var(--app-danger);
-      color: white;
-      border: none;
-      border-radius: 4px;
-      width: 20px;
-      height: 20px;
-      font-size: 12px;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.2s;
-    }
-
-    .sublimation-card:hover .remove-btn {
-      opacity: 1;
-    }
 
     .empty-slot {
       height: 100%;
