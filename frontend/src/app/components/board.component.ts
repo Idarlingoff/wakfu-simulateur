@@ -290,9 +290,30 @@ interface BoardCell {
         <!-- PANNEAU SORTS -->
         <aside class="spells-panel">
 
-          <div class="spell-grid" *ngIf="buildSpells().length > 0; else noSpells">
+          <!-- Sorts du build : groupés par élément en mode timeline, grille plate sinon -->
+          @if (buildSpells().length > 0) {
+            @if (mode() === 'timeline') {
+              <div class="spell-group" *ngFor="let group of spellsByElement()">
+                <div class="spell-group-label">{{ group.label }}</div>
+                <div class="spell-grid">
+                  <ng-container *ngFor="let spell of group.spells">
+                    <ng-container *ngTemplateOutlet="spellCard; context: { $implicit: spell }"></ng-container>
+                  </ng-container>
+                </div>
+              </div>
+            } @else {
+              <div class="spell-grid">
+                <ng-container *ngFor="let spell of buildSpells()">
+                  <ng-container *ngTemplateOutlet="spellCard; context: { $implicit: spell }"></ng-container>
+                </ng-container>
+              </div>
+            }
+          } @else {
+            <ng-container *ngTemplateOutlet="noSpells"></ng-container>
+          }
+
+          <ng-template #spellCard let-spell>
             <div
-              *ngFor="let spell of buildSpells()"
               class="spell-icon-card"
               [class.selected]="selectedSpellId() === spell.id"
               (click)="onSelectSpell(spell)"
@@ -313,7 +334,7 @@ interface BoardCell {
               </div>
               <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
             </div>
-          </div>
+          </ng-template>
 
           <!-- Sorts innés de la classe -->
           <div class="innate-spells-section" *ngIf="innateSpells().length > 0">
@@ -774,6 +795,18 @@ interface BoardCell {
       grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       padding: 4px 0;
+    }
+
+    /* Regroupement par élément (mode timeline) */
+    .spell-group {
+      margin-bottom: 10px;
+    }
+    .spell-group-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--app-text-muted);
+      margin-bottom: 4px;
     }
 
     /* Carte icône de sort */
@@ -2071,6 +2104,33 @@ export class BoardComponent {
 
     return Array.from(cache.values())
       .filter(s => !getInnateSpellIdsForClass(this.boardService.player()?.classId ?? '').includes(s.id));
+  });
+
+  /** Ordre canonique des lignes d'éléments dans le panneau de sorts (mode timeline). */
+  private readonly ELEMENT_ORDER: ReadonlyArray<{ key: string; label: string }> = [
+    { key: 'fire', label: 'Feu' },
+    { key: 'water', label: 'Eau' },
+    { key: 'earth', label: 'Terre' },
+    { key: 'air', label: 'Air' },
+    { key: 'neutral', label: 'Neutre' },
+  ];
+
+  /** Normalise la valeur d'élément d'un sort (données hétérogènes) vers une clé canonique. */
+  private normalizeElement(el?: string): string {
+    const e = (el ?? '').toLowerCase();
+    if (e === 'fire' || e === 'feu') return 'fire';
+    if (e === 'water' || e === 'eau') return 'water';
+    if (e === 'earth' || e === 'terre') return 'earth';
+    if (e === 'air') return 'air';
+    return 'neutral';
+  }
+
+  /** Sorts du build regroupés par élément (lignes non vides seulement), pour le mode timeline. */
+  spellsByElement = computed(() => {
+    const spells = this.buildSpells();
+    return this.ELEMENT_ORDER
+      .map(g => ({ key: g.key, label: g.label, spells: spells.filter(s => this.normalizeElement(s.element) === g.key) }))
+      .filter(g => g.spells.length > 0);
   });
 
   innateSpells = computed(() => {
