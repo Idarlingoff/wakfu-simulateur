@@ -32,4 +32,23 @@ describe('BoardService — taille de map', () => {
     const service = TestBed.inject(BoardService);
     expect(service.gridSize()).toEqual({ cols: 15, rows: 7 });
   });
+
+  it('retombe sur 10x10 si le JSON en cache est invalide', () => {
+    localStorage.setItem(MAP_SIZE_KEY, 'not-json');
+    const service = TestBed.inject(BoardService);
+    expect(service.gridSize()).toEqual({ cols: 10, rows: 10 });
+  });
+
+  it('clampe une taille hors bornes lue en cache', () => {
+    localStorage.setItem(MAP_SIZE_KEY, JSON.stringify({ cols: 0, rows: 999 }));
+    const service = TestBed.inject(BoardService);
+    expect(service.gridSize()).toEqual({ cols: 5, rows: 20 });
+  });
+
+  it('resetToDefault preserve la taille courante', () => {
+    const service = TestBed.inject(BoardService);
+    service.setGridSize(14, 6);
+    service.resetToDefault();
+    expect(service.gridSize()).toEqual({ cols: 14, rows: 6 });
+  });
 });

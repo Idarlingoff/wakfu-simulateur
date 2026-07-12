@@ -17,6 +17,9 @@ const DEFAULT_DIM = 10;
 })
 export class BoardService {
   // State Signal
+  // Valeur provisoire : remplacée immédiatement par initializeBoard() dans le
+  // constructeur (qui applique la taille en cache). Ne pas la considérer comme
+  // la source de vérité de la taille de grille.
   private boardState = signal<InteractiveBoardState>({
     cols: DEFAULT_DIM,
     rows: DEFAULT_DIM,
@@ -641,14 +644,14 @@ export class BoardService {
       entities: state.entities.map(e => ({
         ...e,
         position: {
-          x: Math.min(e.position.x, cols - 1),
-          y: Math.min(e.position.y, rows - 1)
+          x: Math.max(0, Math.min(e.position.x, cols - 1)),
+          y: Math.max(0, Math.min(e.position.y, rows - 1))
         }
       })),
       mechanisms: state.mechanisms.map(m =>
         m.spellId
           ? m
-          : { ...m, position: { x: Math.min(m.position.x, cols - 1), y: Math.min(m.position.y, rows - 1) } }
+          : { ...m, position: { x: Math.max(0, Math.min(m.position.x, cols - 1)), y: Math.max(0, Math.min(m.position.y, rows - 1)) } }
       )
     }));
   }
@@ -658,7 +661,10 @@ export class BoardService {
       const raw = localStorage.getItem(MAP_SIZE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        return { cols: this.clampDim(parsed.cols), rows: this.clampDim(parsed.rows) };
+        return {
+          cols: typeof parsed?.cols === 'number' ? this.clampDim(parsed.cols) : DEFAULT_DIM,
+          rows: typeof parsed?.rows === 'number' ? this.clampDim(parsed.rows) : DEFAULT_DIM
+        };
       }
     } catch {
       /* localStorage indisponible */
