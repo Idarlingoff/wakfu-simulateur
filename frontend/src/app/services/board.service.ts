@@ -700,13 +700,19 @@ export class BoardService {
     this.clearHistory();
     this.resetDialState();
 
+    const cols = this.clampDim(setup?.cols ?? DEFAULT_DIM);
+    const rows = this.clampDim(setup?.rows ?? DEFAULT_DIM);
+    this.persistSize(cols, rows);
+
     if (!setup || setup.entities.length === 0) {
-      this.resetToDefault();
+      this.boardState.set(this.createEmptyBoardState(cols, rows));
       return;
     }
 
     this.boardState.update(state => ({
       ...state,
+      cols,
+      rows,
       entities: setup.entities.map(entity => ({
         id: entity.id,
         type: entity.type,
@@ -725,6 +731,8 @@ export class BoardService {
       selectedEntityId: undefined,
       draggedEntity: undefined
     }));
+
+    this.clampEntitiesToBounds(cols, rows);
   }
 
   public exportCurrentSetup(): TimelineBoardSetup {
@@ -742,7 +750,9 @@ export class BoardService {
         id: m.id,
         position: { ...m.position },
         charges: m.charges ?? 0
-      }))
+      })),
+      cols: state.cols,
+      rows: state.rows
     };
   }
 

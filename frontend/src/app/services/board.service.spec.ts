@@ -51,4 +51,50 @@ describe('BoardService — taille de map', () => {
     service.resetToDefault();
     expect(service.gridSize()).toEqual({ cols: 14, rows: 6 });
   });
+
+  it('setGridSize recale les entites hors bornes sur le bord', () => {
+    const service = TestBed.inject(BoardService);
+    service.addEntity({
+      id: 'e1', type: 'enemy', name: 'X',
+      position: { x: 9, y: 8 }, facing: { direction: 'front' }
+    });
+    service.setGridSize(6, 6);
+    const moved = service.getEntity('e1')!;
+    expect(moved.position).toEqual({ x: 5, y: 5 });
+  });
+
+  it('setGridSize recale les rouages manuels mais laisse les rouages de sort', () => {
+    const service = TestBed.inject(BoardService);
+    service.addMechanism({ id: 'manual', type: 'cog', position: { x: 9, y: 9 }, charges: 0 });
+    service.addMechanism({ id: 'spell', type: 'cog', position: { x: 8, y: 8 }, charges: 0, spellId: 'S' });
+    service.setGridSize(5, 5);
+    expect(service.getMechanism('manual')!.position).toEqual({ x: 4, y: 4 });
+    expect(service.getMechanism('spell')!.position).toEqual({ x: 8, y: 8 });
+  });
+
+  it('exportCurrentSetup ecrit cols/rows courants', () => {
+    const service = TestBed.inject(BoardService);
+    service.setGridSize(14, 9);
+    const setup = service.exportCurrentSetup();
+    expect(setup.cols).toBe(14);
+    expect(setup.rows).toBe(9);
+  });
+
+  it('applyTimelineSetup applique cols/rows du setup', () => {
+    const service = TestBed.inject(BoardService);
+    service.applyTimelineSetup({
+      entities: [{ id: 'a', type: 'player', name: 'P', position: { x: 0, y: 0 }, facing: { direction: 'front' } }],
+      cols: 16, rows: 12
+    });
+    expect(service.gridSize()).toEqual({ cols: 16, rows: 12 });
+  });
+
+  it('applyTimelineSetup retombe sur 10x10 si le setup n a pas de taille', () => {
+    const service = TestBed.inject(BoardService);
+    service.setGridSize(18, 18);
+    service.applyTimelineSetup({
+      entities: [{ id: 'a', type: 'player', name: 'P', position: { x: 0, y: 0 }, facing: { direction: 'front' } }]
+    });
+    expect(service.gridSize()).toEqual({ cols: 10, rows: 10 });
+  });
 });
