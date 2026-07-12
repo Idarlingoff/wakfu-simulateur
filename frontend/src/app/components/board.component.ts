@@ -1,4 +1,4 @@
-import { Component, inject, computed, output, effect, input, signal } from '@angular/core';
+import { Component, inject, computed, output, effect, input, signal, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
@@ -24,6 +24,9 @@ interface BoardCell {
   isAction: boolean;
   actionType?: string;
 }
+
+const MIN_CELL = 16;
+const MAX_CELL = 44;
 
 @Component({
   selector: 'app-board',
@@ -226,8 +229,8 @@ interface BoardCell {
       <div class="board-and-spells">
 
         <!-- MAP -->
-        <div class="board-wrapper">
-          <div class="board"><div
+        <div class="board-wrapper" #boardWrapper>
+          <div class="board" [ngStyle]="gridStyle()"><div
               *ngFor="let cell of boardCells()"
               class="cell"
               [ngStyle]="{ 'grid-column': cell.x + 1, 'grid-row': cell.y + 1 }"
@@ -723,7 +726,7 @@ interface BoardCell {
       background: var(--app-surface);
       border-radius: 12px;
       border: 1px solid var(--app-border);
-      overflow: auto;
+      overflow: hidden;
       min-height: 420px;
       box-sizing: border-box;
     }
@@ -1055,8 +1058,6 @@ interface BoardCell {
 
     .board {
       display: grid;
-      grid-template-columns: repeat(10, 44px);
-      grid-template-rows: repeat(10, 44px);
       gap: 1px;
       background: #0f1415;
       padding: 10px;
@@ -1969,7 +1970,7 @@ interface BoardCell {
     }
   `]
 })
-export class BoardComponent {
+export class BoardComponent implements AfterViewInit, OnDestroy {
   readonly mode = input<'timeline' | 'freeplay'>('timeline');
 
   timelineService = inject(TimelineService);
@@ -2072,8 +2073,45 @@ export class BoardComponent {
       }
     });
 
+    effect(() => {
+      this.boardService.gridSize(); // dépendance : recalcul quand cols/rows changent
+      queueMicrotask(() => this.recomputeCellSize());
+    });
+
     // Précharge les passifs Xélor pour alimenter le menu du Freeplay Xel Rouage.
     this.loadXelorPassivesData();
+  }
+
+  ngAfterViewInit(): void {
+    const el = this.boardWrapperRef?.nativeElement;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.recomputeCellSize());
+      this.resizeObserver.observe(el);
+    }
+    this.recomputeCellSize();
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
+  }
+
+  private recomputeCellSize(): void {
+    const el = this.boardWrapperRef?.nativeElement;
+    if (!el) return;
+    const { cols, rows } = this.boardService.gridSize();
+    const style = getComputedStyle(el);
+    const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const availW = el.clientWidth - padX;
+    const availH = el.clientHeight - padY;
+    const GAP = 1;            // .board gap
+    const BOARD_PADDING = 10; // .board padding
+    const usableW = availW - BOARD_PADDING * 2 - GAP * (cols - 1);
+    const usableH = availH - BOARD_PADDING * 2 - GAP * (rows - 1);
+    const perCol = usableW / cols;
+    const perRow = usableH / rows;
+    const size = Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor(Math.min(perCol, perRow))));
+    this.cellSize.set(Number.isFinite(size) && size > 0 ? size : MIN_CELL);
   }
 
   /** Charge les passifs Xélor (nom/icône/description) depuis le cache de données. */
@@ -2157,9 +2195,10 @@ export class BoardComponent {
   });
 
   boardCells = computed(() => {
+    const { cols, rows } = this.boardService.gridSize();
     const cells: BoardCell[] = [];
-    for (let y = 0; y < 10; y++) {
-      for (let x = 0; x < 10; x++) {
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
         cells.push({
           x,
           y,
@@ -2171,6 +2210,20 @@ export class BoardComponent {
     }
     return cells;
   });
+
+  cellSize = signal<number>(MAX_CELL);
+
+  gridStyle = computed(() => {
+    const { cols, rows } = this.boardService.gridSize();
+    const size = this.cellSize();
+    return {
+      'grid-template-columns': `repeat(${cols}, ${size}px)`,
+      'grid-template-rows': `repeat(${rows}, ${size}px)`
+    };
+  });
+
+  @ViewChild('boardWrapper') boardWrapperRef?: ElementRef<HTMLElement>;
+  private resizeObserver?: ResizeObserver;
 
   getEntityAtPosition(x: number, y: number) {
     return this.boardService.state().entities.find(
