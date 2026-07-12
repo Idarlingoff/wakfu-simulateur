@@ -3,31 +3,30 @@
  * Demonstrates working services and data binding
  */
 
-import {Component, inject, signal, ViewChild} from '@angular/core';
+import {Component, inject, signal, ViewChild, input} from '@angular/core';
 import {CommonModule} from '@angular/common';
 import {FormsModule} from '@angular/forms';
+import {Router} from '@angular/router';
 import {BuildService} from '../services/build.service';
 import {TimelineService} from '../services/timeline.service';
 import {BoardService} from '../services/board.service';
-import {BuildFormComponent} from './build-form.component';
-import {TimelineFormComponent} from './timeline-form.component';
+import {TimelineRecorderComponent} from './timeline-recorder.component';
 import {BoardComponent} from './board.component';
 import {PlayerFormComponent} from './player-form.component';
 import {EnemyFormComponent} from './enemy-form.component';
-import {TimelineSummaryComponent} from './timeline-summary.component';
-import {DamageSummaryComponent} from './damage-summary.component';
 import { Timeline } from '../models/timeline.model';
 import {SimulationService} from '../services/simulation.service';
+import {DamageSummaryComponent} from './damage-summary.component';
+import { IconComponent } from '../ui/icon.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, BuildFormComponent, TimelineFormComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, TimelineSummaryComponent, DamageSummaryComponent],
+  imports: [CommonModule, FormsModule, TimelineRecorderComponent, BoardComponent, PlayerFormComponent, EnemyFormComponent, DamageSummaryComponent, IconComponent],
   template: `
     <div class="dashboard">
       <!-- Header -->
       <header class="header">
-        <h1>Wakfu Simulator</h1>
         <div class="header-selectors">
           <!-- Build selector -->
           <div class="selector-group">
@@ -53,7 +52,8 @@ import {SimulationService} from '../services/simulation.service';
             </div>
           </div>
 
-          <!-- Timeline selector -->
+          <!-- Timeline selector (Timeline mode uniquement) -->
+          @if (mode() === 'timeline') {
           <div class="selector-group">
             <label class="selector-label">Timeline</label>
             <div class="selector-dropdown" (click)="toggleTimelineDropdown()">
@@ -75,46 +75,40 @@ import {SimulationService} from '../services/simulation.service';
               <button class="dropdown-add" (click)="onCreateTimeline(); closeTimelineDropdown()">➕ Nouvelle Timeline</button>
             </div>
           </div>
+          }
         </div>
-        <button class="btn-secondary" (click)="toggleActionsMenu()">Action</button>
+        <div class="header-tools">
+          <button class="tool-btn" (click)="onAddPlayer()" title="Ajouter un allié" aria-label="Ajouter un allié"><ui-icon name="user-plus"></ui-icon></button>
+          <button class="tool-btn" (click)="onAddEnemy()" title="Ajouter un ennemi" aria-label="Ajouter un ennemi"><ui-icon name="target"></ui-icon></button>
+          <button class="tool-btn" (click)="onAddCog()" title="Ajouter un rouage" aria-label="Ajouter un rouage"><ui-icon name="cog"></ui-icon></button>
+          <button class="tool-btn" (click)="onExportBuild()" title="Exporter le build" aria-label="Exporter le build"><ui-icon name="download"></ui-icon></button>
+          @if (mode() === 'timeline') {
+            <button class="tool-btn" (click)="onValidateTimeline()" title="Valider la timeline" aria-label="Valider la timeline"><ui-icon name="check"></ui-icon></button>
+            <button class="tool-btn" (click)="onSaveBoardSetup()" [disabled]="!timelineService.currentTimeline()" title="Sauver la map dans la timeline" aria-label="Sauver la map dans la timeline"><ui-icon name="save"></ui-icon></button>
+          }
+          <button class="tool-btn danger" (click)="onClearBoard()" title="Effacer la map" aria-label="Effacer la map"><ui-icon name="trash"></ui-icon></button>
+        </div>
+        <app-damage-summary [compact]="true" class="header-damage"></app-damage-summary>
       </header>
 
       <!-- Backdrop to close dropdowns -->
       <div class="dropdown-backdrop" *ngIf="showBuildDropdown() || showTimelineDropdown()" (click)="closeAllDropdowns()"></div>
 
-      <section class="header-actions" *ngIf="showActionsMenu()">
-        <div class="actions">
-          <button (click)="onValidateTimeline()" class="btn-primary">Validater la timeline</button>
-          <button (click)="onExportBuild()" class="btn-secondary">Export build</button>
-          <button (click)="onAddPlayer()" class="btn-secondary">Ajout allié</button>
-          <button (click)="onAddEnemy()" class="btn-secondary">Ajout ennemie</button>
-          <button (click)="onAddCog()" class="btn-secondary">Ajout rouage</button>
-          <button (click)="onSaveBoardSetup()" class="btn-primary" [disabled]="!timelineService.currentTimeline()">Sauvegarder la map dans la timeline</button>
-          <button (click)="onClearBoard()" class="btn-danger">Effacer la map</button>
-        </div>
-      </section>
-
       <div class="container">
-        <!-- Left Panel: Damage Summary -->
-        <aside class="panel">
-          <app-damage-summary></app-damage-summary>
-        </aside>
-
         <!-- Main Content -->
         <main class="content">
           <!-- Board Component - Interactive Map -->
           <section class="section board-section">
             <app-board
+              [mode]="mode()"
               (editPlayer)="onEditPlayerFromBoard($event)"
               (editEnemy)="onEditEnemyFromBoard($event)"
               [placementMode]="placementMode()"
               (boardCellClick)="onBoardCellClick($event)"
             ></app-board>
-          </section>
-
-          <!-- Timeline Summary -->
-          <section class="section timeline-summary-section">
-            <app-timeline-summary></app-timeline-summary>
+            @if (mode() === 'freeplay') {
+              <app-timeline-recorder></app-timeline-recorder>
+            }
           </section>
         </main>
       </div>
@@ -137,12 +131,6 @@ import {SimulationService} from '../services/simulation.service';
         </div>
       </div>
 
-    <!-- Build Form Modal -->
-    <app-build-form #buildForm></app-build-form>
-
-    <!-- Timeline Form Modal -->
-    <app-timeline-form #timelineForm></app-timeline-form>
-
     <!-- Player Form Modal -->
     <app-player-form
       #playerForm
@@ -158,34 +146,27 @@ import {SimulationService} from '../services/simulation.service';
     </app-enemy-form>
   `,
   styles: [`
-    :root {
-      --bg: #0f1115;
-      --panel: #181b22;
-      --panel-2: #1d2230;
-      --muted: #8c9bb3;
-      --accent: #4cc9f0;
-      --good: #7bd88f;
-      --bad: #ef476f;
-      --stroke: #2a2f3a;
-    }
+    /* Design tokens are provided globally via --app-* variables */
 
     .dashboard {
-      background: var(--bg);
-      color: #e8ecf3;
+      background: var(--app-bg);
+      color: var(--app-text);
       min-height: 100vh;
       font-family: Inter, Segoe UI, system-ui, -apple-system, Arial;
     }
 
     .header {
-      background: var(--panel);
-      border-bottom: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border-bottom: 1px solid var(--app-border);
       padding: 12px 20px;
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-start;
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
     }
+
+    .header-damage { margin-left: auto; }
 
     .header h1 {
       margin: 0;
@@ -212,7 +193,7 @@ import {SimulationService} from '../services/simulation.service';
     .selector-label {
       font-size: 11px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       white-space: nowrap;
@@ -222,8 +203,8 @@ import {SimulationService} from '../services/simulation.service';
       display: flex;
       align-items: center;
       gap: 6px;
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 6px 12px;
       cursor: pointer;
@@ -233,15 +214,15 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .selector-dropdown:hover {
-      border-color: var(--accent);
-      background: #252f3d;
+      border-color: var(--app-accent);
+      background: var(--app-surface-2);
     }
 
     .selector-value {
       flex: 1;
       font-size: 12px;
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -249,7 +230,7 @@ import {SimulationService} from '../services/simulation.service';
 
     .selector-arrow {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       transition: transform 0.2s;
     }
 
@@ -263,8 +244,8 @@ import {SimulationService} from '../services/simulation.service';
       left: 0;
       right: 0;
       margin-top: 4px;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 4px;
       z-index: 1000;
@@ -286,23 +267,23 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .dropdown-item:hover {
-      background: #252f3d;
+      background: var(--app-surface-2);
     }
 
     .dropdown-item.active {
-      background: rgba(76, 201, 240, 0.15);
-      border-left: 3px solid var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 15%, transparent);
+      border-left: 3px solid var(--app-accent);
     }
 
     .dropdown-item-name {
       font-size: 12px;
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .dropdown-item-meta {
       font-size: 10px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .dropdown-item-actions {
@@ -322,8 +303,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-mini {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 2px 6px;
       cursor: pointer;
@@ -332,22 +313,22 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-mini:hover {
-      background: var(--accent);
-      color: #0b1220;
-      border-color: var(--accent);
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .btn-mini-danger:hover {
-      background: var(--bad);
-      border-color: var(--bad);
+      background: var(--app-danger);
+      border-color: var(--app-danger);
       color: white;
     }
 
     .dropdown-add {
       width: 100%;
       background: transparent;
-      border: 1px dashed var(--stroke);
-      color: var(--accent);
+      border: 1px dashed var(--app-border);
+      color: var(--app-accent);
       border-radius: 6px;
       padding: 8px;
       cursor: pointer;
@@ -358,8 +339,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .dropdown-add:hover {
-      background: rgba(76, 201, 240, 0.1);
-      border-color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border-color: var(--app-accent);
     }
 
     .dropdown-backdrop {
@@ -369,8 +350,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     button {
-      background: var(--accent);
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
       border: none;
       border-radius: 8px;
       padding: 8px 16px;
@@ -388,41 +369,27 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
     }
 
     .btn-danger {
-      background: var(--bad);
+      background: var(--app-danger);
       color: white;
     }
 
     .container {
       display: grid;
-      grid-template-columns: 300px 1fr;
+      grid-template-columns: 1fr;
       gap: 12px;
       padding: 12px;
       min-height: calc(100vh - 72px);
     }
 
-    .header-actions {
-      margin: 12px;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
-      border-radius: 8px;
-      padding: 12px;
-    }
-
-    .header-actions .actions {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 8px;
-    }
-
     .panel {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 16px;
       overflow-y: auto;
@@ -432,7 +399,7 @@ import {SimulationService} from '../services/simulation.service';
     .panel h2 {
       margin: 0 0 12px 0;
       font-size: 14px;
-      color: var(--accent);
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 1px;
     }
@@ -440,7 +407,7 @@ import {SimulationService} from '../services/simulation.service';
     .panel h3 {
       margin: 16px 0 8px 0;
       font-size: 12px;
-      color: var(--muted);
+      color: var(--app-text-muted);
     }
 
     .builds-list, .timelines-list {
@@ -450,8 +417,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .build-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 8px;
       cursor: pointer;
@@ -462,14 +429,14 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .build-item:hover {
-      border-color: var(--accent);
-      background: #252f3d;
+      border-color: var(--app-accent);
+      background: var(--app-surface-2);
     }
 
     .build-item.active {
-      border-color: var(--accent);
+      border-color: var(--app-accent);
       background: #2c3a5a;
-      box-shadow: 0 0 8px rgba(76, 201, 240, 0.3);
+      box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent) 30%, transparent);
     }
 
     .build-actions {
@@ -485,8 +452,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-edit, .btn-delete {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 4px;
       padding: 4px 8px;
       cursor: pointer;
@@ -494,22 +461,22 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-edit:hover {
-      background: #4cc9f0;
-      color: #0b1220;
-      border-color: #4cc9f0;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .btn-delete:hover {
-      background: #ef476f;
+      background: var(--app-danger);
       color: white;
-      border-color: #ef476f;
+      border-color: var(--app-danger);
     }
 
     .btn-add {
       width: 100%;
-      background: #253044;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       border-radius: 8px;
       padding: 8px 12px;
       cursor: pointer;
@@ -518,14 +485,14 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-add:hover {
-      background: #4cc9f0;
-      color: #0b1220;
-      border-color: #4cc9f0;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
+      border-color: var(--app-accent);
     }
 
     .timeline-item {
-      background: var(--panel-2);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
       border-radius: 6px;
       padding: 8px;
       cursor: pointer;
@@ -536,18 +503,18 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .timeline-item.active {
-      background: linear-gradient(135deg, rgba(76, 201, 240, 0.2), rgba(90, 215, 240, 0.15));
-      border-color: var(--accent);
-      box-shadow: 0 0 12px rgba(76, 201, 240, 0.3);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 20%, transparent), rgba(90, 215, 240, 0.15));
+      border-color: var(--app-accent);
+      box-shadow: 0 0 12px color-mix(in srgb, var(--app-accent) 30%, transparent);
     }
 
     .timeline-item:hover {
-      border-color: var(--accent);
-      background: #252f3d;
+      border-color: var(--app-accent);
+      background: var(--app-surface-2);
     }
 
     .timeline-item.active:hover {
-      box-shadow: 0 0 16px rgba(76, 201, 240, 0.5);
+      box-shadow: 0 0 16px color-mix(in srgb, var(--app-accent) 50%, transparent);
     }
 
     .timeline-info {
@@ -571,7 +538,7 @@ import {SimulationService} from '../services/simulation.service';
     .active-badge {
       display: inline-block;
       margin-left: 8px;
-      color: var(--accent);
+      color: var(--app-accent);
       font-size: 12px;
       animation: pulse-badge 1.5s ease-in-out infinite;
     }
@@ -583,7 +550,7 @@ import {SimulationService} from '../services/simulation.service';
 
     .timeline-name, .timeline-meta {
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 13px;
     }
 
@@ -593,13 +560,13 @@ import {SimulationService} from '../services/simulation.service';
 
     .build-name {
       font-weight: 600;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-size: 13px;
     }
 
     hr {
       border: none;
-      border-top: 1px solid var(--stroke);
+      border-top: 1px solid var(--app-border);
       margin: 12px 0;
     }
 
@@ -612,8 +579,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .section {
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 8px;
       padding: 16px;
     }
@@ -621,13 +588,13 @@ import {SimulationService} from '../services/simulation.service';
     .section h2 {
       margin: 0 0 12px 0;
       font-size: 16px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .section h3 {
       margin: 12px 0 8px 0;
       font-size: 13px;
-      color: var(--accent);
+      color: var(--app-accent);
     }
 
     .section-header {
@@ -644,8 +611,8 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-toggle-section {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: var(--accent);
+      border: 1px solid var(--app-border);
+      color: var(--app-accent);
       border-radius: 4px;
       padding: 6px 10px;
       font-size: 14px;
@@ -659,18 +626,18 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .btn-toggle-section:hover {
-      background: rgba(76, 201, 240, 0.1);
-      border-color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 10%, transparent);
+      border-color: var(--app-accent);
     }
 
     .btn-toggle-section.collapsed {
-      color: var(--muted);
-      border-color: var(--stroke);
+      color: var(--app-text-muted);
+      border-color: var(--app-border);
     }
 
     .btn-toggle-section.collapsed:hover {
-      background: rgba(76, 201, 240, 0.05);
-      color: var(--accent);
+      background: color-mix(in srgb, var(--app-accent) 5%, transparent);
+      color: var(--app-accent);
     }
 
     .section-content {
@@ -696,31 +663,31 @@ import {SimulationService} from '../services/simulation.service';
     .info-item {
       display: flex;
       flex-direction: column;
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       padding: 12px;
       border-radius: 8px;
       gap: 8px;
       transition: all 0.3s ease;
-      border: 1px solid rgba(76, 201, 240, 0.1);
+      border: 1px solid color-mix(in srgb, var(--app-accent) 10%, transparent);
     }
 
     .info-item:hover {
-      border-color: rgba(76, 201, 240, 0.3);
-      background: linear-gradient(135deg, rgba(76, 201, 240, 0.05), rgba(90, 215, 240, 0.02));
-      box-shadow: 0 4px 12px rgba(76, 201, 240, 0.1);
+      border-color: color-mix(in srgb, var(--app-accent) 30%, transparent);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 5%, transparent), rgba(90, 215, 240, 0.02));
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 10%, transparent);
     }
 
     .info-item label {
       display: inline-block;
-      background: linear-gradient(135deg, var(--accent), #5ad5f0);
-      color: #0b1220;
+      background: linear-gradient(135deg, var(--app-accent), #5ad5f0);
+      color: var(--app-accent-contrast);
       padding: 4px 12px;
       border-radius: 20px;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      box-shadow: 0 4px 12px rgba(76, 201, 240, 0.25);
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 25%, transparent);
       width: fit-content;
       transition: all 0.3s ease;
     }
@@ -734,28 +701,28 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .info-item:hover label {
-      box-shadow: 0 6px 16px rgba(76, 201, 240, 0.35);
+      box-shadow: 0 6px 16px color-mix(in srgb, var(--app-accent) 35%, transparent);
       transform: translateY(-2px);
     }
 
     .build-meta, .timeline-meta {
       font-size: 11px;
-      color: var(--muted);
+      color: var(--app-text-muted);
       margin-top: 4px;
     }
 
     .info-item span {
       font-size: 15px;
-      color: #e8ecf3;
+      color: var(--app-text);
       font-weight: 600;
       padding: 6px 8px;
-      background: rgba(76, 201, 240, 0.08);
+      background: color-mix(in srgb, var(--app-accent) 8%, transparent);
       border-radius: 6px;
-      border-left: 3px solid var(--accent);
+      border-left: 3px solid var(--app-accent);
     }
 
     .no-data {
-      color: var(--muted);
+      color: var(--app-text-muted);
       font-style: italic;
       text-align: center;
       padding: 20px;
@@ -790,15 +757,15 @@ import {SimulationService} from '../services/simulation.service';
 
     .btn-cancel-placement {
       background: transparent;
-      border: 1px solid var(--stroke);
-      color: #e8ecf3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 6px 8px;
       border-radius: 6px;
       font-size: 11px;
     }
 
     .stats {
-      background: var(--panel-2);
+      background: var(--app-surface-2);
       padding: 12px;
       border-radius: 6px;
       font-size: 12px;
@@ -819,8 +786,8 @@ import {SimulationService} from '../services/simulation.service';
     }
 
     .badge.valid {
-      background: var(--good);
-      color: #0b1220;
+      background: var(--app-success);
+      color: var(--app-accent-contrast);
     }
 
     @media (max-width: 1200px) {
@@ -844,20 +811,29 @@ import {SimulationService} from '../services/simulation.service';
       width: min(900px, 95vw);
       max-height: 80vh;
       overflow: auto;
-      background: var(--panel);
-      border: 1px solid var(--stroke);
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       padding: 16px;
     }
+
+    .header-tools { display: flex; align-items: center; gap: 4px; }
+    .tool-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; background: transparent; border: 1px solid var(--app-border); color: var(--app-text); cursor: pointer; }
+    .tool-btn:hover { border-color: var(--app-border-strong); background: var(--app-surface-2); }
+    .tool-btn:focus-visible { outline: 2px solid var(--app-focus); outline-offset: 2px; }
+    .tool-btn.danger:hover { border-color: var(--app-danger); color: var(--app-danger); }
+    .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   `]
 })
 export class DashboardComponent {
+  readonly mode = input<'timeline' | 'freeplay'>('timeline');
+
   buildService = inject(BuildService);
   timelineService = inject(TimelineService);
   boardService = inject(BoardService);
   simulationService = inject(SimulationService);
+  private readonly router = inject(Router);
 
-  showActionsMenu = signal<boolean>(false);
   showBuildDropdown = signal<boolean>(false);
   showTimelineDropdown = signal<boolean>(false);
   statsBuildModal = signal<any | null>(null);
@@ -899,10 +875,6 @@ export class DashboardComponent {
 
   onSelectBuild(build: any): void {
     this.buildService.selectBuildA(build);
-  }
-
-  toggleActionsMenu(): void {
-    this.showActionsMenu.update(v => !v);
   }
 
   onOpenBuildStats(event: Event, build: any): void {
@@ -1108,18 +1080,16 @@ export class DashboardComponent {
     alert('✓ Plateau et timeline complètement effacés !');
   }
 
-  @ViewChild('buildForm') buildForm!: BuildFormComponent;
-  @ViewChild('timelineForm') timelineForm!: TimelineFormComponent;
   @ViewChild('playerForm') playerForm!: PlayerFormComponent;
   @ViewChild('enemyForm') enemyForm!: EnemyFormComponent;
 
   onCreateBuild(): void {
-    this.buildForm.openNew();
+    this.router.navigate(['/builds/nouveau']);
   }
 
   onEditBuild(event: any, build: any): void {
-    event.stopPropagation();
-    this.buildForm.openEdit(build);
+    event?.stopPropagation?.();
+    this.router.navigate(['/builds', build.id, 'edition']);
   }
 
   onDeleteBuild(event: any, build: any): void {
@@ -1131,12 +1101,15 @@ export class DashboardComponent {
   }
 
   onCreateTimeline(): void {
-    this.timelineForm.openNew();
+    this.router.navigate(['/freeplay']);
   }
 
   onEditTimeline(event: any, timeline: any): void {
-    event.stopPropagation();
-    this.timelineForm.openEdit(timeline);
+    event?.stopPropagation?.();
+    const name = window.prompt('Nouveau nom de la timeline :', timeline.name);
+    if (name && name.trim()) {
+      this.timelineService.updateTimeline(timeline.id, { name: name.trim() });
+    }
   }
 
   async onDeleteTimeline(event: any, timeline: any): Promise<void> {

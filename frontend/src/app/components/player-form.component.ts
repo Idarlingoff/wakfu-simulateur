@@ -101,8 +101,8 @@ interface PlayerForm {
     }
 
     .modal {
-      background: #181b22;
-      border: 1px solid #2a2f3a;
+      background: var(--app-surface);
+      border: 1px solid var(--app-border);
       border-radius: 12px;
       width: 500px;
       max-width: 90vw;
@@ -116,20 +116,20 @@ interface PlayerForm {
       justify-content: space-between;
       align-items: center;
       padding: 20px;
-      border-bottom: 1px solid #2a2f3a;
-      background: linear-gradient(135deg, rgba(76, 201, 240, 0.1), rgba(90, 215, 240, 0.05));
+      border-bottom: 1px solid var(--app-border);
+      background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 10%, transparent), rgba(90, 215, 240, 0.05));
     }
 
     .modal-header h2 {
       margin: 0;
       font-size: 20px;
-      color: #e8ecf3;
+      color: var(--app-text);
     }
 
     .close {
       background: transparent;
-      border: 1px solid #2a2f3a;
-      color: #8c9bb3;
+      border: 1px solid var(--app-border);
+      color: var(--app-text-muted);
       font-size: 20px;
       width: 32px;
       height: 32px;
@@ -174,16 +174,16 @@ interface PlayerForm {
     .form-group label {
       font-size: 13px;
       font-weight: 600;
-      color: #4cc9f0;
+      color: var(--app-accent);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .form-group input,
     .form-group select {
-      background: #1d2230;
-      border: 1px solid #2a2f3a;
-      color: #e8ecf3;
+      background: var(--app-surface-2);
+      border: 1px solid var(--app-border);
+      color: var(--app-text);
       padding: 10px 12px;
       border-radius: 6px;
       font-size: 14px;
@@ -193,8 +193,8 @@ interface PlayerForm {
     .form-group input:focus,
     .form-group select:focus {
       outline: none;
-      border-color: #4cc9f0;
-      box-shadow: 0 0 0 3px rgba(76, 201, 240, 0.1);
+      border-color: var(--app-accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 10%, transparent);
     }
 
     .form-group select {
@@ -207,7 +207,7 @@ interface PlayerForm {
       gap: 12px;
       margin-top: 24px;
       padding-top: 20px;
-      border-top: 1px solid #2a2f3a;
+      border-top: 1px solid var(--app-border);
     }
 
     .btn-primary,
@@ -221,13 +221,13 @@ interface PlayerForm {
     }
 
     .btn-primary {
-      background: #4cc9f0;
-      color: #0b1220;
+      background: var(--app-accent);
+      color: var(--app-accent-contrast);
     }
 
     .btn-primary:hover:not(:disabled) {
       background: #5ad5f0;
-      box-shadow: 0 4px 12px rgba(76, 201, 240, 0.3);
+      box-shadow: 0 4px 12px color-mix(in srgb, var(--app-accent) 30%, transparent);
     }
 
     .btn-primary:disabled {
@@ -236,14 +236,14 @@ interface PlayerForm {
     }
 
     .btn-secondary {
-      background: #253044;
-      color: #e8ecf3;
-      border: 1px solid #2a2f3a;
+      background: var(--app-surface-2);
+      color: var(--app-text);
+      border: 1px solid var(--app-border);
     }
 
     .btn-secondary:hover {
-      background: #2c3a5a;
-      border-color: #4cc9f0;
+      background: var(--app-border);
+      border-color: var(--app-accent);
     }
   `]
 })
