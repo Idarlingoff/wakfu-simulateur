@@ -84,8 +84,8 @@ import { IconComponent } from '../ui/icon.component';
           <button class="tool-btn" (click)="onExportBuild()" title="Exporter le build" aria-label="Exporter le build"><ui-icon name="download"></ui-icon></button>
           @if (mode() === 'timeline') {
             <button class="tool-btn" (click)="onValidateTimeline()" title="Valider la timeline" aria-label="Valider la timeline"><ui-icon name="check"></ui-icon></button>
-            <button class="tool-btn" (click)="onSaveBoardSetup()" [disabled]="!timelineService.currentTimeline()" title="Sauver la map dans la timeline" aria-label="Sauver la map dans la timeline"><ui-icon name="save"></ui-icon></button>
           }
+          <button class="tool-btn" (click)="onSaveMap()" title="Sauvegarder la map (alliés, ennemis, rouages)" aria-label="Sauvegarder la map"><ui-icon name="save"></ui-icon></button>
           <button class="tool-btn danger" (click)="onClearBoard()" title="Effacer la map" aria-label="Effacer la map"><ui-icon name="trash"></ui-icon></button>
         </div>
         <app-damage-summary [compact]="true" class="header-damage"></app-damage-summary>
@@ -895,21 +895,27 @@ export class DashboardComponent {
     }
   }
 
-  async onSaveBoardSetup(): Promise<void> {
-    const timeline = this.timelineService.currentTimeline();
-    if (!timeline) {
-      return;
+  /**
+   * Sauvegarde manuelle de la map (alliés, ennemis, rouages posés manuellement).
+   * En mode Timeline, la map est aussi persistée dans la timeline courante.
+   */
+  async onSaveMap(): Promise<void> {
+    this.boardService.saveMap();
+
+    if (this.mode() === 'timeline') {
+      const timeline = this.timelineService.currentTimeline();
+      if (timeline) {
+        const updated = await this.timelineService.updateTimeline(timeline.id, {
+          boardSetup: this.boardService.exportCurrentSetup()
+        });
+        alert(updated
+          ? '✓ Map sauvegardée (et enregistrée dans la timeline) !'
+          : "Map sauvegardée localement, mais erreur lors de l'enregistrement dans la timeline");
+        return;
+      }
     }
 
-    const updated = await this.timelineService.updateTimeline(timeline.id, {
-      boardSetup: this.boardService.exportCurrentSetup()
-    });
-
-    if (updated) {
-      alert('✓ Setup du board sauvegardé dans la timeline !');
-    } else {
-      alert('Erreur lors de la sauvegarde du setup du board');
-    }
+    alert('✓ Map sauvegardée ! Le bouton Réinitialiser la restaurera.');
   }
 
   onValidateTimeline(): void {

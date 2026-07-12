@@ -24,6 +24,10 @@ export class BoardService {
   // État initial du plateau (sauvegardé avant toute exécution)
   private initialState = signal<InteractiveBoardState | null>(null);
 
+  // Map sauvegardée manuellement par l'utilisateur (bouton "Sauvegarder la map")
+  private savedMap = signal<{ entities: BoardEntity[]; mechanisms: Mechanism[] } | null>(null);
+  public hasSavedMap = computed(() => this.savedMap() !== null);
+
   // Historique des états pour le undo
   private stateHistory = signal<InteractiveBoardState[]>([]);
 
@@ -631,7 +635,12 @@ export class BoardService {
         position: { ...entity.position },
         facing: { ...entity.facing }
       })),
-      mechanisms: [],
+      mechanisms: (setup.mechanisms ?? []).map(m => ({
+        id: m.id,
+        type: 'cog' as const,
+        position: { ...m.position },
+        charges: m.charges ?? 0
+      })),
       dialHours: [],
       selectedEntityId: undefined,
       draggedEntity: undefined
@@ -648,8 +657,21 @@ export class BoardService {
         classId: entity.classId,
         position: { ...entity.position },
         facing: { ...entity.facing }
+      })),
+      mechanisms: this.getManualCogs(state.mechanisms).map(m => ({
+        id: m.id,
+        position: { ...m.position },
+        charges: m.charges ?? 0
       }))
     };
+  }
+
+  /**
+   * Rouages posés manuellement (bouton "Ajouter un rouage") : sans spellId,
+   * contrairement aux mécanismes créés par un sort (ex. Rouage Xélor).
+   */
+  private getManualCogs(mechanisms: Mechanism[]): Mechanism[] {
+    return mechanisms.filter(m => m.type === 'cog' && !m.spellId);
   }
 
   public hasMinimumSetup(): boolean {
@@ -745,6 +767,49 @@ export class BoardService {
       console.warn('Aucun état initial sauvegardé, réinitialisation par défaut');
       this.resetToDefault();
     }
+  }
+
+  /**
+   * Sauvegarde manuelle de la map (alliés, ennemis, rouages posés manuellement).
+   * Déclenchée par le bouton "Sauvegarder la map".
+   */
+  public saveMap(): void {
+    const state = this.boardState();
+    const manualCogs = this.getManualCogs(state.mechanisms);
+
+    this.savedMap.set({
+      entities: state.entities.map(e => ({ ...e, position: { ...e.position }, facing: { ...e.facing } })),
+      mechanisms: manualCogs.map(m => ({ ...m, position: { ...m.position } }))
+    });
+
+    console.log(`[BoardService] 💾 Map sauvegardée (${state.entities.length} entité(s), ${manualCogs.length} rouage(s) manuel(s))`);
+  }
+
+  /**
+   * Restaure la map sauvegardée manuellement (bouton "Réinitialiser").
+   * @returns true si une map était sauvegardée et a été restaurée, false sinon
+   */
+  public restoreMap(): boolean {
+    const saved = this.savedMap();
+    if (!saved) {
+      console.warn('[BoardService] Aucune map sauvegardée à restaurer');
+      return false;
+    }
+
+    this.clearHistory();
+    this.resetDialState();
+
+    this.boardState.update(state => ({
+      ...state,
+      entities: saved.entities.map(e => ({ ...e, position: { ...e.position }, facing: { ...e.facing } })),
+      mechanisms: saved.mechanisms.map(m => ({ ...m, position: { ...m.position } })),
+      dialHours: [],
+      selectedEntityId: undefined,
+      draggedEntity: undefined
+    }));
+
+    console.log('[BoardService] 🔄 Map restaurée depuis la sauvegarde manuelle');
+    return true;
   }
 
   /**

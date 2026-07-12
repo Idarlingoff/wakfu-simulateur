@@ -2616,7 +2616,9 @@ export class BoardComponent {
   }
 
   resetInteractiveMode(): void {
-    this.boardService.restoreInitialState();
+    if (!this.boardService.restoreMap()) {
+      this.boardService.restoreInitialState();
+    }
     if (this.isXelorFreeplayActive()) {
       this.interactivePlay.startSessionXelorFreeplay(this.enabledOptionalXelorPassiveIds());
     } else {
@@ -3018,7 +3020,9 @@ export class BoardComponent {
   onReset(): void {
     this.timelineService.resetTimeline();
 
-    this.boardService.restoreInitialState();
+    if (!this.boardService.restoreMap()) {
+      this.boardService.restoreInitialState();
+    }
 
     this.simulationService.clearSimulation();
 
