@@ -50,6 +50,8 @@ export interface TimelineBoardMechanismSetup {
 export interface TimelineBoardSetup {
   entities: TimelineBoardEntitySetup[];
   mechanisms?: TimelineBoardMechanismSetup[];
+  cols?: number;
+  rows?: number;
 }
 
 export interface Timeline {
