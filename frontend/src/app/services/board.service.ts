@@ -10,6 +10,8 @@ import { Position, Facing, TimelineBoardSetup } from '../models/timeline.model';
 const MAP_SIZE_KEY = 'wakfu.mapSize';
 const MIN_DIM = 5;
 const MAX_DIM = 20;
+// DEFAULT_DIM (10) sert aussi de repli pour les anciennes timelines sans
+// cols/rows : le modifier change le comportement des timelines déjà sauvegardées.
 const DEFAULT_DIM = 10;
 
 @Injectable({
@@ -709,6 +711,9 @@ export class BoardService {
       return;
     }
 
+    // Une seule mise à jour de l'état : le recalage des positions hors bornes
+    // est intégré ici (setup provenant d'un JSON potentiellement incohérent),
+    // pour éviter une double émission du signal (double rendu à la navigation).
     this.boardState.update(state => ({
       ...state,
       cols,
@@ -718,21 +723,25 @@ export class BoardService {
         type: entity.type,
         name: entity.name,
         classId: entity.classId,
-        position: { ...entity.position },
+        position: {
+          x: Math.max(0, Math.min(entity.position.x, cols - 1)),
+          y: Math.max(0, Math.min(entity.position.y, rows - 1))
+        },
         facing: { ...entity.facing }
       })),
       mechanisms: (setup.mechanisms ?? []).map(m => ({
         id: m.id,
         type: 'cog' as const,
-        position: { ...m.position },
+        position: {
+          x: Math.max(0, Math.min(m.position.x, cols - 1)),
+          y: Math.max(0, Math.min(m.position.y, rows - 1))
+        },
         charges: m.charges ?? 0
       })),
       dialHours: [],
       selectedEntityId: undefined,
       draggedEntity: undefined
     }));
-
-    this.clampEntitiesToBounds(cols, rows);
   }
 
   public exportCurrentSetup(): TimelineBoardSetup {

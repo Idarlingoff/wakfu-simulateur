@@ -97,4 +97,31 @@ describe('BoardService — taille de map', () => {
     });
     expect(service.gridSize()).toEqual({ cols: 10, rows: 10 });
   });
+
+  it('applyTimelineSetup recale une entite hors bornes du setup', () => {
+    const service = TestBed.inject(BoardService);
+    service.applyTimelineSetup({
+      entities: [{ id: 'e1', type: 'enemy', name: 'X', position: { x: 20, y: 20 }, facing: { direction: 'front' } }],
+      cols: 8, rows: 8
+    });
+    expect(service.getEntity('e1')!.position).toEqual({ x: 7, y: 7 });
+  });
+
+  it('applyTimelineSetup clampe un cols/rows hors bornes', () => {
+    const service = TestBed.inject(BoardService);
+    service.applyTimelineSetup({
+      entities: [{ id: 'a', type: 'player', name: 'P', position: { x: 0, y: 0 }, facing: { direction: 'front' } }],
+      cols: 1, rows: 999
+    });
+    expect(service.gridSize()).toEqual({ cols: 5, rows: 20 });
+  });
+
+  it('applyTimelineSetup persiste la taille dans localStorage', () => {
+    const service = TestBed.inject(BoardService);
+    service.applyTimelineSetup({
+      entities: [{ id: 'a', type: 'player', name: 'P', position: { x: 0, y: 0 }, facing: { direction: 'front' } }],
+      cols: 13, rows: 7
+    });
+    expect(JSON.parse(localStorage.getItem(MAP_SIZE_KEY)!)).toEqual({ cols: 13, rows: 7 });
+  });
 });
