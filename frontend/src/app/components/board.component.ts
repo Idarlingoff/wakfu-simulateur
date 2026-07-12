@@ -27,6 +27,8 @@ interface BoardCell {
 
 const MIN_CELL = 16;
 const MAX_CELL = 44;
+const BOARD_PADDING = 10;
+const BOARD_GAP = 1;
 
 @Component({
   selector: 'app-board',
@@ -1610,13 +1612,6 @@ const MAX_CELL = 44;
       }
     }
 
-    @media (max-width: 1200px) {
-      .board {
-        grid-template-columns: repeat(10, 34px);
-        grid-template-rows: repeat(10, 34px);
-      }
-    }
-
     /* ═══ Bandeau Mode Interactif ═══ */
     .interactive-bar {
       display: flex;
@@ -2073,6 +2068,10 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
       }
     });
 
+    // Recalcule la taille de case quand cols/rows changent. La 1re exécution a lieu
+    // avant ngAfterViewInit (boardWrapperRef indéfini) : le garde dans
+    // recomputeCellSize la rend inoffensive ; queueMicrotask laisse le DOM se mettre
+    // à jour avant la mesure.
     effect(() => {
       this.boardService.gridSize(); // dépendance : recalcul quand cols/rows changent
       queueMicrotask(() => this.recomputeCellSize());
