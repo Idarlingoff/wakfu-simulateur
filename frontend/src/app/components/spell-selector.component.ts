@@ -25,7 +25,7 @@ import { areEquivalentSpellIds, getInnateSpellIdsForClass, isXelorClass } from '
           }
         </h4>
         <button type="button" class="btn-open" (click)="openModal()">
-          ⚔️ Gérer les sorts
+          Gérer les sorts
         </button>
       </div>
 

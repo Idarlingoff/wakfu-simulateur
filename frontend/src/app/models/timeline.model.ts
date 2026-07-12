@@ -41,8 +41,15 @@ export interface TimelineBoardEntitySetup {
   facing: Facing;
 }
 
+export interface TimelineBoardMechanismSetup {
+  id: string;
+  position: Position;
+  charges?: number;
+}
+
 export interface TimelineBoardSetup {
   entities: TimelineBoardEntitySetup[];
+  mechanisms?: TimelineBoardMechanismSetup[];
 }
 
 export interface Timeline {
