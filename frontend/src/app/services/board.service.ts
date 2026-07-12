@@ -7,14 +7,19 @@ import { Injectable, signal, computed } from '@angular/core';
 import { InteractiveBoardState, BoardEntity, Mechanism, DialHour } from '../models/board.model';
 import { Position, Facing, TimelineBoardSetup } from '../models/timeline.model';
 
+const MAP_SIZE_KEY = 'wakfu.mapSize';
+const MIN_DIM = 5;
+const MAX_DIM = 20;
+const DEFAULT_DIM = 10;
+
 @Injectable({
   providedIn: 'root'
 })
 export class BoardService {
   // State Signal
   private boardState = signal<InteractiveBoardState>({
-    cols: 13,
-    rows: 13,
+    cols: DEFAULT_DIM,
+    rows: DEFAULT_DIM,
     entities: [],
     mechanisms: [],
     dialHours: [], // Heures du cadran (zones visuelles)
@@ -43,6 +48,11 @@ export class BoardService {
 
   // Computed Selectors
   public state = computed(() => this.boardState());
+
+  public gridSize = computed(() => {
+    const s = this.boardState();
+    return { cols: s.cols, rows: s.rows };
+  });
 
   // Exposer l'heure courante comme signal public
   public currentDialHour = computed(() => this._currentDialHour());
@@ -83,7 +93,8 @@ export class BoardService {
    * Initialize board with default state
    */
   private initializeBoard(): void {
-    const defaultState = this.createEmptyBoardState();
+    const { cols, rows } = this.readCachedSize();
+    const defaultState = this.createEmptyBoardState(cols, rows);
     defaultState.entities = [
       {
         id: 'default_player',
@@ -104,9 +115,10 @@ export class BoardService {
     this.boardState.set(defaultState);
   }
 
-  private createEmptyBoardState(): InteractiveBoardState {
-    return {      cols: 13,
-      rows: 13,
+  private createEmptyBoardState(cols: number = DEFAULT_DIM, rows: number = DEFAULT_DIM): InteractiveBoardState {
+    return {
+      cols,
+      rows,
       entities: [],
       mechanisms: [],
       dialHours: [],
@@ -601,8 +613,70 @@ export class BoardService {
     }));
   }
 
+  /**
+   * Définit la taille de la grille (largeur/hauteur en cases).
+   * Clampe entre MIN_DIM et MAX_DIM, recale les entités/rouages manuels
+   * hors des nouvelles bornes, puis met la taille en cache (localStorage).
+   */
+  public setGridSize(cols: number, rows: number): void {
+    const c = this.clampDim(cols);
+    const r = this.clampDim(rows);
+    this.boardState.update(state => ({ ...state, cols: c, rows: r }));
+    this.clampEntitiesToBounds(c, r);
+    this.persistSize(c, r);
+  }
+
+  private clampDim(n: number): number {
+    if (!Number.isFinite(n)) return DEFAULT_DIM;
+    return Math.max(MIN_DIM, Math.min(MAX_DIM, Math.round(n)));
+  }
+
+  /**
+   * Recale les entités et rouages posés manuellement (sans spellId) hors
+   * des bornes cols/rows sur la case valide la plus proche (bord de la map).
+   */
+  private clampEntitiesToBounds(cols: number, rows: number): void {
+    this.boardState.update(state => ({
+      ...state,
+      entities: state.entities.map(e => ({
+        ...e,
+        position: {
+          x: Math.min(e.position.x, cols - 1),
+          y: Math.min(e.position.y, rows - 1)
+        }
+      })),
+      mechanisms: state.mechanisms.map(m =>
+        m.spellId
+          ? m
+          : { ...m, position: { x: Math.min(m.position.x, cols - 1), y: Math.min(m.position.y, rows - 1) } }
+      )
+    }));
+  }
+
+  private readCachedSize(): { cols: number; rows: number } {
+    try {
+      const raw = localStorage.getItem(MAP_SIZE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return { cols: this.clampDim(parsed.cols), rows: this.clampDim(parsed.rows) };
+      }
+    } catch {
+      /* localStorage indisponible */
+    }
+    return { cols: DEFAULT_DIM, rows: DEFAULT_DIM };
+  }
+
+  private persistSize(cols: number, rows: number): void {
+    try {
+      localStorage.setItem(MAP_SIZE_KEY, JSON.stringify({ cols, rows }));
+    } catch {
+      /* localStorage indisponible */
+    }
+  }
+
   public resetToDefault(): void {
-    this.boardState.set(this.createEmptyBoardState());
+    const s = this.boardState();
+    this.boardState.set(this.createEmptyBoardState(s.cols, s.rows));
   }
 
   /**
