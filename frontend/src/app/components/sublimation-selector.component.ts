@@ -17,7 +17,7 @@ import { Sublimation } from '../models/build.model';
       <div class="selector-header">
         <h4>Sublimations ({{ countSelected() }}/12)</h4>
         <button type="button" class="btn-open" (click)="openModal()">
-          ✨ Gérer les sublimations
+          Gérer les sublimations
         </button>
       </div>
 
