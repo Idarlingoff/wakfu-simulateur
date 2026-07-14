@@ -86,6 +86,25 @@ import { IconComponent } from '../ui/icon.component';
             <button class="tool-btn" (click)="onValidateTimeline()" title="Valider la timeline" aria-label="Valider la timeline"><ui-icon name="check"></ui-icon></button>
           }
           <button class="tool-btn" (click)="onSaveMap()" title="Sauvegarder la map (alliés, ennemis, rouages)" aria-label="Sauvegarder la map"><ui-icon name="save"></ui-icon></button>
+          <div class="map-size-wrapper">
+            <button class="tool-btn" (click)="toggleMapSizePanel()" title="Taille de la map" aria-label="Taille de la map"><ui-icon name="cog"></ui-icon></button>
+            @if (showMapSizePanel()) {
+              <div class="map-size-backdrop" (click)="showMapSizePanel.set(false)"></div>
+              <div class="map-size-panel">
+                <div class="map-size-title">Taille de la map (cases)</div>
+                <label class="map-size-field">
+                  <span>Largeur</span>
+                  <input type="number" min="5" max="20" [(ngModel)]="mapWidthInput" />
+                </label>
+                <label class="map-size-field">
+                  <span>Hauteur</span>
+                  <input type="number" min="5" max="20" [(ngModel)]="mapHeightInput" />
+                </label>
+                <div class="map-size-hint">Entre 5 et 20 cases.</div>
+                <button class="map-size-apply" (click)="onApplyMapSize()">Appliquer</button>
+              </div>
+            }
+          </div>
           <button class="tool-btn danger" (click)="onClearBoard()" title="Effacer la map" aria-label="Effacer la map"><ui-icon name="trash"></ui-icon></button>
         </div>
         <app-damage-summary [compact]="true" class="header-damage"></app-damage-summary>
@@ -823,6 +842,21 @@ import { IconComponent } from '../ui/icon.component';
     .tool-btn:focus-visible { outline: 2px solid var(--app-focus); outline-offset: 2px; }
     .tool-btn.danger:hover { border-color: var(--app-danger); color: var(--app-danger); }
     .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .map-size-wrapper { position: relative; display: inline-flex; }
+    .map-size-backdrop { position: fixed; inset: 0; z-index: 40; }
+    .map-size-panel {
+      position: absolute; top: 40px; right: 0; z-index: 41;
+      display: flex; flex-direction: column; gap: 8px;
+      background: var(--app-surface); border: 1px solid var(--app-border);
+      border-radius: 8px; padding: 12px; min-width: 180px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+    .map-size-title { font-weight: 600; font-size: 13px; color: var(--app-text); }
+    .map-size-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--app-text); }
+    .map-size-field input { width: 64px; padding: 4px 6px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-2); color: var(--app-text); }
+    .map-size-hint { font-size: 11px; color: var(--app-text-muted); }
+    .map-size-apply { padding: 6px 10px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-accent); color: #fff; cursor: pointer; font-size: 13px; }
+    .map-size-apply:hover { filter: brightness(1.05); }
   `]
 })
 export class DashboardComponent {
@@ -836,6 +870,9 @@ export class DashboardComponent {
 
   showBuildDropdown = signal<boolean>(false);
   showTimelineDropdown = signal<boolean>(false);
+  showMapSizePanel = signal<boolean>(false);
+  mapWidthInput = signal<number>(10);
+  mapHeightInput = signal<number>(10);
   statsBuildModal = signal<any | null>(null);
   placementMode = signal<'none' | 'player' | 'enemy' | 'player-edit' | 'enemy-edit' | 'cog'>('none');
 
@@ -916,6 +953,18 @@ export class DashboardComponent {
     }
 
     alert('✓ Map sauvegardée ! Le bouton Réinitialiser la restaurera.');
+  }
+
+  toggleMapSizePanel(): void {
+    const size = this.boardService.gridSize();
+    this.mapWidthInput.set(size.cols);
+    this.mapHeightInput.set(size.rows);
+    this.showMapSizePanel.update(v => !v);
+  }
+
+  onApplyMapSize(): void {
+    this.boardService.setGridSize(Number(this.mapWidthInput()), Number(this.mapHeightInput()));
+    this.showMapSizePanel.set(false);
   }
 
   onValidateTimeline(): void {
