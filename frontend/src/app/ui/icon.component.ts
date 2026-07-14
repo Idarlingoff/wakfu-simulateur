@@ -16,6 +16,7 @@ const ICON_PATHS: Record<string, string> = {
   trash: 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
   check: 'M20 6 9 17l-5-5',
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2ZM17 21v-8H7v8M7 3v5h8',
+  grid: 'M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18',
 };
 
 @Component({

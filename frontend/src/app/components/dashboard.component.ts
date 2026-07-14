@@ -87,18 +87,18 @@ import { IconComponent } from '../ui/icon.component';
           }
           <button class="tool-btn" (click)="onSaveMap()" title="Sauvegarder la map (alliés, ennemis, rouages)" aria-label="Sauvegarder la map"><ui-icon name="save"></ui-icon></button>
           <div class="map-size-wrapper">
-            <button class="tool-btn" (click)="toggleMapSizePanel()" title="Taille de la map" aria-label="Taille de la map"><ui-icon name="cog"></ui-icon></button>
+            <button class="tool-btn" (click)="toggleMapSizePanel()" title="Taille de la map" aria-label="Taille de la map"><ui-icon name="grid"></ui-icon></button>
             @if (showMapSizePanel()) {
               <div class="map-size-backdrop" (click)="showMapSizePanel.set(false)"></div>
-              <div class="map-size-panel">
+              <div class="map-size-panel" (keydown.escape)="showMapSizePanel.set(false)">
                 <div class="map-size-title">Taille de la map (cases)</div>
                 <label class="map-size-field">
                   <span>Largeur</span>
-                  <input type="number" min="5" max="20" [(ngModel)]="mapWidthInput" />
+                  <input type="number" min="5" max="20" step="1" [(ngModel)]="mapWidthInput" />
                 </label>
                 <label class="map-size-field">
                   <span>Hauteur</span>
-                  <input type="number" min="5" max="20" [(ngModel)]="mapHeightInput" />
+                  <input type="number" min="5" max="20" step="1" [(ngModel)]="mapHeightInput" />
                 </label>
                 <div class="map-size-hint">Entre 5 et 20 cases.</div>
                 <button class="map-size-apply" (click)="onApplyMapSize()">Appliquer</button>
@@ -843,9 +843,9 @@ import { IconComponent } from '../ui/icon.component';
     .tool-btn.danger:hover { border-color: var(--app-danger); color: var(--app-danger); }
     .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .map-size-wrapper { position: relative; display: inline-flex; }
-    .map-size-backdrop { position: fixed; inset: 0; z-index: 40; }
+    .map-size-backdrop { position: fixed; inset: 0; z-index: 999; }
     .map-size-panel {
-      position: absolute; top: 40px; right: 0; z-index: 41;
+      position: absolute; top: calc(100% + 4px); right: 0; z-index: 1000;
       display: flex; flex-direction: column; gap: 8px;
       background: var(--app-surface); border: 1px solid var(--app-border);
       border-radius: 8px; padding: 12px; min-width: 180px;
@@ -855,7 +855,7 @@ import { IconComponent } from '../ui/icon.component';
     .map-size-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--app-text); }
     .map-size-field input { width: 64px; padding: 4px 6px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-2); color: var(--app-text); }
     .map-size-hint { font-size: 11px; color: var(--app-text-muted); }
-    .map-size-apply { padding: 6px 10px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-accent); color: #fff; cursor: pointer; font-size: 13px; }
+    .map-size-apply { padding: 6px 10px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-accent); color: var(--app-accent-contrast); cursor: pointer; font-size: 13px; }
     .map-size-apply:hover { filter: brightness(1.05); }
   `]
 })
@@ -879,6 +879,7 @@ export class DashboardComponent {
   toggleBuildDropdown(): void {
     this.showBuildDropdown.update(v => !v);
     this.showTimelineDropdown.set(false);
+    this.showMapSizePanel.set(false);
   }
 
   closeBuildDropdown(): void {
@@ -888,6 +889,7 @@ export class DashboardComponent {
   toggleTimelineDropdown(): void {
     this.showTimelineDropdown.update(v => !v);
     this.showBuildDropdown.set(false);
+    this.showMapSizePanel.set(false);
   }
 
   closeTimelineDropdown(): void {
@@ -904,6 +906,7 @@ export class DashboardComponent {
   closeAllDropdowns(): void {
     this.showBuildDropdown.set(false);
     this.showTimelineDropdown.set(false);
+    this.showMapSizePanel.set(false);
   }
 
   countNonNull(items: any[]): number {
@@ -959,6 +962,8 @@ export class DashboardComponent {
     const size = this.boardService.gridSize();
     this.mapWidthInput.set(size.cols);
     this.mapHeightInput.set(size.rows);
+    this.showBuildDropdown.set(false);
+    this.showTimelineDropdown.set(false);
     this.showMapSizePanel.update(v => !v);
   }
 
