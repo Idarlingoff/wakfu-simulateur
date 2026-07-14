@@ -7,14 +7,24 @@ import { Injectable, signal, computed } from '@angular/core';
 import { InteractiveBoardState, BoardEntity, Mechanism, DialHour } from '../models/board.model';
 import { Position, Facing, TimelineBoardSetup } from '../models/timeline.model';
 
+const MAP_SIZE_KEY = 'wakfu.mapSize';
+const MIN_DIM = 5;
+const MAX_DIM = 20;
+// DEFAULT_DIM (10) sert aussi de repli pour les anciennes timelines sans
+// cols/rows : le modifier change le comportement des timelines déjà sauvegardées.
+const DEFAULT_DIM = 10;
+
 @Injectable({
   providedIn: 'root'
 })
 export class BoardService {
   // State Signal
+  // Valeur provisoire : remplacée immédiatement par initializeBoard() dans le
+  // constructeur (qui applique la taille en cache). Ne pas la considérer comme
+  // la source de vérité de la taille de grille.
   private boardState = signal<InteractiveBoardState>({
-    cols: 13,
-    rows: 13,
+    cols: DEFAULT_DIM,
+    rows: DEFAULT_DIM,
     entities: [],
     mechanisms: [],
     dialHours: [], // Heures du cadran (zones visuelles)
@@ -43,6 +53,11 @@ export class BoardService {
 
   // Computed Selectors
   public state = computed(() => this.boardState());
+
+  public gridSize = computed(() => {
+    const s = this.boardState();
+    return { cols: s.cols, rows: s.rows };
+  });
 
   // Exposer l'heure courante comme signal public
   public currentDialHour = computed(() => this._currentDialHour());
@@ -83,7 +98,8 @@ export class BoardService {
    * Initialize board with default state
    */
   private initializeBoard(): void {
-    const defaultState = this.createEmptyBoardState();
+    const { cols, rows } = this.readCachedSize();
+    const defaultState = this.createEmptyBoardState(cols, rows);
     defaultState.entities = [
       {
         id: 'default_player',
@@ -104,9 +120,10 @@ export class BoardService {
     this.boardState.set(defaultState);
   }
 
-  private createEmptyBoardState(): InteractiveBoardState {
-    return {      cols: 13,
-      rows: 13,
+  private createEmptyBoardState(cols: number = DEFAULT_DIM, rows: number = DEFAULT_DIM): InteractiveBoardState {
+    return {
+      cols,
+      rows,
       entities: [],
       mechanisms: [],
       dialHours: [],
@@ -601,8 +618,73 @@ export class BoardService {
     }));
   }
 
+  /**
+   * Définit la taille de la grille (largeur/hauteur en cases).
+   * Clampe entre MIN_DIM et MAX_DIM, recale les entités/rouages manuels
+   * hors des nouvelles bornes, puis met la taille en cache (localStorage).
+   */
+  public setGridSize(cols: number, rows: number): void {
+    const c = this.clampDim(cols);
+    const r = this.clampDim(rows);
+    this.boardState.update(state => ({ ...state, cols: c, rows: r }));
+    this.clampEntitiesToBounds(c, r);
+    this.persistSize(c, r);
+  }
+
+  private clampDim(n: number): number {
+    if (!Number.isFinite(n)) return DEFAULT_DIM;
+    return Math.max(MIN_DIM, Math.min(MAX_DIM, Math.round(n)));
+  }
+
+  /**
+   * Recale les entités et rouages posés manuellement (sans spellId) hors
+   * des bornes cols/rows sur la case valide la plus proche (bord de la map).
+   */
+  private clampEntitiesToBounds(cols: number, rows: number): void {
+    this.boardState.update(state => ({
+      ...state,
+      entities: state.entities.map(e => ({
+        ...e,
+        position: {
+          x: Math.max(0, Math.min(e.position.x, cols - 1)),
+          y: Math.max(0, Math.min(e.position.y, rows - 1))
+        }
+      })),
+      mechanisms: state.mechanisms.map(m =>
+        m.spellId
+          ? m
+          : { ...m, position: { x: Math.max(0, Math.min(m.position.x, cols - 1)), y: Math.max(0, Math.min(m.position.y, rows - 1)) } }
+      )
+    }));
+  }
+
+  private readCachedSize(): { cols: number; rows: number } {
+    try {
+      const raw = localStorage.getItem(MAP_SIZE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return {
+          cols: typeof parsed?.cols === 'number' ? this.clampDim(parsed.cols) : DEFAULT_DIM,
+          rows: typeof parsed?.rows === 'number' ? this.clampDim(parsed.rows) : DEFAULT_DIM
+        };
+      }
+    } catch {
+      /* localStorage indisponible */
+    }
+    return { cols: DEFAULT_DIM, rows: DEFAULT_DIM };
+  }
+
+  private persistSize(cols: number, rows: number): void {
+    try {
+      localStorage.setItem(MAP_SIZE_KEY, JSON.stringify({ cols, rows }));
+    } catch {
+      /* localStorage indisponible */
+    }
+  }
+
   public resetToDefault(): void {
-    this.boardState.set(this.createEmptyBoardState());
+    const s = this.boardState();
+    this.boardState.set(this.createEmptyBoardState(s.cols, s.rows));
   }
 
   /**
@@ -620,25 +702,40 @@ export class BoardService {
     this.clearHistory();
     this.resetDialState();
 
+    const cols = this.clampDim(setup?.cols ?? DEFAULT_DIM);
+    const rows = this.clampDim(setup?.rows ?? DEFAULT_DIM);
+    this.persistSize(cols, rows);
+
     if (!setup || setup.entities.length === 0) {
-      this.resetToDefault();
+      this.boardState.set(this.createEmptyBoardState(cols, rows));
       return;
     }
 
+    // Une seule mise à jour de l'état : le recalage des positions hors bornes
+    // est intégré ici (setup provenant d'un JSON potentiellement incohérent),
+    // pour éviter une double émission du signal (double rendu à la navigation).
     this.boardState.update(state => ({
       ...state,
+      cols,
+      rows,
       entities: setup.entities.map(entity => ({
         id: entity.id,
         type: entity.type,
         name: entity.name,
         classId: entity.classId,
-        position: { ...entity.position },
+        position: {
+          x: Math.max(0, Math.min(entity.position.x, cols - 1)),
+          y: Math.max(0, Math.min(entity.position.y, rows - 1))
+        },
         facing: { ...entity.facing }
       })),
       mechanisms: (setup.mechanisms ?? []).map(m => ({
         id: m.id,
         type: 'cog' as const,
-        position: { ...m.position },
+        position: {
+          x: Math.max(0, Math.min(m.position.x, cols - 1)),
+          y: Math.max(0, Math.min(m.position.y, rows - 1))
+        },
         charges: m.charges ?? 0
       })),
       dialHours: [],
@@ -662,7 +759,9 @@ export class BoardService {
         id: m.id,
         position: { ...m.position },
         charges: m.charges ?? 0
-      }))
+      })),
+      cols: state.cols,
+      rows: state.rows
     };
   }
 
@@ -799,16 +898,31 @@ export class BoardService {
     this.clearHistory();
     this.resetDialState();
 
+    const { cols, rows } = this.boardState();
+
     this.boardState.update(state => ({
       ...state,
-      entities: saved.entities.map(e => ({ ...e, position: { ...e.position }, facing: { ...e.facing } })),
-      mechanisms: saved.mechanisms.map(m => ({ ...m, position: { ...m.position } })),
+      entities: saved.entities.map(e => ({
+        ...e,
+        position: {
+          x: Math.max(0, Math.min(e.position.x, cols - 1)),
+          y: Math.max(0, Math.min(e.position.y, rows - 1))
+        },
+        facing: { ...e.facing }
+      })),
+      mechanisms: saved.mechanisms.map(m => ({
+        ...m,
+        position: {
+          x: Math.max(0, Math.min(m.position.x, cols - 1)),
+          y: Math.max(0, Math.min(m.position.y, rows - 1))
+        }
+      })),
       dialHours: [],
       selectedEntityId: undefined,
       draggedEntity: undefined
     }));
 
-    console.log('[BoardService] 🔄 Map restaurée depuis la sauvegarde manuelle');
+    console.log('[BoardService] 🔄 Map restaurée depuis la sauvegarde manuelle (recalée sur la grille courante)');
     return true;
   }
 
