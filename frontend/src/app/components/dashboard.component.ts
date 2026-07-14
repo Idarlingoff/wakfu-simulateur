@@ -90,7 +90,7 @@ import { IconComponent } from '../ui/icon.component';
             <button class="tool-btn" (click)="toggleMapSizePanel()" title="Taille de la map" aria-label="Taille de la map"><ui-icon name="grid"></ui-icon></button>
             @if (showMapSizePanel()) {
               <div class="map-size-backdrop" (click)="showMapSizePanel.set(false)"></div>
-              <div class="map-size-panel" (keydown.escape)="showMapSizePanel.set(false)">
+              <div class="map-size-panel" tabindex="-1" (keydown.escape)="showMapSizePanel.set(false)">
                 <div class="map-size-title">Taille de la map (cases)</div>
                 <label class="map-size-field">
                   <span>Largeur</span>

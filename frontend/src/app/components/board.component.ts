@@ -2101,12 +2101,12 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     const style = getComputedStyle(el);
     const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
     const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    // padX/padY = padding du .board-wrapper (mesuré) ; BOARD_PADDING/BOARD_GAP =
+    // padding et gap internes du .board (constantes de module couplées au CSS).
     const availW = el.clientWidth - padX;
     const availH = el.clientHeight - padY;
-    const GAP = 1;            // .board gap
-    const BOARD_PADDING = 10; // .board padding
-    const usableW = availW - BOARD_PADDING * 2 - GAP * (cols - 1);
-    const usableH = availH - BOARD_PADDING * 2 - GAP * (rows - 1);
+    const usableW = availW - BOARD_PADDING * 2 - BOARD_GAP * (cols - 1);
+    const usableH = availH - BOARD_PADDING * 2 - BOARD_GAP * (rows - 1);
     const perCol = usableW / cols;
     const perRow = usableH / rows;
     const size = Math.max(MIN_CELL, Math.min(MAX_CELL, Math.floor(Math.min(perCol, perRow))));

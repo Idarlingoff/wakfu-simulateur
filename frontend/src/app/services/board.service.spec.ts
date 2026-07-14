@@ -124,4 +124,13 @@ describe('BoardService — taille de map', () => {
     });
     expect(JSON.parse(localStorage.getItem(MAP_SIZE_KEY)!)).toEqual({ cols: 13, rows: 7 });
   });
+
+  it('restoreMap recale les entites hors de la grille courante', () => {
+    const service = TestBed.inject(BoardService);
+    service.addEntity({ id: 'e1', type: 'enemy', name: 'X', position: { x: 9, y: 9 }, facing: { direction: 'front' } });
+    service.saveMap();
+    service.setGridSize(6, 6);
+    service.restoreMap();
+    expect(service.getEntity('e1')!.position).toEqual({ x: 5, y: 5 });
+  });
 });

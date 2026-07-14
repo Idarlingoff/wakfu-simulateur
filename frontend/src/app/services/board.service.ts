@@ -898,16 +898,31 @@ export class BoardService {
     this.clearHistory();
     this.resetDialState();
 
+    const { cols, rows } = this.boardState();
+
     this.boardState.update(state => ({
       ...state,
-      entities: saved.entities.map(e => ({ ...e, position: { ...e.position }, facing: { ...e.facing } })),
-      mechanisms: saved.mechanisms.map(m => ({ ...m, position: { ...m.position } })),
+      entities: saved.entities.map(e => ({
+        ...e,
+        position: {
+          x: Math.max(0, Math.min(e.position.x, cols - 1)),
+          y: Math.max(0, Math.min(e.position.y, rows - 1))
+        },
+        facing: { ...e.facing }
+      })),
+      mechanisms: saved.mechanisms.map(m => ({
+        ...m,
+        position: {
+          x: Math.max(0, Math.min(m.position.x, cols - 1)),
+          y: Math.max(0, Math.min(m.position.y, rows - 1))
+        }
+      })),
       dialHours: [],
       selectedEntityId: undefined,
       draggedEntity: undefined
     }));
 
-    console.log('[BoardService] 🔄 Map restaurée depuis la sauvegarde manuelle');
+    console.log('[BoardService] 🔄 Map restaurée depuis la sauvegarde manuelle (recalée sur la grille courante)');
     return true;
   }
 
