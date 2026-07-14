@@ -29,7 +29,7 @@ aujourd'hui, et non le 13×13 d'état jamais affiché).
 | Persistance | **Hybride** : par timeline (dans `TimelineBoardSetup`) **+** cache localStorage pour la continuité de navigation |
 | UI de réglage | Bouton ⚙ dans la barre d'outils → petit popover (Largeur, Hauteur, Appliquer) |
 | Rendu | Le `.board` grandit dans `.board-wrapper` **sans le redimensionner** ; la taille des cases devient dynamique (elles rétrécissent pour rester contenues) |
-| Limites | **5 à 20** cases par côté ; défaut **10×10** |
+| Limites | **10 à 20** cases par côté ; défaut **10×10** |
 | Réduction | Recaler les entités et rouages manuels hors-bornes sur la case valide la plus proche |
 | Stratégie de rendu | **Approche B** : taille de case calculée en px (variable CSS `--cell-size`), pour préserver les enfants dimensionnés en px |
 
@@ -41,7 +41,7 @@ aujourd'hui, et non le 13×13 d'état jamais affiché).
 - `cols`/`rows` deviennent la **seule** source de vérité, défaut **10×10**.
 - Signal public `gridSize = computed(() => ({ cols, rows }))`.
 - Méthode `setGridSize(cols, rows)` :
-  - clampe les valeurs entre 5 et 20 ;
+  - clampe les valeurs entre 10 et 20 ;
   - recale les entités et rouages manuels hors des nouvelles bornes ;
   - écrit la taille courante dans le cache localStorage.
 
@@ -69,7 +69,7 @@ aujourd'hui, et non le 13×13 d'état jamais affiché).
   `dashboard.component.ts` (à côté des autres `tool-btn`), visible dans les deux
   modes (Freeplay et Timeline).
 - Petit popover (même pattern que le menu passifs existant) :
-  - deux champs numériques **Largeur** et **Hauteur** (min 5, max 20),
+  - deux champs numériques **Largeur** et **Hauteur** (min 10, max 20),
     pré-remplis avec la taille courante ;
   - bouton **Appliquer** ;
   - validation inline si hors bornes.
@@ -103,7 +103,7 @@ aujourd'hui, et non le 13×13 d'état jamais affiché).
 ## Tests
 
 `board.service.spec` :
-- `setGridSize` clampe à 5–20.
+- `setGridSize` clampe à 10–20.
 - Recalage des entités/rouages manuels hors bornes.
 - `exportCurrentSetup`/`applyTimelineSetup` : round-trip avec `cols`/`rows`,
   fallback 10×10 pour timeline sans taille.

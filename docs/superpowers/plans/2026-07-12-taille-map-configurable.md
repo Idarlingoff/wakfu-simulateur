@@ -96,7 +96,7 @@ describe('BoardService — taille de map', () => {
     expect(service.gridSize()).toEqual({ cols: 10, rows: 10 });
   });
 
-  it('setGridSize clampe entre 5 et 20', () => {
+  it('setGridSize clampe entre 10 et 20', () => {
     const service = TestBed.inject(BoardService);
     service.setGridSize(2, 99);
     expect(service.gridSize()).toEqual({ cols: 5, rows: 20 });
@@ -646,7 +646,7 @@ devient :
                   <span>Hauteur</span>
                   <input type="number" min="5" max="20" [(ngModel)]="mapHeightInput" />
                 </label>
-                <div class="map-size-hint">Entre 5 et 20 cases.</div>
+                <div class="map-size-hint">Entre 10 et 20 cases.</div>
                 <button class="map-size-apply" (click)="onApplyMapSize()">Appliquer</button>
               </div>
             }

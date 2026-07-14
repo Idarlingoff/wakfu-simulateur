@@ -1989,9 +1989,6 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
   selectedInteractionMode = signal<'none' | 'spell' | 'move' | 'pwMove'>('none');
   hoveredPlayerId = signal<string | null>(null);
 
-  /** Mode Freeplay Xel Rouage */
-  isXelorFreeplayActive = signal<boolean>(false);
-
   /**
    * Passifs proposés dans le menu du Freeplay Xel Rouage.
    * `mandatory` = imposé (verrouillé, toujours actif) ; sinon togglable.
@@ -2079,6 +2076,19 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
 
     // Précharge les passifs Xélor pour alimenter le menu du Freeplay Xel Rouage.
     this.loadXelorPassivesData();
+
+    // Restaure l'UI du Freeplay Xél Rouage si une session est déjà active (le composant
+    // a pu être recréé après une navigation). La session persiste dans le service : on
+    // reconstitue l'état activé des passifs optionnels et on recharge les sorts Xélor.
+    if (this.interactivePlay.isXelorFreeplay()) {
+      const enabledIds = new Set(this.interactivePlay.getXelorOptionalPassiveIds());
+      const restored: Record<string, boolean> = {};
+      for (const p of this.optionalXelorPassives()) {
+        restored[p.id] = enabledIds.has(p.id);
+      }
+      this.xelorOptionalPassivesEnabled.set(restored);
+      this.loadSpells('XEL');
+    }
   }
 
   ngAfterViewInit(): void {
@@ -2555,10 +2565,14 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     return !!this.buildService.selectedBuildA();
   }
 
+  /** Le mode Freeplay Xel Rouage est-il actif ? Source de vérité : la session du service (persiste à la navigation). */
+  isXelorFreeplayActive(): boolean {
+    return this.interactivePlay.isXelorFreeplay();
+  }
+
   toggleInteractiveMode(): void {
     if (this.interactivePlay.isActive()) {
       this.interactivePlay.stopSession();
-      this.isXelorFreeplayActive.set(false);
       return;
     }
 
@@ -2574,7 +2588,6 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     } else {
       this.interactivePlay.startSessionFreeplay();
     }
-    this.isXelorFreeplayActive.set(false);
   }
 
   /** Termine le tour courant en jeu interactif (fin de tour puis début du tour suivant). */
@@ -2585,7 +2598,6 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
   toggleXelorFreeplay(): void {
     if (this.interactivePlay.isActive() && this.isXelorFreeplayActive()) {
       this.interactivePlay.stopSession();
-      this.isXelorFreeplayActive.set(false);
       return;
     }
 
@@ -2601,7 +2613,6 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
 
     this.boardService.saveInitialState();
     this.interactivePlay.startSessionXelorFreeplay(this.enabledOptionalXelorPassiveIds());
-    this.isXelorFreeplayActive.set(true);
 
     // Charger les sorts du Xelor
     this.loadSpells('XEL');

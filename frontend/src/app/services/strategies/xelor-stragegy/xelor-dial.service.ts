@@ -281,20 +281,21 @@ private get teleport(): XelorTeleportService {
     }
 
     // Tour de cadran RÉEL (hors premier "tour" de la pose) : ordre métier
-    // permutation -> prémonition -> horlogerie -> dégâts indirects (Rouage). Le tout premier wrap
-    // (pose à 12h -> 1h au 1er PW) ne déclenche aucun de ces effets.
+    // permutation -> prémonition -> horlogerie -> dégâts/soins indirects (Rouage/Sinistro).
+    // Le tout premier wrap (pose à 12h -> 1h au 1er PW) ne déclenche AUCUN de ces effets :
+    // l'explosion du Rouage ne doit pas proc tant qu'un vrai tour de cadran n'a pas eu lieu.
     if (!isFirstLoop) {
       this.xelorPassiveService.applyPermutationMomentanee(context);  // a) échange Xélor <-> Cadran
       this.teleport.resolvePremonitionDeferredTeleport(context);     // b) Prémonition : TP différé du Xélor
       this.xelorPassiveService.applyHorlogerie(context);             // c) Horlogerie : TP sur l'heure courante
-    }
 
-    if (getXelorState(context, true).activeAuras?.has('ROUAGE_AURA')) {
-      this.xelorMechanismsService.applyRouageDamage(context);
-    }
-
-    if (getXelorState(context, true).activeAuras?.has('SINISTRO_AURA')) {
-      this.xelorMechanismsService.applySinistroHealing(context);
+      // d) dégâts/soins indirects des mécanismes, déclenchés par le tour de cadran
+      if (getXelorState(context, true).activeAuras?.has('ROUAGE_AURA')) {
+        this.xelorMechanismsService.applyRouageDamage(context);
+      }
+      if (getXelorState(context, true).activeAuras?.has('SINISTRO_AURA')) {
+        this.xelorMechanismsService.applySinistroHealing(context);
+      }
     }
 
     // Comportement par défaut du Cadran (refonte : ex-"Connaissance du passé") :

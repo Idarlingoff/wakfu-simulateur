@@ -15,22 +15,22 @@ describe('BoardService — taille de map', () => {
     expect(service.gridSize()).toEqual({ cols: 10, rows: 10 });
   });
 
-  it('setGridSize clampe entre 5 et 20', () => {
+  it('setGridSize clampe entre 10 et 20', () => {
     const service = TestBed.inject(BoardService);
     service.setGridSize(2, 99);
-    expect(service.gridSize()).toEqual({ cols: 5, rows: 20 });
+    expect(service.gridSize()).toEqual({ cols: 10, rows: 20 });
   });
 
   it('setGridSize persiste la taille dans localStorage', () => {
     const service = TestBed.inject(BoardService);
-    service.setGridSize(12, 8);
-    expect(JSON.parse(localStorage.getItem(MAP_SIZE_KEY)!)).toEqual({ cols: 12, rows: 8 });
+    service.setGridSize(12, 16);
+    expect(JSON.parse(localStorage.getItem(MAP_SIZE_KEY)!)).toEqual({ cols: 12, rows: 16 });
   });
 
   it('lit la taille en cache au demarrage', () => {
-    localStorage.setItem(MAP_SIZE_KEY, JSON.stringify({ cols: 15, rows: 7 }));
+    localStorage.setItem(MAP_SIZE_KEY, JSON.stringify({ cols: 15, rows: 12 }));
     const service = TestBed.inject(BoardService);
-    expect(service.gridSize()).toEqual({ cols: 15, rows: 7 });
+    expect(service.gridSize()).toEqual({ cols: 15, rows: 12 });
   });
 
   it('retombe sur 10x10 si le JSON en cache est invalide', () => {
@@ -42,42 +42,44 @@ describe('BoardService — taille de map', () => {
   it('clampe une taille hors bornes lue en cache', () => {
     localStorage.setItem(MAP_SIZE_KEY, JSON.stringify({ cols: 0, rows: 999 }));
     const service = TestBed.inject(BoardService);
-    expect(service.gridSize()).toEqual({ cols: 5, rows: 20 });
+    expect(service.gridSize()).toEqual({ cols: 10, rows: 20 });
   });
 
   it('resetToDefault preserve la taille courante', () => {
     const service = TestBed.inject(BoardService);
-    service.setGridSize(14, 6);
+    service.setGridSize(14, 16);
     service.resetToDefault();
-    expect(service.gridSize()).toEqual({ cols: 14, rows: 6 });
+    expect(service.gridSize()).toEqual({ cols: 14, rows: 16 });
   });
 
   it('setGridSize recale les entites hors bornes sur le bord', () => {
     const service = TestBed.inject(BoardService);
+    service.setGridSize(20, 20);
     service.addEntity({
       id: 'e1', type: 'enemy', name: 'X',
-      position: { x: 9, y: 8 }, facing: { direction: 'front' }
+      position: { x: 18, y: 17 }, facing: { direction: 'front' }
     });
-    service.setGridSize(6, 6);
+    service.setGridSize(12, 12);
     const moved = service.getEntity('e1')!;
-    expect(moved.position).toEqual({ x: 5, y: 5 });
+    expect(moved.position).toEqual({ x: 11, y: 11 });
   });
 
   it('setGridSize recale les rouages manuels mais laisse les rouages de sort', () => {
     const service = TestBed.inject(BoardService);
-    service.addMechanism({ id: 'manual', type: 'cog', position: { x: 9, y: 9 }, charges: 0 });
+    service.setGridSize(20, 20);
+    service.addMechanism({ id: 'manual', type: 'cog', position: { x: 18, y: 18 }, charges: 0 });
     service.addMechanism({ id: 'spell', type: 'cog', position: { x: 8, y: 8 }, charges: 0, spellId: 'S' });
-    service.setGridSize(5, 5);
-    expect(service.getMechanism('manual')!.position).toEqual({ x: 4, y: 4 });
+    service.setGridSize(12, 12);
+    expect(service.getMechanism('manual')!.position).toEqual({ x: 11, y: 11 });
     expect(service.getMechanism('spell')!.position).toEqual({ x: 8, y: 8 });
   });
 
   it('exportCurrentSetup ecrit cols/rows courants', () => {
     const service = TestBed.inject(BoardService);
-    service.setGridSize(14, 9);
+    service.setGridSize(14, 16);
     const setup = service.exportCurrentSetup();
     expect(setup.cols).toBe(14);
-    expect(setup.rows).toBe(9);
+    expect(setup.rows).toBe(16);
   });
 
   it('applyTimelineSetup applique cols/rows du setup', () => {
@@ -102,9 +104,9 @@ describe('BoardService — taille de map', () => {
     const service = TestBed.inject(BoardService);
     service.applyTimelineSetup({
       entities: [{ id: 'e1', type: 'enemy', name: 'X', position: { x: 20, y: 20 }, facing: { direction: 'front' } }],
-      cols: 8, rows: 8
+      cols: 12, rows: 12
     });
-    expect(service.getEntity('e1')!.position).toEqual({ x: 7, y: 7 });
+    expect(service.getEntity('e1')!.position).toEqual({ x: 11, y: 11 });
   });
 
   it('applyTimelineSetup clampe un cols/rows hors bornes', () => {
@@ -113,24 +115,86 @@ describe('BoardService — taille de map', () => {
       entities: [{ id: 'a', type: 'player', name: 'P', position: { x: 0, y: 0 }, facing: { direction: 'front' } }],
       cols: 1, rows: 999
     });
-    expect(service.gridSize()).toEqual({ cols: 5, rows: 20 });
+    expect(service.gridSize()).toEqual({ cols: 10, rows: 20 });
   });
 
   it('applyTimelineSetup persiste la taille dans localStorage', () => {
     const service = TestBed.inject(BoardService);
     service.applyTimelineSetup({
       entities: [{ id: 'a', type: 'player', name: 'P', position: { x: 0, y: 0 }, facing: { direction: 'front' } }],
-      cols: 13, rows: 7
+      cols: 13, rows: 16
     });
-    expect(JSON.parse(localStorage.getItem(MAP_SIZE_KEY)!)).toEqual({ cols: 13, rows: 7 });
+    expect(JSON.parse(localStorage.getItem(MAP_SIZE_KEY)!)).toEqual({ cols: 13, rows: 16 });
   });
 
   it('restoreMap recale les entites hors de la grille courante', () => {
     const service = TestBed.inject(BoardService);
-    service.addEntity({ id: 'e1', type: 'enemy', name: 'X', position: { x: 9, y: 9 }, facing: { direction: 'front' } });
+    service.setGridSize(20, 20);
+    service.addEntity({ id: 'e1', type: 'enemy', name: 'X', position: { x: 18, y: 18 }, facing: { direction: 'front' } });
     service.saveMap();
-    service.setGridSize(6, 6);
+    service.setGridSize(12, 12);
     service.restoreMap();
-    expect(service.getEntity('e1')!.position).toEqual({ x: 5, y: 5 });
+    expect(service.getEntity('e1')!.position).toEqual({ x: 11, y: 11 });
+  });
+});
+
+describe('BoardService — teleportPlayerToDialHour (comportement de base du cadran)', () => {
+  beforeEach(() => {
+    localStorage.removeItem(MAP_SIZE_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [BoardService] });
+  });
+
+  function addHour6(service: BoardService, dialId: string, position: { x: number; y: number }): void {
+    service.addDialHour({ id: `h6_${dialId}`, dialId, hour: 6, position });
+  }
+
+  it('echange le Xelor avec l\'entite occupant la case 6', () => {
+    const service = TestBed.inject(BoardService);
+    // Xelor par defaut en (4,4) ; occupant en (4,6)
+    service.addEntity({ id: 'occ', type: 'enemy', name: 'Allie', position: { x: 4, y: 6 }, facing: { direction: 'front' } });
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(service.getEntity('occ')!.position).toEqual({ x: 4, y: 4 });
+    expect(outcome.kind).toBe('swap_entity');
+    expect(outcome.occupant?.id).toBe('occ');
+  });
+
+  it('teleporte simplement le Xelor si la case 6 est libre', () => {
+    const service = TestBed.inject(BoardService);
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(outcome.kind).toBe('teleport');
+  });
+
+  it('echange avec un mecanisme occupant la case 6', () => {
+    const service = TestBed.inject(BoardService);
+    service.addMechanism({ id: 'cog1', type: 'cog', position: { x: 4, y: 6 }, charges: 0 });
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(service.getMechanism('cog1')!.position).toEqual({ x: 4, y: 4 });
+    expect(outcome.kind).toBe('swap_mechanism');
+    expect(outcome.occupant?.id).toBe('cog1');
+  });
+
+  it('ne fait rien si le Xelor est deja sur la case 6', () => {
+    const service = TestBed.inject(BoardService);
+    const xelId = service.player()!.id;
+    service.updateEntityPosition(xelId, { x: 4, y: 6 });
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(outcome.kind).toBe('none');
   });
 });

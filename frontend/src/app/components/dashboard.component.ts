@@ -94,13 +94,13 @@ import { IconComponent } from '../ui/icon.component';
                 <div class="map-size-title">Taille de la map (cases)</div>
                 <label class="map-size-field">
                   <span>Largeur</span>
-                  <input type="number" min="5" max="20" step="1" [(ngModel)]="mapWidthInput" />
+                  <input type="number" min="10" max="20" step="1" [(ngModel)]="mapWidthInput" />
                 </label>
                 <label class="map-size-field">
                   <span>Hauteur</span>
-                  <input type="number" min="5" max="20" step="1" [(ngModel)]="mapHeightInput" />
+                  <input type="number" min="10" max="20" step="1" [(ngModel)]="mapHeightInput" />
                 </label>
-                <div class="map-size-hint">Entre 5 et 20 cases.</div>
+                <div class="map-size-hint">Entre 10 et 20 cases.</div>
                 <button class="map-size-apply" (click)="onApplyMapSize()">Appliquer</button>
               </div>
             }
