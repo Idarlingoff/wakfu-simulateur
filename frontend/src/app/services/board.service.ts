@@ -10,6 +10,19 @@ import { Position, Facing, TimelineBoardSetup } from '../models/timeline.model';
 const MAP_SIZE_KEY = 'wakfu.mapSize';
 const MIN_DIM = 5;
 const MAX_DIM = 20;
+
+/**
+ * Issue d'une téléportation du joueur sur une case du cadran.
+ * - `none` : aucun déplacement (joueur déjà sur la case, ou cible/joueur introuvable)
+ * - `teleport` : case libre, simple déplacement (compte pour 1 charge de transposition)
+ * - `swap_entity` / `swap_mechanism` : échange avec l'occupant (compte pour 2 charges)
+ */
+export interface DialHourTeleportOutcome {
+  kind: 'none' | 'teleport' | 'swap_entity' | 'swap_mechanism';
+  from: Position;
+  to: Position;
+  occupant?: { id: string; name: string; type: 'entity' | 'mechanism' };
+}
 // DEFAULT_DIM (10) sert aussi de repli pour les anciennes timelines sans
 // cols/rows : le modifier change le comportement des timelines déjà sauvegardées.
 const DEFAULT_DIM = 10;
@@ -560,29 +573,50 @@ export class BoardService {
   }
 
   /**
-   * Téléporte le joueur sur une heure spécifique du cadran
+   * Téléporte le joueur sur une heure spécifique du cadran.
+   *
+   * Comportement de base du cadran : si la case cible est occupée par une entité
+   * ou un mécanisme, le joueur ÉCHANGE avec l'occupant (le joueur va sur l'heure,
+   * l'occupant prend l'ancienne case du joueur). Sinon, simple téléportation.
+   *
    * @param hour L'heure cible (1-12)
    * @param dialId L'ID du cadran (optionnel)
-   * @returns true si la téléportation a réussi
+   * @returns L'issue du déplacement (rien / téléportation / échange entité / échange mécanisme)
    */
-  public teleportPlayerToDialHour(hour: number, dialId?: string): boolean {
+  public teleportPlayerToDialHour(hour: number, dialId?: string): DialHourTeleportOutcome {
     const position = this.getDialHourPosition(hour, dialId);
+    const player = this.player();
 
-    if (!position) {
-      console.error(`[BoardService] Cannot teleport player: hour ${hour} not found`);
-      return false;
+    if (!position || !player) {
+      console.error(`[BoardService] Cannot teleport player: hour ${hour} not found or no player`);
+      return { kind: 'none', from: player?.position ?? { x: 0, y: 0 }, to: position ?? { x: 0, y: 0 } };
     }
 
-    const player = this.player();
-    if (!player) {
-      console.error(`[BoardService] Cannot teleport player: no player found`);
-      return false;
+    const from = { ...player.position };
+
+    // Déjà sur la case de l'heure : rien à faire.
+    if (from.x === position.x && from.y === position.y) {
+      return { kind: 'none', from, to: { ...position } };
+    }
+
+    const occupantEntity = this.getEntityAtPosition(position);
+    const occupantMechanism = this.getMechanismAtPosition(position);
+
+    if (occupantEntity && occupantEntity.id !== player.id) {
+      this.swapEntityPositions(player.id, occupantEntity.id);
+      console.log(`[BoardService] 🔄 Player échange avec ${occupantEntity.name} sur l'heure ${hour} (${position.x}, ${position.y})`);
+      return { kind: 'swap_entity', from, to: { ...position }, occupant: { id: occupantEntity.id, name: occupantEntity.name, type: 'entity' } };
+    }
+
+    if (occupantMechanism && occupantMechanism.id !== dialId) {
+      this.swapEntityWithMechanism(player.id, occupantMechanism.id);
+      console.log(`[BoardService] 🔄 Player échange avec le mécanisme ${occupantMechanism.type} sur l'heure ${hour} (${position.x}, ${position.y})`);
+      return { kind: 'swap_mechanism', from, to: { ...position }, occupant: { id: occupantMechanism.id, name: occupantMechanism.type, type: 'mechanism' } };
     }
 
     this.updateEntityPosition(player.id, position);
     console.log(`[BoardService] 🌀 Player teleported to hour ${hour} at (${position.x}, ${position.y})`);
-
-    return true;
+    return { kind: 'teleport', from, to: { ...position } };
   }
 
   /**

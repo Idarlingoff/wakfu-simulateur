@@ -134,3 +134,64 @@ describe('BoardService — taille de map', () => {
     expect(service.getEntity('e1')!.position).toEqual({ x: 5, y: 5 });
   });
 });
+
+describe('BoardService — teleportPlayerToDialHour (comportement de base du cadran)', () => {
+  beforeEach(() => {
+    localStorage.removeItem(MAP_SIZE_KEY);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [BoardService] });
+  });
+
+  function addHour6(service: BoardService, dialId: string, position: { x: number; y: number }): void {
+    service.addDialHour({ id: `h6_${dialId}`, dialId, hour: 6, position });
+  }
+
+  it('echange le Xelor avec l\'entite occupant la case 6', () => {
+    const service = TestBed.inject(BoardService);
+    // Xelor par defaut en (4,4) ; occupant en (4,6)
+    service.addEntity({ id: 'occ', type: 'enemy', name: 'Allie', position: { x: 4, y: 6 }, facing: { direction: 'front' } });
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(service.getEntity('occ')!.position).toEqual({ x: 4, y: 4 });
+    expect(outcome.kind).toBe('swap_entity');
+    expect(outcome.occupant?.id).toBe('occ');
+  });
+
+  it('teleporte simplement le Xelor si la case 6 est libre', () => {
+    const service = TestBed.inject(BoardService);
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(outcome.kind).toBe('teleport');
+  });
+
+  it('echange avec un mecanisme occupant la case 6', () => {
+    const service = TestBed.inject(BoardService);
+    service.addMechanism({ id: 'cog1', type: 'cog', position: { x: 4, y: 6 }, charges: 0 });
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(service.getMechanism('cog1')!.position).toEqual({ x: 4, y: 4 });
+    expect(outcome.kind).toBe('swap_mechanism');
+    expect(outcome.occupant?.id).toBe('cog1');
+  });
+
+  it('ne fait rien si le Xelor est deja sur la case 6', () => {
+    const service = TestBed.inject(BoardService);
+    const xelId = service.player()!.id;
+    service.updateEntityPosition(xelId, { x: 4, y: 6 });
+    addHour6(service, 'd1', { x: 4, y: 6 });
+
+    const outcome = service.teleportPlayerToDialHour(6, 'd1');
+
+    expect(service.player()!.position).toEqual({ x: 4, y: 6 });
+    expect(outcome.kind).toBe('none');
+  });
+});

@@ -10,6 +10,7 @@ import {XelorCastValidatorService} from './xelor-cast-validator.service';
 import {getMechanismImagePath, getSpellMechanismType} from '../../../utils/mechanism-utils';
 import {XelorExecuteEffectService} from './xelor-execute-effect.service';
 import {XelorPassivesService} from './xelor-passives.service';
+import {XelorMovementService} from './xelor-movement.service';
 import { getXelorState } from './xelor-state.utils';
 
 @Injectable({ providedIn: 'root' })
@@ -21,6 +22,7 @@ export class XelorMechanismsService {
   private readonly xelorCastValidator = inject(XelorCastValidatorService);
   private readonly xelorExecuteEffectService = inject(XelorExecuteEffectService);
   private readonly xelorPassiveService = inject(XelorPassivesService);
+  private readonly xelorMovementService = inject(XelorMovementService);
   private readonly injector = inject(Injector);
 
   private get dial(): XelorDialService {
@@ -146,26 +148,12 @@ export class XelorMechanismsService {
 
       this.boardService.setCurrentDialHour(12, mechanism.id);
 
-      const teleported = this.boardService.teleportPlayerToDialHour(6, mechanism.id);
-      if (teleported) {
-        console.log(`[XELOR] 🌀 Player automatically teleported to hour 6`);
-
-        const hour6Position = this.boardService.getDialHourPosition(6, mechanism.id);
-        if (hour6Position) {
-          context.playerPosition = hour6Position;
-          context.currentPosition = hour6Position;
-
-          if (context.entities) {
-            const playerEntityInContext = context.entities.find(e => e.type === 'player');
-            if (playerEntityInContext) {
-              playerEntityInContext.position = hour6Position;
-              console.log(`[XELOR] 📍 Player entity in context.entities also updated to (${hour6Position.x}, ${hour6Position.y})`);
-            }
-          }
-
-          console.log(`[XELOR] 📍 Context updated with new player position: (${hour6Position.x}, ${hour6Position.y})`);
-        }
-      }
+      // Comportement de base du cadran : le Xélor est téléporté sur la case n°6.
+      // Si la case est occupée, il ÉCHANGE avec l'occupant (le Xélor se retrouve
+      // bien sur le 6, l'occupant prend l'ancienne case du Xélor). Cette
+      // transposition génère des charges (téléport = 1, échange = 2), enregistrées
+      // ici pour être comptées par addRouageAndSinistroChargesFromTranspositions.
+      this.teleportPlayerToDialHourSix(mechanism.id, context, spell.id);
 
       getXelorState(context, true).currentDialHour = 12;
       getXelorState(context, true).dialId = mechanism.id;
@@ -206,6 +194,56 @@ export class XelorMechanismsService {
         mechanismId: mechanism.id
       }
     };
+  }
+
+  /**
+   * Téléporte le Xélor sur la case n°6 du cadran à la pose (comportement de base).
+   * Délègue l'échange/déplacement au BoardService, synchronise le contexte de
+   * simulation, puis enregistre le mouvement pour la génération de charges
+   * (téléportation = 1 charge, échange = 2 charges).
+   */
+  private teleportPlayerToDialHourSix(
+    dialId: string,
+    context: SimulationContext,
+    sourceSpellId: string
+  ): void {
+    const outcome = this.boardService.teleportPlayerToDialHour(6, dialId);
+    if (outcome.kind === 'none') {
+      return;
+    }
+
+    const player = this.boardService.player();
+    if (!player) {
+      return;
+    }
+
+    // Synchronise le contexte : joueur sur la case 6, occupant sur l'ancienne case.
+    context.playerPosition = { ...outcome.to };
+    context.currentPosition = { ...outcome.to };
+    this.xelorMovementService.updateEntityPositionInContext(context, player.id, outcome.to);
+    if (outcome.kind === 'swap_entity' && outcome.occupant) {
+      this.xelorMovementService.updateEntityPositionInContext(context, outcome.occupant.id, outcome.from);
+    }
+
+    // Enregistre la transposition pour le comptage des charges.
+    if (outcome.kind === 'swap_entity' && outcome.occupant) {
+      this.xelorMovementService.recordMovement(
+        context, 'swap', player.id, 'entity', player.name || 'Player',
+        outcome.from, outcome.to, sourceSpellId,
+        { id: outcome.occupant.id, type: 'entity', name: outcome.occupant.name, fromPosition: outcome.to, toPosition: outcome.from }
+      );
+    } else if (outcome.kind === 'swap_mechanism' && outcome.occupant) {
+      this.xelorMovementService.recordMovement(
+        context, 'swap_mechanism', player.id, 'entity', player.name || 'Player',
+        outcome.from, outcome.to, sourceSpellId,
+        { id: outcome.occupant.id, type: 'mechanism', name: outcome.occupant.name, fromPosition: outcome.to, toPosition: outcome.from }
+      );
+    } else {
+      this.xelorMovementService.recordMovement(
+        context, 'teleport', player.id, 'entity', player.name || 'Player',
+        outcome.from, outcome.to, sourceSpellId
+      );
+    }
   }
 
   private getInitialChargesForMechanismType(
