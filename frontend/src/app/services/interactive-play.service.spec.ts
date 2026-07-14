@@ -76,6 +76,25 @@ describe('InteractivePlayService – Freeplay Xel Rouage passifs', () => {
     expect(ids.filter(id => id === 'XEL_MAITRE_CADRAN').length).toBe(1);
     expect(ids).toContain('XEL_REMANENCE');
   });
+
+  it('isXelorFreeplay est vrai apres startSessionXelorFreeplay', () => {
+    service.startSessionXelorFreeplay(['XEL_HORLOGERIE']);
+    expect(service.isXelorFreeplay()).toBe(true);
+    expect(service.getXelorOptionalPassiveIds()).toContain('XEL_HORLOGERIE');
+  });
+
+  it('isXelorFreeplay est faux en freeplay classique', () => {
+    service.startSessionFreeplay();
+    expect(service.isXelorFreeplay()).toBe(false);
+    expect(service.getXelorOptionalPassiveIds()).toEqual([]);
+  });
+
+  it('isXelorFreeplay repasse a faux apres stopSession', () => {
+    service.startSessionXelorFreeplay(['XEL_HORLOGERIE']);
+    service.stopSession();
+    expect(service.isXelorFreeplay()).toBe(false);
+    expect(service.getXelorOptionalPassiveIds()).toEqual([]);
+  });
 });
 
 describe('InteractivePlayService — enregistrement', () => {

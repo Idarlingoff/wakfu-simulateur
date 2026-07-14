@@ -35,6 +35,10 @@ export class InteractivePlayService {
   private _build: Build | null = null;
   /** true quand la session a démarré sans build (aucun contrôle) */
   private _freeplay = false;
+  /** true quand la session courante est un Freeplay Xél Rouage (passifs Xélor). */
+  private _xelorFreeplay = false;
+  /** Passifs optionnels choisis pour le Freeplay Xél Rouage courant (source de vérité persistante). */
+  private _xelorOptionalPassiveIds: string[] = [];
   private _stepCount = 0;
 
   private readonly _recordedSteps = signal<TimelineStep[]>([]);
@@ -51,6 +55,8 @@ export class InteractivePlayService {
   startSession(build: Build): void {
     this._build = build;
     this._freeplay = false;
+    this._xelorFreeplay = false;
+    this._xelorOptionalPassiveIds = [];
     this._stepCount = 0;
     this._recordedSteps.set([]);
 
@@ -93,6 +99,8 @@ export class InteractivePlayService {
   startSessionFreeplay(): void {
     this._build = null;
     this._freeplay = true;
+    this._xelorFreeplay = false;
+    this._xelorOptionalPassiveIds = [];
     this._stepCount = 0;
     this._recordedSteps.set([]);
 
@@ -175,6 +183,8 @@ export class InteractivePlayService {
       },
     };
     this._freeplay = true;
+    this._xelorFreeplay = true;
+    this._xelorOptionalPassiveIds = [...enabledOptionalPassiveIds];
     this._stepCount = 0;
     this._recordedSteps.set([]);
 
@@ -210,6 +220,8 @@ export class InteractivePlayService {
     this._context.set(null);
     this._build = null;
     this._freeplay = false;
+    this._xelorFreeplay = false;
+    this._xelorOptionalPassiveIds = [];
     this._stepCount = 0;
     this._recordedSteps.set([]);
     console.log('[InteractivePlay] Session arrêtée');
@@ -228,6 +240,16 @@ export class InteractivePlayService {
 
   isActive(): boolean {
     return this._mode() === 'idle';
+  }
+
+  /** true si la session courante est un Freeplay Xél Rouage (persiste tant que la session est active). */
+  isXelorFreeplay(): boolean {
+    return this._xelorFreeplay;
+  }
+
+  /** Passifs optionnels choisis pour le Freeplay Xél Rouage courant (pour restaurer l'UI). */
+  getXelorOptionalPassiveIds(): ReadonlyArray<string> {
+    return this._xelorOptionalPassiveIds;
   }
 
   isFreeplay(): boolean {
