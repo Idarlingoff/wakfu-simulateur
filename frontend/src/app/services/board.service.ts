@@ -8,7 +8,7 @@ import { InteractiveBoardState, BoardEntity, Mechanism, DialHour } from '../mode
 import { Position, Facing, TimelineBoardSetup } from '../models/timeline.model';
 
 const MAP_SIZE_KEY = 'wakfu.mapSize';
-const MIN_DIM = 5;
+const MIN_DIM = 10;
 const MAX_DIM = 20;
 
 /**
