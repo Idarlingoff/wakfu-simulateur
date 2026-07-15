@@ -102,8 +102,8 @@ export class DamageCalculatorService {
    *   multiplicateur critique de la formule (seulement la maîtrise critique).
    * - Sans critBase (soin/bouclier) : le crit applique ×1.25 sur la base normale.
    * - Résistance / parade / barrière = 0 (stats cible non disponibles).
-   * - HEAL/GIVE_ARMOR n'utilisent pas la maîtrise élémentaire (soin = maîtrise de soin ;
-   *   bouclier = pas de maîtrise), uniquement le multiplicateur critique ×1.25.
+   * - HEAL : maîtrise élémentaire + mêlée/distance + critique + maîtrise soin (pas de dommages infligés).
+   * - GIVE_ARMOR : aucune maîtrise, seulement le ×1.25 en critique.
    */
   computeEffectValues(input: EffectValueInput): EffectValues {
     if (input.effectType === 'DEAL_DAMAGE') {
@@ -133,7 +133,7 @@ export class DamageCalculatorService {
       orientation: input.orientation,
     }).value;
 
-    const hasCritBase = typeof input.critBase === 'number';
+    const hasCritBase = typeof input.critBase === 'number' && input.critBase > 0;
     const crit = this.calculator.calculateDirectDamage({
       baseValue: hasCritBase ? input.critBase! : input.normalBase,
       applicableMasterySum: masteryCrit,

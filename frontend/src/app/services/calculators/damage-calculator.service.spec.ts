@@ -66,4 +66,33 @@ describe('DamageCalculatorService.computeEffectValues', () => {
     expect(r.normal).toBe(100);
     expect(r.crit).toBe(125);
   });
+
+  it('degats: distance >= 3 applique la maitrise distance (pas la melee)', () => {
+    const s = { ...stats, masteryFire: 0, masteryMelee: 40, masteryDistance: 60 };
+    const r = svc.computeEffectValues({
+      effectType: 'DEAL_DAMAGE', normalBase: 100,
+      element: 'FIRE', stats: s, distanceCases: 3, orientation: 'front',
+    });
+    // mastery = distance 60 -> 100 * (1 + 60/100) = 160
+    expect(r.normal).toBe(160);
+  });
+
+  it('degats: orientation back ajoute la maitrise dos + bonus x1.25 d orientation', () => {
+    const s = { ...stats, masteryFire: 0, backMastery: 50 };
+    const r = svc.computeEffectValues({
+      effectType: 'DEAL_DAMAGE', normalBase: 100,
+      element: 'FIRE', stats: s, distanceCases: 1, orientation: 'back',
+    });
+    // mastery = 50 -> base*(1.5) puis bonus orientation dos x1.25 : 100*1.5*1.25 = 187 (floor)
+    expect(r.normal).toBe(187);
+  });
+
+  it('degats: critBase=0 retombe sur ×1.25 de la base normale (pas crit=0)', () => {
+    const r = svc.computeEffectValues({
+      effectType: 'DEAL_DAMAGE', normalBase: 100, critBase: 0,
+      element: 'FIRE', stats, distanceCases: 1, orientation: 'front',
+    });
+    // critBase 0 ignore -> crit = 200 * 1.25 = 250
+    expect(r.crit).toBe(250);
+  });
 });
