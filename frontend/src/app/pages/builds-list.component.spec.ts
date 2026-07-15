@@ -11,7 +11,8 @@ function makeBuild(id: string, name: string): Build {
     spellBar: { spells: [] }, passiveBar: { passives: [] }, sublimationBar: { sublimations: [] },
     stats: {
       level: 230, masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
-      masterySecondary: 0, backMastery: 0, dommageInflict: 0, critRate: 0, critMastery: 0,
+      masterySecondary: 0, backMastery: 0, masteryMelee: 0, masteryDistance: 0, masteryHealing: 0,
+      dommageInflict: 0, critRate: 0, critMastery: 0,
       resistance: 0, ap: 12, mp: 4, wp: 6, range: 0,
     },
   };
