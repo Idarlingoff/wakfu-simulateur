@@ -5,6 +5,21 @@ const baseStats: ApplicableMasteryStats = {
   masteryMelee: 50, masteryDistance: 70, backMastery: 30, critMastery: 40, masteryHealing: 60,
 };
 
+describe('resolveApplicableMasterySum — maitrise secondaire (heritee)', () => {
+  const s: ApplicableMasteryStats = {
+    masteryFire: 100, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
+    masteryMelee: 0, masteryDistance: 0, masterySecondary: 25, masteryHealing: 0,
+  };
+  it('ajoute la maitrise secondaire aux degats', () => {
+    expect(resolveApplicableMasterySum({ element: 'FIRE', stats: s, distanceCases: 1, orientation: 'front', isCritical: false, isHeal: false }))
+      .toBe(100 + 25);
+  });
+  it('n ajoute PAS la maitrise secondaire aux soins', () => {
+    expect(resolveApplicableMasterySum({ element: 'FIRE', stats: s, distanceCases: 1, orientation: 'front', isCritical: false, isHeal: true }))
+      .toBe(100);
+  });
+});
+
 describe('resolveApplicableMasterySum', () => {
   it('prend la maitrise elementaire de l element du sort', () => {
     expect(resolveApplicableMasterySum({ element: 'FIRE', stats: baseStats, distanceCases: 1, orientation: 'front', isCritical: false, isHeal: false }))
