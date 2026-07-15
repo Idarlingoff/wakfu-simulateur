@@ -149,11 +149,19 @@ export class DamageCalculatorService {
 
   private computeNonDamageEffectValues(input: EffectValueInput): EffectValues {
     if (input.effectType === 'HEAL') {
-      // Le soin utilise la maîtrise de soin uniquement (pas d'élémentaire, distance, dos...).
-      const mastery = input.stats.masteryHealing ?? 0;
+      // Maîtrises applicables au soin (formule Wakfu) : élémentaire (ou la plus haute pour
+      // Lumière/Stasis) + mêlée/distance + critique + maîtrise soin. Pas de dommages infligés.
+      const masteryNormal = resolveApplicableMasterySum({
+        element: input.element, stats: input.stats, distanceCases: input.distanceCases,
+        orientation: input.orientation, isCritical: false, isHeal: true,
+      });
+      const masteryCrit = resolveApplicableMasterySum({
+        element: input.element, stats: input.stats, distanceCases: input.distanceCases,
+        orientation: input.orientation, isCritical: true, isHeal: true,
+      });
       const normal = this.calculator.calculateDirectHeal({
         baseValue: input.normalBase,
-        applicableMasterySum: mastery,
+        applicableMasterySum: masteryNormal,
         healPerformedBonusSum: 0,
         healReceivedBonusSum: 0,
         healResistancePercent: 0,
@@ -162,7 +170,7 @@ export class DamageCalculatorService {
       }).value;
       const crit = this.calculator.calculateDirectHeal({
         baseValue: input.normalBase,
-        applicableMasterySum: mastery,
+        applicableMasterySum: masteryCrit,
         healPerformedBonusSum: 0,
         healReceivedBonusSum: 0,
         healResistancePercent: 0,

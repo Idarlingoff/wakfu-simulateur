@@ -37,12 +37,32 @@ describe('DamageCalculatorService.computeEffectValues', () => {
     expect(r.average).toBe(225);
   });
 
-  it('soin sans critBase: le crit applique x1.25 sur la base normale', () => {
+  it('soin: applique la maitrise elementaire (comme les degats) + x1.25 en crit', () => {
+    // element FIRE, masteryFire 100, masteryHealing 0 -> maitrise applicable = 100
     const r = svc.computeEffectValues({
       effectType: 'HEAL', normalBase: 100,
-      element: 'FIRE', stats: { ...stats, masteryHealing: 0 }, distanceCases: 1, orientation: 'front',
+      element: 'FIRE', stats, distanceCases: 1, orientation: 'front',
     });
-    // normal: 100 ; crit: 100 * 1.25 = 125
+    // normal: 100 * (1 + 100/100) = 200 ; crit (pas de critBase): 200 * 1.25 = 250
+    expect(r.normal).toBe(200);
+    expect(r.crit).toBe(250);
+  });
+
+  it('soin: la maitrise soin s ajoute a l elementaire', () => {
+    // masteryFire 100 + masteryHealing 50 -> maitrise applicable = 150
+    const r = svc.computeEffectValues({
+      effectType: 'HEAL', normalBase: 100,
+      element: 'FIRE', stats: { ...stats, masteryHealing: 50 }, distanceCases: 1, orientation: 'front',
+    });
+    // normal: 100 * (1 + 150/100) = 250
+    expect(r.normal).toBe(250);
+  });
+
+  it('bouclier: aucune maitrise, seul le crit x1.25', () => {
+    const r = svc.computeEffectValues({
+      effectType: 'GIVE_ARMOR', normalBase: 100,
+      element: 'FIRE', stats, distanceCases: 1, orientation: 'front',
+    });
     expect(r.normal).toBe(100);
     expect(r.crit).toBe(125);
   });
