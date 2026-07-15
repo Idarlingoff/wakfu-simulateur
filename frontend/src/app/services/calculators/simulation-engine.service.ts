@@ -100,6 +100,8 @@ export interface SimulationContext {
   freeplay?: boolean;
   /** Recharge restante par sort, en tours de jeu (0/absent = disponible). */
   spellCooldowns?: Map<string, number>;
+  /** Stats totales du lanceur (maîtrises, DI, coup critique...) pour le calcul déterministe des dégâts/soins. */
+  casterStats?: TotalStats;
 }
 
 export interface SpellEffectResult {
@@ -313,6 +315,9 @@ export class SimulationEngineService {
       });
       console.log('');
     }
+
+    // Rend les stats du lanceur disponibles pour les calculs déterministes (dégâts/soins mécanismes Xélor, etc.).
+    initialContext.casterStats = buildStats;
 
     const steps: SimulationStepResult[] = [];
     const errors: string[] = [];
@@ -1079,6 +1084,9 @@ export class SimulationEngineService {
       buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, context);
     }
 
+    // Rend les stats du lanceur disponibles pour les calculs déterministes en jeu interactif.
+    context.casterStats = buildStats;
+
     // Jeu interactif : une action n'est PAS un tour -> pas de cycle de tour automatique.
     return await this.executeStep(step, context, build, buildStats, stepNumber, false);
   }
@@ -1093,6 +1101,15 @@ export class SimulationEngineService {
     this.currentClassStrategy ??= this.classStrategyFactory.getStrategyForBuild(build);
 
     const ctx = this.cloneContext(context);
+
+    // Garantit la présence des stats du lanceur pour les ticks de fin/début de tour (explosion Rouage, soin Sinistro).
+    if (!ctx.casterStats) {
+      let buildStats = this.statsCalculator.calculateTotalStats(build);
+      if (this.currentClassStrategy) {
+        buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, ctx);
+      }
+      ctx.casterStats = buildStats;
+    }
 
     // Fin du tour courant
     this.currentClassStrategy?.cleanupTurn?.(ctx);

@@ -12,6 +12,7 @@ import {XelorExecuteEffectService} from './xelor-execute-effect.service';
 import {XelorPassivesService} from './xelor-passives.service';
 import {XelorMovementService} from './xelor-movement.service';
 import { getXelorState } from './xelor-state.utils';
+import {DamageCalculatorService} from '../../calculators/damage-calculator.service';
 
 @Injectable({ providedIn: 'root' })
 
@@ -23,6 +24,7 @@ export class XelorMechanismsService {
   private readonly xelorExecuteEffectService = inject(XelorExecuteEffectService);
   private readonly xelorPassiveService = inject(XelorPassivesService);
   private readonly xelorMovementService = inject(XelorMovementService);
+  private readonly damageCalculator = inject(DamageCalculatorService);
   private readonly injector = inject(Injector);
 
   private get dial(): XelorDialService {
@@ -271,7 +273,19 @@ export class XelorMechanismsService {
       }
 
       const effectiveCharges = Math.min(charges, XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.maxCharges);
-      const damage = effectiveCharges * XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.perChargeAmount;
+      const baseDamage = effectiveCharges * XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.perChargeAmount;
+
+      // Convertit la base brute en valeurs déterministes (maîtrises, DI, coup critique) via le calculateur.
+      const stats = context.casterStats ?? this.zeroStats();
+      const values = this.damageCalculator.computeEffectValues({
+        effectType: 'DEAL_DAMAGE',
+        normalBase: baseDamage,
+        element: XelorMechanismsService.ROUAGE_STATUS_EFFECT_CONFIG.element,
+        stats: stats as any,
+        distanceCases: 3,
+        orientation: 'front',
+      });
+      const damage = values.normal;
 
       const enemiesInArea = this.boardService.enemies().filter(enemy =>
         this.isPositionInRouageExplosionArea(enemy.position, rouage.position)
@@ -300,6 +314,7 @@ export class XelorMechanismsService {
           spellId: rouage.spellId || 'XEL_ROUAGE',
           spellName: 'Rouage',
           damage,
+          averageDamage: values.average,
           paCost: 0,
           pwCost: 0,
           mpCost: 0,
@@ -328,6 +343,14 @@ export class XelorMechanismsService {
   }
 
   /**
+   * Stats neutres utilisées comme repli quand le contexte ne porte pas les stats du lanceur.
+   * (aucune maîtrise, aucun DI, aucun coup critique -> la base brute est renvoyée telle quelle)
+   */
+  private zeroStats(): { masteryFire: number; masteryWater: number; masteryEarth: number; masteryAir: number; dommageInflict: number; critRate: number } {
+    return { masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0, dommageInflict: 0, critRate: 0 };
+  }
+
+  /**
    * Vérifie si une position est dans la zone d'explosion du Rouage.
    */
   private isPositionInRouageExplosionArea(target: { x: number; y: number }, rouagePosition: { x: number; y: number }): boolean {
@@ -353,8 +376,12 @@ export class XelorMechanismsService {
 
       if (charges > 0) {
         console.log(`[XELOR] 💚 Sinistro (${sinistro.id}) heals adjacent allies (${charges} charges)`);
-        // TODO: Calculer et appliquer les soins aux alliés adjacents
-        // Soins = 2% PV manquant par charge
+        // TODO: Calculer et appliquer les soins aux alliés adjacents (2% PV manquant par charge).
+        // Aucune valeur de soin brute n'est disponible ici (pas de modèle de PV, cf. mémoire "no HP"),
+        // et le résultat Sinistro ne surface que la régén PA. Quand la base de soin existera, la router
+        // via this.damageCalculator.computeEffectValues({ effectType: 'HEAL', normalBase, element: 'Light',
+        // stats: context.casterStats ?? this.zeroStats() as any, distanceCases: 1, orientation: 'front' })
+        // et exposer heal/averageHeal sur le résultat.
       }
     });
 
