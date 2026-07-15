@@ -5,6 +5,7 @@ import {
   ShieldComputationResult,
   WakfuCombatCalculator
 } from '../../domain/combat-resolution';
+import { resolveApplicableMasterySum, ApplicableMasteryStats } from '../../domain/combat-resolution/applicable-mastery';
 
 export interface DamageCalculationParams {
   baseDamage: number;
@@ -65,12 +66,135 @@ export interface DamageResult {
   };
 }
 
+export interface EffectValueStats extends ApplicableMasteryStats {
+  dommageInflict: number;
+  critRate: number;
+}
+
+export interface EffectValueInput {
+  effectType: 'DEAL_DAMAGE' | 'HEAL' | 'GIVE_ARMOR';
+  normalBase: number;
+  /** Base critique (pour DEAL_DAMAGE : ratio CRIT, qui inclut déjà le ×1.25). Absent = crit dérivé de normalBase. */
+  critBase?: number;
+  element?: string;
+  stats: EffectValueStats;
+  distanceCases: number;
+  orientation: 'front' | 'side' | 'back';
+}
+
+export interface EffectValues {
+  normal: number;
+  crit: number;
+  average: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class DamageCalculatorService {
 
   private readonly calculator = new WakfuCombatCalculator();
+
+  /**
+   * Calcule les valeurs déterministes { normal, crit, average } d'un effet.
+   * - Pas de tirage aléatoire.
+   * - DEAL_DAMAGE avec critBase : la base CRIT inclut déjà le ×1.25 → on n'ajoute PAS le
+   *   multiplicateur critique de la formule (seulement la maîtrise critique).
+   * - Sans critBase (soin/bouclier) : le crit applique ×1.25 sur la base normale.
+   * - Résistance / parade / barrière = 0 (stats cible non disponibles).
+   * - HEAL/GIVE_ARMOR n'utilisent pas la maîtrise élémentaire (soin = maîtrise de soin ;
+   *   bouclier = pas de maîtrise), uniquement le multiplicateur critique ×1.25.
+   */
+  computeEffectValues(input: EffectValueInput): EffectValues {
+    if (input.effectType === 'DEAL_DAMAGE') {
+      return this.computeDamageEffectValues(input);
+    }
+    return this.computeNonDamageEffectValues(input);
+  }
+
+  private computeDamageEffectValues(input: EffectValueInput): EffectValues {
+    const masteryNormal = resolveApplicableMasterySum({
+      element: input.element, stats: input.stats, distanceCases: input.distanceCases,
+      orientation: input.orientation, isCritical: false, isHeal: false,
+    });
+    const masteryCrit = resolveApplicableMasterySum({
+      element: input.element, stats: input.stats, distanceCases: input.distanceCases,
+      orientation: input.orientation, isCritical: true, isHeal: false,
+    });
+
+    const di = input.stats.dommageInflict ?? 0;
+
+    const normal = this.calculator.calculateDirectDamage({
+      baseValue: input.normalBase,
+      applicableMasterySum: masteryNormal,
+      damageInflictedBonusSum: di,
+      resistancePercent: 0,
+      isCritical: false,
+      orientation: input.orientation,
+    }).value;
+
+    const hasCritBase = typeof input.critBase === 'number';
+    const crit = this.calculator.calculateDirectDamage({
+      baseValue: hasCritBase ? input.critBase! : input.normalBase,
+      applicableMasterySum: masteryCrit,
+      damageInflictedBonusSum: di,
+      resistancePercent: 0,
+      // Si critBase fournie, elle inclut déjà le ×1.25 → ne pas le réappliquer.
+      isCritical: !hasCritBase,
+      orientation: input.orientation,
+    }).value;
+
+    return this.withAverage(normal, crit, input.stats.critRate);
+  }
+
+  private computeNonDamageEffectValues(input: EffectValueInput): EffectValues {
+    if (input.effectType === 'HEAL') {
+      // Le soin utilise la maîtrise de soin uniquement (pas d'élémentaire, distance, dos...).
+      const mastery = input.stats.masteryHealing ?? 0;
+      const normal = this.calculator.calculateDirectHeal({
+        baseValue: input.normalBase,
+        applicableMasterySum: mastery,
+        healPerformedBonusSum: 0,
+        healReceivedBonusSum: 0,
+        healResistancePercent: 0,
+        incurablePercent: 0,
+        isCritical: false,
+      }).value;
+      const crit = this.calculator.calculateDirectHeal({
+        baseValue: input.normalBase,
+        applicableMasterySum: mastery,
+        healPerformedBonusSum: 0,
+        healReceivedBonusSum: 0,
+        healResistancePercent: 0,
+        incurablePercent: 0,
+        isCritical: true,
+      }).value;
+      return this.withAverage(normal, crit, input.stats.critRate);
+    }
+
+    // GIVE_ARMOR : aucune maîtrise ne s'applique, seul le critique ×1.25.
+    const normal = this.calculator.calculateShield({
+      baseValue: input.normalBase,
+      armorGivenBonusSum: 0,
+      armorReceivedBonusSum: 0,
+      friablePercent: 0,
+      isCritical: false,
+    }).value;
+    const crit = this.calculator.calculateShield({
+      baseValue: input.normalBase,
+      armorGivenBonusSum: 0,
+      armorReceivedBonusSum: 0,
+      friablePercent: 0,
+      isCritical: true,
+    }).value;
+    return this.withAverage(normal, crit, input.stats.critRate);
+  }
+
+  private withAverage(normal: number, crit: number, rawCritRate: number | undefined): EffectValues {
+    const critRate = Math.min(100, Math.max(0, rawCritRate ?? 0)) / 100;
+    const average = Math.round(normal * (1 - critRate) + crit * critRate);
+    return { normal, crit, average };
+  }
 
   calculateDamage(params: DamageCalculationParams): DamageResult {
     const isCritical = params.isCritical ?? this.rollCritical(params.critRate);
