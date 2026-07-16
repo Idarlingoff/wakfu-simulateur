@@ -17,6 +17,15 @@ frontend/node_modules/
 frontend/dist/
 frontend/.angular/
 frontend/.idea/
+
+# -------------------------
+# Config Supabase locale
+# -------------------------
+# .env porte les valeurs du projet Supabase ; environment.ts en est genere
+# a chaque start/build/test par frontend/scripts/generate-env.js.
+# Modele versionne : frontend/.env.example
+frontend/.env
+frontend/src/environments/environment.ts
 # Node
 node_modules/
 npm-debug.log
