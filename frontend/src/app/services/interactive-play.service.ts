@@ -89,6 +89,7 @@ export class InteractivePlayService {
       freeplay: false,
     };
 
+    this.simulationEngine.initializeInteractiveContext(ctx, build);
     this._context.set(ctx);
     this.simulationService.clearInteractiveSteps();
     this._mode.set('idle');
@@ -129,6 +130,7 @@ export class InteractivePlayService {
       freeplay: true,
     };
 
+    this.simulationEngine.initializeInteractiveContext(ctx, this.makeDummyBuild());
     this._context.set(ctx);
     this.simulationService.clearInteractiveSteps();
     this._mode.set('idle');
@@ -209,6 +211,7 @@ export class InteractivePlayService {
       freeplay: true,
     };
 
+    this.simulationEngine.initializeInteractiveContext(ctx, this._build);
     this._context.set(ctx);
     this.simulationService.clearInteractiveSteps();
     this._mode.set('idle');

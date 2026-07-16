@@ -1067,6 +1067,22 @@ export class SimulationEngineService {
   }
 
   /**
+   * Démarre une session de jeu interactif : fixe la stratégie de classe du build courant
+   * et initialise le contexte de classe depuis l'état du board.
+   *
+   * Sans cette initialisation, seuls les mécanismes POSÉS pendant la session sont connus du
+   * contexte (via activateMechanismAura) : un Rouage déjà présent sur le board n'a ni aura ni
+   * charges, et son explosion — gardée par ROUAGE_AURA — ne se déclenche jamais.
+   *
+   * La stratégie est réaffectée (et non `??=`) : une nouvelle session peut porter un build
+   * d'une autre classe que la session précédente.
+   */
+  initializeInteractiveContext(context: SimulationContext, build: Build): void {
+    this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
+    this.currentClassStrategy.initializeClassContext(context, build);
+  }
+
+  /**
    * Exécute un SEUL step avec le contexte fourni (sans ré-exécuter les steps précédents)
    * Utilisé pour l'exécution incrémentale step-by-step
    */
