@@ -6,6 +6,9 @@ import { ComparaisonPageComponent } from './pages/placeholder-page.component';
 import { BuildsListComponent } from './pages/builds-list.component';
 import { BuildEditorComponent } from './pages/build-editor.component';
 import { ResultatsPageComponent } from './pages/resultats-page.component';
+import { LoginPageComponent } from './pages/login-page.component';
+import { SignupPageComponent } from './pages/signup-page.component';
+import { PasswordResetPageComponent } from './pages/password-reset-page.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'accueil', pathMatch: 'full' },
@@ -17,5 +20,8 @@ export const routes: Routes = [
   { path: 'freeplay', component: FreeplayPageComponent },
   { path: 'resultats', component: ResultatsPageComponent },
   { path: 'comparaison', component: ComparaisonPageComponent },
+  { path: 'connexion', component: LoginPageComponent },
+  { path: 'inscription', component: SignupPageComponent },
+  { path: 'mot-de-passe-oublie', component: PasswordResetPageComponent },
   { path: '**', redirectTo: 'accueil' },
 ];

@@ -1,6 +1,7 @@
-import { Component, input } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { IconComponent } from './icon.component';
+import { AuthService } from '../services/auth.service';
 
 interface NavItem {
   readonly path: string;
@@ -43,6 +44,20 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
           </li>
         }
       </ul>
+
+      <div class="account">
+        @if (status() === 'authenticated') {
+          <a class="nav-item" routerLink="/accueil" (click)="signOut()" [attr.title]="expanded() ? null : 'Se déconnecter'">
+            <ui-icon name="log-out"></ui-icon>
+            @if (expanded()) { <span class="nav-label">{{ profile()?.username ?? 'Mon compte' }}</span> }
+          </a>
+        } @else if (status() === 'anonymous') {
+          <a class="nav-item" routerLink="/connexion" routerLinkActive="active" [attr.title]="expanded() ? null : 'Se connecter'">
+            <ui-icon name="log-in"></ui-icon>
+            @if (expanded()) { <span class="nav-label">Se connecter</span> }
+          </a>
+        }
+      </div>
     </nav>
   `,
   styles: [`
@@ -85,9 +100,21 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
     .nav-item.active ui-icon { color: var(--app-accent); }
     .nav-item:focus-visible { outline: 2px solid var(--app-focus); outline-offset: 2px; }
     .nav-label { font-size: 13px; }
+    .account { margin-top: auto; border-top: 1px solid var(--app-border); padding-top: 6px; }
   `],
 })
 export class AppSidebarComponent {
+  private readonly auth = inject(AuthService);
+
   readonly expanded = input<boolean>(true);
   protected readonly items = NAV_ITEMS;
+
+  // 'loading' n'affiche rien : evite le flash "Se connecter" au rafraichissement
+  // pour un utilisateur deja connecte.
+  protected readonly status = this.auth.status;
+  protected readonly profile = this.auth.profile;
+
+  protected async signOut(): Promise<void> {
+    await this.auth.signOut();
+  }
 }
