@@ -40,7 +40,9 @@ Toutes les commandes `npx ng ...` de ce plan s'exécutent depuis `frontend/`.
 
 | Fichier | Responsabilité |
 |---|---|
-| `src/environments/environment.ts` (créer) | URL + anon key Supabase. Seule source de config. |
+| `src/environments/environment.ts` (~~créer~~ **généré, non versionné** — cf. `51a9bc0`) | URL + anon key Supabase. Généré par `scripts/generate-env.js` depuis `frontend/.env`. |
+| `frontend/scripts/generate-env.js` (créer — ajouté après coup) | Génère `environment.ts` depuis `.env`. Échoue si une clé `service_role` est présente. |
+| `frontend/.env.example` (créer — ajouté après coup) | Modèle versionné de `.env`. |
 | `src/app/services/supabase-client.service.ts` (créer) | Possède l'unique instance du client. Rien d'autre. |
 | `src/app/models/profile.model.ts` (créer) | Type `Profile` (id, username). |
 | `src/app/services/auth.service.ts` (créer) | État d'auth en signals + actions. Seul point de contact avec l'auth. |

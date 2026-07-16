@@ -88,9 +88,23 @@ seul fichier de l'application qui connaît l'URL et la clé du projet.
 
 L'`anon key` sera présente dans le bundle : **c'est le fonctionnement nominal de
 Supabase**, cette clé est publique par design et la sécurité repose entièrement sur les
-politiques RLS, jamais sur son secret. Il faut créer `src/environments/`
-(`environment.ts` / `environment.production.ts`), inexistant aujourd'hui, et brancher
-le `fileReplacements` correspondant dans `angular.json`.
+politiques RLS, jamais sur son secret.
+
+**Configuration hors de git (décidé après coup, commit `51a9bc0`) :**
+`src/environments/environment.ts` n'est **pas** versionné. Il est généré à chaque
+`start` / `build` / `test` par `frontend/scripts/generate-env.js` à partir de
+`frontend/.env` (modèle versionné : `frontend/.env.example`). Sans `.env`, le générateur
+écrit des placeholders : build et tests continuent de fonctionner, l'application reste en
+mode invité.
+
+Ce dispositif **ne rend pas la clé secrète** — dans un SPA statique elle est inlinée dans
+le bundle de chaque visiteur, c'est structurel. Le gain est ailleurs : rotation simple,
+pas de clé dans l'historique d'un dépôt public, pas de commit accidentel. Le générateur
+échoue volontairement (exit 1) si une clé `service_role` figure dans `.env` : elle
+contourne RLS et serait publiée à tous les visiteurs.
+
+Pas de `fileReplacements` : un seul projet Supabase, donc un seul fichier généré. À
+réintroduire le jour où un environnement de staging existe (YAGNI).
 
 ### 2. `AuthService`
 
