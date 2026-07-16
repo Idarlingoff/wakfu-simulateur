@@ -137,7 +137,9 @@ lot 3), écriture restreinte au propriétaire (`auth.uid() = id`).
 | `/mot-de-passe-oublie` | `PasswordResetPageComponent` | demande du mail de réinitialisation |
 
 Routes en français, cohérentes avec l'existant (`/accueil`, `/builds`, `/timelines`).
-Composants standalone, Reactive Forms.
+Composants standalone, formulaires **template-driven** (`FormsModule` + `[(ngModel)]`) :
+c'est le seul pattern de formulaire du codebase (cf. `build-editor.component.ts`,
+`player-form.component.ts`), `ReactiveFormsModule` n'y est utilisé nulle part.
 
 Dans `app-sidebar.component.ts`, une entrée en pied de navigation : « Se connecter » si
 invité, sinon le pseudo + « Se déconnecter ». La logique de formulaire vit dans les
