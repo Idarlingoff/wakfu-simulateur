@@ -47,6 +47,51 @@ function parseEnv(content) {
   return vars;
 }
 
+/**
+ * Lit le claim "role" d'une cle Supabase, ou null si illisible.
+ *
+ * Les cles Supabase historiques sont des JWT dont le payload porte le role en clair
+ * ("anon" ou "service_role"). On le lit sans verifier la signature : on ne cherche pas
+ * a authentifier la cle, seulement a refuser celle qui ne doit pas etre publiee.
+ */
+function readKeyRole(key) {
+  const payload = key.split('.')[1];
+  if (!payload) {
+    return null;
+  }
+  try {
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(Buffer.from(normalized, 'base64').toString()).role ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Refuse toute cle qui contourne RLS.
+ *
+ * Verifier le NOM de la variable ne suffit pas : l'erreur la plus probable est de coller
+ * la cle service_role dans SUPABASE_ANON_KEY, les deux etant cote a cote dans le
+ * dashboard. On inspecte donc la cle elle-meme.
+ */
+function assertNotServiceRole(key) {
+  const role = readKeyRole(key);
+  const isLegacyServiceRole = role === 'service_role';
+  const isNewSecretKey = key.startsWith('sb_secret_');
+
+  if (isLegacyServiceRole || isNewSecretKey) {
+    console.error('[generate-env] ERREUR : SUPABASE_ANON_KEY contient une cle secrete');
+    console.error(`[generate-env] (${isNewSecretKey ? 'prefixe sb_secret_' : 'role=service_role'}).`);
+    console.error('[generate-env] Elle contourne RLS et serait publiee dans le bundle,');
+    console.error('[generate-env] donc lisible par tous les visiteurs. Utilise l\'anon key.');
+    process.exit(1);
+  }
+
+  if (role && role !== 'anon') {
+    console.warn(`[generate-env] Cle au role inattendu : "${role}" (attendu "anon").`);
+  }
+}
+
 function resolveConfig() {
   if (!fs.existsSync(ENV_FILE)) {
     // Pas de .env : on genere des placeholders pour que build et tests tournent quand
@@ -70,6 +115,10 @@ function resolveConfig() {
 
   if (!vars.SUPABASE_URL || !vars.SUPABASE_ANON_KEY) {
     console.warn('[generate-env] SUPABASE_URL et/ou SUPABASE_ANON_KEY manquants dans .env.');
+  }
+
+  if (vars.SUPABASE_ANON_KEY) {
+    assertNotServiceRole(vars.SUPABASE_ANON_KEY);
   }
 
   return {
