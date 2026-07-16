@@ -80,6 +80,22 @@ describe('AuthService', () => {
     expect(service.profile()).toBeNull();
   });
 
+  // Un echec de getSession ne doit pas nous priver du listener pour toute la vie de la
+  // page : sinon une connexion ulterieure reussirait cote Supabase sans jamais mettre
+  // l'UI a jour, jusqu'au prochain rechargement.
+  it('reste reactif a une connexion ulterieure malgre un echec de getSession', async () => {
+    const fake = makeFakeClient({ getSessionRejects: true, profileRow: { id: 'u1', username: 'Lilia' } });
+    const service = configure(fake);
+    await service.ready();
+    expect(service.status()).toBe('anonymous');
+
+    fake.listeners.forEach(cb => cb('SIGNED_IN', { user: { id: 'u1' } }));
+    await service.ready();
+
+    expect(service.status()).toBe('authenticated');
+    expect(service.profile()?.username).toBe('Lilia');
+  });
+
   it('reagit a une deconnexion emise par onAuthStateChange', async () => {
     const fake = makeFakeClient({
       session: { user: { id: 'u1' } },

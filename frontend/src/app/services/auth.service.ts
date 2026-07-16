@@ -106,17 +106,21 @@ export class AuthService {
   }
 
   private async restoreSession(): Promise<void> {
+    // Abonnement AVANT toute operation faillible : si getSession() echoue, le listener
+    // doit exister malgre tout, sinon une connexion ulterieure reussirait cote Supabase
+    // sans jamais mettre l'UI a jour, jusqu'au prochain rechargement de la page.
+    this.supabase.client.auth.onAuthStateChange((event, session) => {
+      // Supabase rejoue INITIAL_SESSION a chaque nouvel abonnement : le getSession()
+      // ci-dessous traite deja cet etat, le rejouer relancerait une requete profiles
+      // inutile et rouvrirait une fenetre d'ecrasement par un etat obsolete.
+      if (event === 'INITIAL_SESSION') {
+        return;
+      }
+      this.pending = this.applySession(session);
+    });
+
     try {
       const { data } = await this.supabase.client.auth.getSession();
-      this.supabase.client.auth.onAuthStateChange((event, session) => {
-        // Supabase rejoue INITIAL_SESSION a chaque nouvel abonnement : getSession()
-        // vient deja de traiter cet etat, le rejouer relancerait une requete profiles
-        // inutile et rouvrirait une fenetre d'ecrasement par un etat obsolete.
-        if (event === 'INITIAL_SESSION') {
-          return;
-        }
-        this.pending = this.applySession(session);
-      });
       await this.applySession(data.session);
     } catch {
       this.toAnonymous();
