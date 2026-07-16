@@ -1,11 +1,13 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Build } from '../models/build.model';
 import { Timeline } from '../models/timeline.model';
 import { Spell } from '../models/spell.model';
 import { Passive } from '../models/passive.model';
+import { LocalBuildRepository } from './storage/local-build.repository';
+import { LocalTimelineRepository } from './storage/local-timeline.repository';
 
 export interface SimulationRequest {
   buildId: string;
@@ -42,17 +44,6 @@ export interface ActionResult {
   mpCost: number;
   message: string;
   details?: any;
-}
-
-const LS_BUILDS    = 'wakfu_builds';
-const LS_TIMELINES = 'wakfu_timelines';
-
-function lsGet<T>(key: string): T[] {
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]') as T[]; }
-  catch { return []; }
-}
-function lsSet<T>(key: string, data: T[]): void {
-  try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* quota */ }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -96,64 +87,24 @@ export class WakfuApiService {
     );
   }
 
-  // ============ Builds (localStorage) ============
+  private readonly localBuilds = inject(LocalBuildRepository);
+  private readonly localTimelines = inject(LocalTimelineRepository);
 
-  getAllBuilds(): Observable<Build[]> {
-    return of(lsGet<Build>(LS_BUILDS));
-  }
+  // ============ Builds ============
 
-  getBuildById(id: string): Observable<Build> {
-    const found = lsGet<Build>(LS_BUILDS).find(b => b.id === id);
-    return found ? of(found) : throwError(() => new Error(`Build ${id} not found`));
-  }
+  getAllBuilds(): Observable<Build[]> { return this.localBuilds.getAll(); }
+  getBuildById(id: string): Observable<Build> { return this.localBuilds.getById(id); }
+  createBuild(build: Build): Observable<Build> { return this.localBuilds.create(build); }
+  updateBuild(id: string, build: Build): Observable<Build> { return this.localBuilds.update(id, build); }
+  deleteBuild(id: string): Observable<void> { return this.localBuilds.delete(id); }
 
-  createBuild(build: Build): Observable<Build> {
-    const builds = lsGet<Build>(LS_BUILDS);
-    builds.push(build);
-    lsSet(LS_BUILDS, builds);
-    return of(build);
-  }
+  // ============ Timelines ============
 
-  updateBuild(id: string, build: Build): Observable<Build> {
-    const builds = lsGet<Build>(LS_BUILDS).map(b => b.id === id ? build : b);
-    lsSet(LS_BUILDS, builds);
-    return of(build);
-  }
-
-  deleteBuild(id: string): Observable<void> {
-    lsSet(LS_BUILDS, lsGet<Build>(LS_BUILDS).filter(b => b.id !== id));
-    return of(undefined);
-  }
-
-  // ============ Timelines (localStorage) ============
-
-  getAllTimelines(buildId?: string): Observable<Timeline[]> {
-    const timelines = lsGet<Timeline>(LS_TIMELINES);
-    return of(buildId ? timelines.filter(t => t.buildId === buildId) : timelines);
-  }
-
-  getTimelineById(id: string): Observable<Timeline> {
-    const found = lsGet<Timeline>(LS_TIMELINES).find(t => t.id === id);
-    return found ? of(found) : throwError(() => new Error(`Timeline ${id} not found`));
-  }
-
-  createTimeline(timeline: Timeline): Observable<Timeline> {
-    const timelines = lsGet<Timeline>(LS_TIMELINES);
-    timelines.push(timeline);
-    lsSet(LS_TIMELINES, timelines);
-    return of(timeline);
-  }
-
-  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> {
-    const timelines = lsGet<Timeline>(LS_TIMELINES).map(t => t.id === id ? timeline : t);
-    lsSet(LS_TIMELINES, timelines);
-    return of(timeline);
-  }
-
-  deleteTimeline(id: string): Observable<void> {
-    lsSet(LS_TIMELINES, lsGet<Timeline>(LS_TIMELINES).filter(t => t.id !== id));
-    return of(undefined);
-  }
+  getAllTimelines(buildId?: string): Observable<Timeline[]> { return this.localTimelines.getAll(buildId); }
+  getTimelineById(id: string): Observable<Timeline> { return this.localTimelines.getById(id); }
+  createTimeline(timeline: Timeline): Observable<Timeline> { return this.localTimelines.create(timeline); }
+  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> { return this.localTimelines.update(id, timeline); }
+  deleteTimeline(id: string): Observable<void> { return this.localTimelines.delete(id); }
 
   // ============ Simulation (moteur local, non utilisé via HTTP) ============
 
