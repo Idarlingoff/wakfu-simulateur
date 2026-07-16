@@ -83,4 +83,93 @@ describe('AuthService', () => {
     expect(service.status()).toBe('anonymous');
     expect(service.profile()).toBeNull();
   });
+
+  describe('actions', () => {
+    it('signIn retourne ok quand Supabase accepte', async () => {
+      const fake: any = makeFakeClient({ session: null });
+      fake.auth.signInWithPassword = () => Promise.resolve({ data: {}, error: null });
+      const service = configure(fake);
+      await service.ready();
+
+      const result = await service.signIn('a@b.c', 'motdepasse8');
+      expect(result.ok).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('signIn traduit une erreur d identifiants', async () => {
+      const fake: any = makeFakeClient({ session: null });
+      fake.auth.signInWithPassword = () =>
+        Promise.resolve({ data: {}, error: { message: 'Invalid login credentials' } });
+      const service = configure(fake);
+      await service.ready();
+
+      const result = await service.signIn('a@b.c', 'faux');
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe('Email ou mot de passe incorrect.');
+    });
+
+    it('signIn traduit une exception reseau sans la laisser remonter', async () => {
+      const fake: any = makeFakeClient({ session: null });
+      fake.auth.signInWithPassword = () => Promise.reject(new Error('Failed to fetch'));
+      const service = configure(fake);
+      await service.ready();
+
+      const result = await service.signIn('a@b.c', 'motdepasse8');
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe('Service indisponible, tu peux continuer sans compte.');
+    });
+
+    it('signUp refuse un pseudo deja pris sans appeler Supabase', async () => {
+      const fake: any = makeFakeClient({ profileRow: { id: 'autre', username: 'Lilia' } });
+      const signUpSpy = jasmine.createSpy('signUp');
+      fake.auth.signUp = signUpSpy;
+      const service = configure(fake);
+      await service.ready();
+
+      const result = await service.signUp('a@b.c', 'motdepasse8', 'Lilia');
+      expect(result.ok).toBe(false);
+      expect(result.error).toBe('Ce pseudo est deja utilise.');
+      expect(signUpSpy).not.toHaveBeenCalled();
+    });
+
+    it('signUp transmet le pseudo en metadonnees quand il est libre', async () => {
+      const fake: any = makeFakeClient({ profileRow: null });
+      const signUpSpy = jasmine
+        .createSpy('signUp')
+        .and.returnValue(Promise.resolve({ data: {}, error: null }));
+      fake.auth.signUp = signUpSpy;
+      const service = configure(fake);
+      await service.ready();
+
+      const result = await service.signUp('a@b.c', 'motdepasse8', 'Nouveau');
+      expect(result.ok).toBe(true);
+      const args = signUpSpy.calls.mostRecent().args[0];
+      expect(args.email).toBe('a@b.c');
+      expect(args.options.data.username).toBe('Nouveau');
+    });
+
+    it('signOut repasse en anonymous', async () => {
+      const fake: any = makeFakeClient({
+        session: { user: { id: 'u1' } },
+        profileRow: { id: 'u1', username: 'Lilia' },
+      });
+      const service = configure(fake);
+      await service.ready();
+      expect(service.status()).toBe('authenticated');
+
+      await service.signOut();
+      expect(service.status()).toBe('anonymous');
+      expect(service.profile()).toBeNull();
+    });
+
+    it('requestPasswordReset retourne ok', async () => {
+      const fake: any = makeFakeClient({ session: null });
+      fake.auth.resetPasswordForEmail = () => Promise.resolve({ data: {}, error: null });
+      const service = configure(fake);
+      await service.ready();
+
+      const result = await service.requestPasswordReset('a@b.c');
+      expect(result.ok).toBe(true);
+    });
+  });
 });
