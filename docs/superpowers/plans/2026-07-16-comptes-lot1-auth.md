@@ -185,12 +185,21 @@ l'infrastructure Supabase et se vérifie manuellement (step 3).
 
 Créer `supabase/migrations/0001_profiles.sql` :
 
+> **Corrigé en revue sécurité (commit `90644cb`)** : `username` est en `citext` et non en
+> `text`. En `text`, « Lilia » et « lilia » coexistent — usurpation triviale d'un nom
+> d'auteur public — et le `.eq('username', X)` de la Task 5 laisserait passer les variantes
+> de casse. Le trigger lève aussi une exception lisible quand le pseudo est absent.
+
 ```sql
 -- Table applicative portant le pseudo : auth.users (gere par Supabase) ne le stocke pas.
 -- Ce pseudo signera les timelines publiques au lot 3.
+
+-- citext : l'unicite du pseudo DOIT etre insensible a la casse.
+create extension if not exists citext;
+
 create table public.profiles (
   id uuid primary key references auth.users (id) on delete cascade,
-  username text not null unique,
+  username citext not null unique,
   created_at timestamptz not null default now()
 );
 
@@ -374,6 +383,16 @@ git commit -m "feat(auth): traduction des erreurs Supabase en messages francais"
 
 C'est la tâche qui porte l'invariant central du lot : **si Supabase échoue, on retombe en
 invité, jamais bloqué en `loading`**.
+
+> **Bug trouvé en revue, corrigé par `2d3f04b`.** Le code ci-dessous est fautif :
+> `onAuthStateChange` rejoue TOUJOURS un événement `INITIAL_SESSION`
+> (`@supabase/auth-js`, `_emitInitialSession`), donc `applySession` tournait deux fois à
+> chaque démarrage (requête `profiles` en double), et un `applySession` obsolète pouvait
+> ré-authentifier après un `signOut()`. Le test-double ci-dessous masquait le bug en
+> n'invoquant jamais ses listeners. Correctif : ignorer `INITIAL_SESSION` dans le listener
+> + compteur de génération invalidant les `applySession` en vol, avec 4 tests de
+> non-régression. **Leçon : un test-double doit imiter le vrai client, sinon il ne teste
+> que lui-même.**
 
 - [ ] **Step 1 : Créer le modèle**
 
@@ -1635,9 +1654,10 @@ git commit -m "feat(auth): etat de connexion dans la sidebar"
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-Attendu : `TOTAL: 133 SUCCESS`, **zéro échec**. La suite comptait 98 specs avant ce lot ;
-ce plan en ajoute 35 (2 client + 7 erreurs + 11 AuthService + 4 connexion + 5 inscription
-+ 3 reset + 3 sidebar).
+Attendu : `TOTAL: 137 SUCCESS`, **zéro échec**. La suite comptait 98 specs avant ce lot ;
+ce plan en ajoute 39 (2 client + 7 erreurs + 11 AuthService + 4 connexion + 5 inscription
++ 3 reset + 3 sidebar + **4 de non-régression** ajoutés par le correctif `2d3f04b`, voir
+la note de la Task 4).
 
 - [ ] **Step 2 : Vérifier le build de production**
 
