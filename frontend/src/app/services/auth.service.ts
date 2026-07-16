@@ -1,7 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { SupabaseClientService } from './supabase-client.service';
 import { Profile } from '../models/profile.model';
-import { toFrenchAuthMessage } from './auth-errors';
+import { toFrenchAuthMessage, USERNAME_TAKEN_MESSAGE } from './auth-errors';
 
 export type AuthStatus = 'loading' | 'authenticated' | 'anonymous';
 
@@ -29,8 +29,11 @@ export class AuthService {
   readonly profile = this._profile.asReadonly();
   readonly isAuthenticated = computed(() => this._status() === 'authenticated');
 
-  /** Resolue quand la resolution de session en cours est terminee (tests et guards). */
+  /** Resolue quand la resolution de session en cours est terminee (utilisee par les tests). */
   private pending: Promise<void> = Promise.resolve();
+
+  /** Invalide les applySession en vol : seule la generation la plus recente ecrit l'etat. */
+  private generation = 0;
 
   constructor() {
     this.pending = this.restoreSession();
@@ -57,7 +60,7 @@ export class AuthService {
   async signUp(email: string, password: string, username: string): Promise<AuthResult> {
     try {
       if (await this.isUsernameTaken(username)) {
-        return { ok: false, error: 'Ce pseudo est deja utilise.' };
+        return { ok: false, error: USERNAME_TAKEN_MESSAGE };
       }
       const { error } = await this.supabase.client.auth.signUp({
         email,
@@ -97,13 +100,21 @@ export class AuthService {
       .select('id, username')
       .eq('username', username)
       .single();
+    // Fail-open volontaire : une erreur (RLS, reseau) se lit comme "pseudo libre".
+    // La contrainte unique en base reste le vrai garde-fou, et son erreur est traduite.
     return !!data;
   }
 
   private async restoreSession(): Promise<void> {
     try {
       const { data } = await this.supabase.client.auth.getSession();
-      this.supabase.client.auth.onAuthStateChange((_event, session) => {
+      this.supabase.client.auth.onAuthStateChange((event, session) => {
+        // Supabase rejoue INITIAL_SESSION a chaque nouvel abonnement : getSession()
+        // vient deja de traiter cet etat, le rejouer relancerait une requete profiles
+        // inutile et rouvrirait une fenetre d'ecrasement par un etat obsolete.
+        if (event === 'INITIAL_SESSION') {
+          return;
+        }
         this.pending = this.applySession(session);
       });
       await this.applySession(data.session);
@@ -118,11 +129,21 @@ export class AuthService {
       this.toAnonymous();
       return;
     }
-    this._profile.set(await this.loadProfile(userId));
+
+    const generation = ++this.generation;
+    const profile = await this.loadProfile(userId);
+
+    // Un evenement plus recent a pris la main pendant le chargement du profil
+    // (ex. signOut) : ne pas ecraser son etat avec le notre, devenu obsolete.
+    if (generation !== this.generation) {
+      return;
+    }
+    this._profile.set(profile);
     this._status.set('authenticated');
   }
 
   private toAnonymous(): void {
+    this.generation++;
     this._profile.set(null);
     this._status.set('anonymous');
   }

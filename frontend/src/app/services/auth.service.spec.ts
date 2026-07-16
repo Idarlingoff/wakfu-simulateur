@@ -7,6 +7,7 @@ function makeFakeClient(options: {
   session?: any;
   getSessionRejects?: boolean;
   profileRow?: { id: string; username: string } | null;
+  replayInitialSession?: boolean;
 } = {}) {
   const listeners: Array<(event: string, session: any) => void> = [];
   return {
@@ -18,17 +19,28 @@ function makeFakeClient(options: {
           : Promise.resolve({ data: { session: options.session ?? null }, error: null }),
       onAuthStateChange: (cb: (event: string, session: any) => void) => {
         listeners.push(cb);
+        // Le vrai client Supabase rejoue INITIAL_SESSION a chaque abonnement.
+        if (options.replayInitialSession) {
+          cb('INITIAL_SESSION', options.session ?? null);
+        }
         return { data: { subscription: { unsubscribe: () => {} } } };
       },
       signOut: () => Promise.resolve({ error: null }),
     },
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          single: () => Promise.resolve({ data: options.profileRow ?? null, error: null }),
+    profileQueries: [] as string[],
+    from(this: any) {
+      const self = this;
+      return {
+        select: () => ({
+          eq: (column: string, _value: unknown) => {
+            self.profileQueries.push(column);
+            return {
+              single: () => Promise.resolve({ data: options.profileRow ?? null, error: null }),
+            };
+          },
         }),
-      }),
-    }),
+      };
+    },
   };
 }
 
@@ -82,6 +94,31 @@ describe('AuthService', () => {
 
     expect(service.status()).toBe('anonymous');
     expect(service.profile()).toBeNull();
+  });
+
+  // Le vrai client rejoue INITIAL_SESSION : sans garde, applySession tournerait deux fois
+  // au demarrage et rechargerait le profil pour rien.
+  it('ne charge le profil qu une fois malgre le replay INITIAL_SESSION', async () => {
+    const fake: any = makeFakeClient({
+      session: { user: { id: 'u1' } },
+      profileRow: { id: 'u1', username: 'Lilia' },
+      replayInitialSession: true,
+    });
+    const service = configure(fake);
+    await service.ready();
+
+    expect(service.status()).toBe('authenticated');
+    expect(fake.profileQueries.filter((c: string) => c === 'id').length).toBe(1);
+  });
+
+  it('interroge profiles par id pour charger le profil', async () => {
+    const fake: any = makeFakeClient({
+      session: { user: { id: 'u1' } },
+      profileRow: { id: 'u1', username: 'Lilia' },
+    });
+    const service = configure(fake);
+    await service.ready();
+    expect(fake.profileQueries).toContain('id');
   });
 
   describe('actions', () => {
@@ -158,6 +195,41 @@ describe('AuthService', () => {
       expect(service.status()).toBe('authenticated');
 
       await service.signOut();
+      expect(service.status()).toBe('anonymous');
+      expect(service.profile()).toBeNull();
+    });
+
+    it('interroge profiles par username pour le controle d unicite', async () => {
+      const fake: any = makeFakeClient({ profileRow: null });
+      fake.auth.signUp = () => Promise.resolve({ data: {}, error: null });
+      const service = configure(fake);
+      await service.ready();
+
+      await service.signUp('a@b.c', 'motdepasse8', 'Nouveau');
+      expect(fake.profileQueries).toContain('username');
+    });
+
+    // Un applySession en vol ne doit pas ressusciter la session apres un signOut.
+    it('ne se reauthentifie pas si un applySession obsolete se termine apres signOut', async () => {
+      const fake: any = makeFakeClient({ session: { user: { id: 'u1' } } });
+      let resolveProfile: (v: any) => void = () => {};
+      fake.from = () => ({
+        select: () => ({
+          eq: () => ({
+            single: () => new Promise(resolve => { resolveProfile = resolve; }),
+          }),
+        }),
+      });
+      const service = configure(fake);
+
+      // Le chargement du profil est en vol ; on deconnecte pendant ce temps.
+      await service.signOut();
+      expect(service.status()).toBe('anonymous');
+
+      // Le profil obsolete arrive enfin : il ne doit rien ecraser.
+      resolveProfile({ data: { id: 'u1', username: 'Lilia' }, error: null });
+      await service.ready();
+
       expect(service.status()).toBe('anonymous');
       expect(service.profile()).toBeNull();
     });
