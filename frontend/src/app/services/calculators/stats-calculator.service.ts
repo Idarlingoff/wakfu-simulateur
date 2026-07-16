@@ -34,6 +34,9 @@ export interface TotalStats {
   berserkMastery?: number;
   meleeMastery?: number;
   distanceMastery?: number;
+  masteryMelee?: number;
+  masteryDistance?: number;
+  masteryHealing?: number;
   singleTargetMastery?: number;
   areaMastery?: number;
   resistanceFire?: number;
@@ -106,6 +109,9 @@ export class StatsCalculatorService {
       masteryAir: 0,
       masterySecondary: 0,
       backMastery: 0,
+      masteryMelee: 0,
+      masteryDistance: 0,
+      masteryHealing: 0,
       dommageInflict: 0,
       critRate: 0,
       critMastery: 0,

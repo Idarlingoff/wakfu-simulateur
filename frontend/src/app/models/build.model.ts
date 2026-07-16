@@ -42,6 +42,10 @@ export interface BuildStats {
   masterySecondary: number;
   backMastery: number;
 
+  masteryMelee: number;
+  masteryDistance: number;
+  masteryHealing: number;
+
   dommageInflict: number;
   critRate: number;
   critMastery: number;

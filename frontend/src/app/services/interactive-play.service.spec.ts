@@ -30,7 +30,7 @@ describe('InteractivePlayService – Freeplay Xel Rouage passifs', () => {
         },
         { provide: SimulationService, useValue: { clearInteractiveSteps: () => {} } },
         { provide: StatsCalculatorService, useValue: {} },
-        { provide: SimulationEngineService, useValue: {} },
+        { provide: SimulationEngineService, useValue: { initializeInteractiveContext: () => {} } },
       ],
     });
     service = TestBed.inject(InteractivePlayService);
@@ -102,6 +102,7 @@ describe('InteractivePlayService — enregistrement', () => {
 
   beforeEach(() => {
     const engine = {
+      initializeInteractiveContext: jasmine.createSpy('initializeInteractiveContext'),
       executeSingleStep: jasmine.createSpy('executeSingleStep').and.returnValue(
         Promise.resolve({ success: true, contextAfter: { playerPosition: { x: 3, y: 4 }, mechanisms: [], entities: [] }, actions: [] })
       ),

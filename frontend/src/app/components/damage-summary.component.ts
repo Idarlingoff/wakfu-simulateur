@@ -96,13 +96,18 @@ import { Spell } from '../models/spell.model';
                 </span>
               </div>
               <div class="action-values">
-                <span *ngIf="action.damage > 0" class="val damage">{{ action.damage | number:'1.0-0' }}</span>
-                <span *ngIf="action.heal > 0" class="val heal">+{{ action.heal | number:'1.0-0' }}</span>
-                <span *ngIf="action.shield > 0" class="val shield">🛡{{ action.shield | number:'1.0-0' }}</span>
+                <span *ngIf="action.averageDamage > 0" class="val damage">
+                  {{ action.averageDamage | number:'1.0-0' }}
+                  <span class="val-detail" *ngIf="action.critDamage !== action.damage">
+                    ({{ action.damage | number:'1.0-0' }} / {{ action.critDamage | number:'1.0-0' }} crit)
+                  </span>
+                </span>
+                <span *ngIf="action.averageHeal > 0" class="val heal">+{{ action.averageHeal | number:'1.0-0' }}</span>
+                <span *ngIf="action.averageShield > 0" class="val shield">🛡{{ action.averageShield | number:'1.0-0' }}</span>
                 <span *ngIf="action.paRegenerated > 0" class="val pa-regen">
                   +{{ action.paRegenerated }}<img src="assets/images/characteristics/AP.png" alt="PA" class="val-icon" />
                 </span>
-                <span *ngIf="action.damage === 0 && action.heal === 0 && action.shield === 0 && action.paRegenerated === 0" class="val muted">—</span>
+                <span *ngIf="action.averageDamage === 0 && action.averageHeal === 0 && action.averageShield === 0 && action.paRegenerated === 0" class="val muted">—</span>
               </div>
             </div>
           </div>
@@ -408,6 +413,8 @@ import { Spell } from '../models/spell.model';
       font-weight: 400;
     }
 
+    .val-detail { font-size: 10px; color: var(--app-text-muted); font-weight: 400; margin-left: 4px; }
+
     /* ── Empty state ── */
     .empty-state {
       display: flex;
@@ -524,14 +531,20 @@ export class DamageSummaryComponent {
         iconId: a.iconId ?? (a.spellId ? this.getSpellIconId(a.spellId) : undefined),
         mechanismType: a.details?.mechanismType || null,
         isMechanism: a.actionType === 'TriggerExplosion',
-        damage: a.damage || 0,
+        damage: a.damage || 0,                       // valeur normale
+        averageDamage: a.averageDamage ?? (a.damage || 0),
+        critDamage: (a.effects || [])
+          .filter((e: any) => e.effectType === 'DEAL_DAMAGE')
+          .reduce((s: number, e: any) => s + (e.critValue ?? 0), 0) || (a.damage || 0),
         heal: a.heal || 0,
+        averageHeal: a.averageHeal ?? (a.heal || 0),
         shield: a.shield || 0,
+        averageShield: a.averageShield ?? (a.shield || 0),
         paCost: a.paCost || 0,
         paRegenerated: a.details?.paRegenerated || 0,
         success: a.success
       }));
-      const totalDamage = actions.reduce((sum, a) => sum + a.damage, 0);
+      const totalDamage = actions.reduce((sum, a) => sum + a.averageDamage, 0);
       return { actions, totalDamage };
     });
   });
@@ -543,14 +556,14 @@ export class DamageSummaryComponent {
   totalHeal = computed(() => {
     const steps = this.simulationService.cachedSteps();
     return steps.reduce((sum, step) =>
-      sum + step.actions.reduce((s, a) => s + (a.heal || 0), 0), 0
+      sum + step.actions.reduce((s, a) => s + (a.averageHeal ?? (a.heal || 0)), 0), 0
     );
   });
 
   totalShield = computed(() => {
     const steps = this.simulationService.cachedSteps();
     return steps.reduce((sum, step) =>
-      sum + step.actions.reduce((s, a) => s + (a.shield || 0), 0), 0
+      sum + step.actions.reduce((s, a) => s + (a.averageShield ?? (a.shield || 0)), 0), 0
     );
   });
 }

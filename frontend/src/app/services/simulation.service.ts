@@ -16,6 +16,7 @@ export interface SimulationStats {
   totalPwUsed: number;
   totalMpUsed: number;
   totalDamage: number;
+  averageDamage: number;
   totalHeal: number;
   totalShield: number;
   remainingPa: number;
@@ -100,6 +101,7 @@ export class SimulationService {
       this.simulationResultsCache.steps.push(step);
       const totals = this.aggregateStepTotals([step]);
       this.simulationResultsCache.totalDamage += totals.totalDamage;
+      this.simulationResultsCache.averageDamage += totals.averageDamage;
       this.simulationResultsCache.totalHeal += totals.totalHeal;
       this.simulationResultsCache.totalShield += totals.totalShield;
       this.simulationResultsCache.totalPaUsed += totals.totalPaUsed;
@@ -135,11 +137,12 @@ export class SimulationService {
   /**
    * Recalcule les totaux agrégés (dégâts/soins/armure/coûts) à partir d'une liste de steps
    */
-  private aggregateStepTotals(steps: SimulationStepResult[]): Pick<SimulationResult, 'totalDamage' | 'totalHeal' | 'totalShield' | 'totalPaUsed' | 'totalPwUsed' | 'totalMpUsed'> {
+  private aggregateStepTotals(steps: SimulationStepResult[]): Pick<SimulationResult, 'totalDamage' | 'averageDamage' | 'totalHeal' | 'totalShield' | 'totalPaUsed' | 'totalPwUsed' | 'totalMpUsed'> {
     return steps.reduce(
       (totals, step) => {
         for (const action of step.actions) {
           totals.totalDamage += action.damage || 0;
+          totals.averageDamage += action.averageDamage ?? action.damage ?? 0;
           totals.totalHeal += action.heal || 0;
           totals.totalShield += action.shield || 0;
           totals.totalPaUsed += action.paCost || 0;
@@ -151,6 +154,7 @@ export class SimulationService {
       },
       {
         totalDamage: 0,
+        averageDamage: 0,
         totalHeal: 0,
         totalShield: 0,
         totalPaUsed: 0,
@@ -227,6 +231,7 @@ export class SimulationService {
 
     const totals = this.aggregateStepTotals([stepResult]);
     this.simulationResultsCache!.totalDamage += totals.totalDamage;
+    this.simulationResultsCache!.averageDamage += totals.averageDamage;
     this.simulationResultsCache!.totalHeal += totals.totalHeal;
     this.simulationResultsCache!.totalShield += totals.totalShield;
     this.simulationResultsCache!.totalPaUsed += totals.totalPaUsed;
@@ -340,6 +345,7 @@ export class SimulationService {
    */
   private buildStatsFromSteps(steps: SimulationStepResult[], finalContext: { availablePa: number; availablePw: number; availableMp: number }): SimulationStats {
     let totalDamage = 0;
+    let averageDamage = 0;
     let totalHeal = 0;
     let totalShield = 0;
     let totalPaUsed = 0;
@@ -356,6 +362,7 @@ export class SimulationService {
         if (action.success) {
           successfulActions++;
           totalDamage += action.damage || 0;
+          averageDamage += action.averageDamage ?? action.damage ?? 0;
           totalHeal += action.heal || 0;
           totalShield += action.shield || 0;
           totalPaUsed += action.paCost || 0;
@@ -370,6 +377,7 @@ export class SimulationService {
       successfulActions,
       failedActions: totalActions - successfulActions,
       totalDamage,
+      averageDamage,
       totalHeal,
       totalShield,
       totalPaUsed,

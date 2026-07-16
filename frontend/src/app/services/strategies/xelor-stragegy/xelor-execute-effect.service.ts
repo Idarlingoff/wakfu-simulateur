@@ -87,7 +87,9 @@ export class XelorExecuteEffectService {
     console.log(`[XELOR EFFECT] ⚔️ DEAL_DAMAGE: ${amount} ${element}`);
     console.log(`[XELOR EFFECT]    Target: ${effect.targetScope} at (${effect.targetPosition.x}, ${effect.targetPosition.y})`);
 
-    // TODO: Appliquer les dégâts via DamageCalculatorService
+    // TODO: base de dégâts disponible (effect.params.amount / element), mais aucun canal de résultat
+    // (SimulationActionResult / triggeredActions) n'existe pour cet effet différé -> non branché.
+    // À router via DamageCalculatorService.computeEffectValues quand un tel canal existera.
   }
 
   /**
@@ -100,7 +102,9 @@ export class XelorExecuteEffectService {
     console.log(`[XELOR EFFECT] 💚 HEAL: ${amount > 0 ? amount : percentMissing + '% missing HP per charge'}`);
     console.log(`[XELOR EFFECT]    Target: ${effect.targetScope}`);
 
-    // TODO: Appliquer les soins
+    // TODO: base de soin disponible (effect.params.amount), mais aucun canal de résultat
+    // (SimulationActionResult / triggeredActions) n'existe pour cet effet différé -> non branché.
+    // À router via DamageCalculatorService.computeEffectValues quand un tel canal existera.
   }
 
   /**

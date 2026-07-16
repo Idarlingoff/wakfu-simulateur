@@ -14,7 +14,6 @@ import { ClassSimulationStrategy } from '../strategies/class-simulation-strategy
 import { ResourceRegenerationService } from '../processors/resource-regeneration.service';
 import { firstValueFrom } from 'rxjs';
 import {buildSpellReferencesWithInnates, canonicalizeInnateSpellId} from '../../utils/innate-spells.utils';
-import { resolveElementalMastery, getHighestElementalMastery } from '../../utils/mastery-utils';
 
 /**
  * Phases d'exécution des effets de sorts
@@ -101,6 +100,8 @@ export interface SimulationContext {
   freeplay?: boolean;
   /** Recharge restante par sort, en tours de jeu (0/absent = disponible). */
   spellCooldowns?: Map<string, number>;
+  /** Stats totales du lanceur (maîtrises, DI, coup critique...) pour le calcul déterministe des dégâts/soins. */
+  casterStats?: TotalStats;
 }
 
 export interface SpellEffectResult {
@@ -111,6 +112,9 @@ export interface SpellEffectResult {
   shield?: number;
   isCritical?: boolean;
   breakdown?: any;
+  normalValue?: number;
+  critValue?: number;
+  averageValue?: number;
 }
 
 export interface SimulationActionResult {
@@ -123,6 +127,9 @@ export interface SimulationActionResult {
   damage?: number;
   heal?: number;
   shield?: number;
+  averageDamage?: number;
+  averageHeal?: number;
+  averageShield?: number;
   paCost: number;
   pwCost: number;
   mpCost: number;
@@ -147,6 +154,7 @@ export interface SimulationResult {
   steps: SimulationStepResult[];
   finalContext: SimulationContext;
   totalDamage: number;
+  averageDamage: number;
   totalHeal: number;
   totalShield: number;
   totalPaUsed: number;
@@ -308,10 +316,14 @@ export class SimulationEngineService {
       console.log('');
     }
 
+    // Rend les stats du lanceur disponibles pour les calculs déterministes (dégâts/soins mécanismes Xélor, etc.).
+    initialContext.casterStats = buildStats;
+
     const steps: SimulationStepResult[] = [];
     const errors: string[] = [];
     let currentContext = this.cloneContext(initialContext);
     let totalDamage = 0;
+    let averageDamage = 0;
     let totalHeal = 0;
     let totalShield = 0;
 
@@ -331,6 +343,7 @@ export class SimulationEngineService {
 
       for (const action of stepResult.actions) {
         if (action.damage) totalDamage += action.damage;
+        averageDamage += action.averageDamage ?? action.damage ?? 0;
         if (action.heal) totalHeal += action.heal;
         if (action.shield) totalShield += action.shield;
       }
@@ -368,6 +381,7 @@ export class SimulationEngineService {
       steps,
       finalContext: this.cloneContext(currentContext),
       totalDamage,
+      averageDamage,
       totalHeal,
       totalShield,
       totalPaUsed: initialContext.availablePa - currentContext.availablePa,
@@ -703,33 +717,37 @@ export class SimulationEngineService {
 
     const contextualStats = buildStats;
 
-    const isCritical = this.damageCalculator.calculateDamage({
-      baseDamage: 0,
-      masteryElemental: getHighestElementalMastery(contextualStats),
-      dommageInflict: contextualStats.dommageInflict,
-      critRate: contextualStats.critRate,
-      critMastery: contextualStats.critMastery,
-      resistance: 0
-    }).isCritical;
-
-    const variantKind = isCritical ? 'CRIT' : 'NORMAL';
-    const spellEffects = this.extractSpellEffects(spell, variantKind);
-
-    const effectResults: SpellEffectResult[] = [];
-    let totalDamage = 0;
-    let totalHeal = 0;
-    let totalShield = 0;
+    const normalEffects = this.extractSpellEffects(spell, 'NORMAL');
+    const critEffects = this.extractSpellEffects(spell, 'CRIT');
 
     const targetEntity = this.boardService.getEntityAtPosition(targetPosition);
-    const orientation = this.resolveOrientation(targetEntity?.facing?.direction);
+    const orientation = this.resolveOrientation(targetEntity?.facing?.direction) as 'front' | 'side' | 'back';
+    const distanceCases = this.manhattanDistanceToTarget(context, targetPosition);
 
-    for (const effect of spellEffects) {
-      const effectResult = this.computeSpellEffect(effect, contextualStats, isCritical, orientation);
-      effectResults.push(effectResult);
+    const effectResults: SpellEffectResult[] = [];
+    let totalDamage = 0, totalHeal = 0, totalShield = 0;
+    let avgDamage = 0, avgHeal = 0, avgShield = 0;
 
-      if (effectResult.damage) totalDamage += effectResult.damage;
-      if (effectResult.heal) totalHeal += effectResult.heal;
-      if (effectResult.shield) totalShield += effectResult.shield;
+    for (let i = 0; i < normalEffects.length; i++) {
+      const eff = normalEffects[i];
+      const critBase = critEffects[i]?.type === eff.type ? critEffects[i].baseValue : undefined;
+      const values = this.damageCalculator.computeEffectValues({
+        effectType: eff.type as 'DEAL_DAMAGE' | 'HEAL' | 'GIVE_ARMOR',
+        normalBase: eff.baseValue,
+        critBase,
+        element: eff.element,
+        stats: contextualStats as any,
+        distanceCases,
+        orientation,
+      });
+      const result: SpellEffectResult = {
+        effectType: eff.type, element: eff.element,
+        normalValue: values.normal, critValue: values.crit, averageValue: values.average,
+      };
+      if (eff.type === 'DEAL_DAMAGE') { result.damage = values.normal; totalDamage += values.normal; avgDamage += values.average; }
+      else if (eff.type === 'HEAL') { result.heal = values.normal; totalHeal += values.normal; avgHeal += values.average; }
+      else if (eff.type === 'GIVE_ARMOR') { result.shield = values.normal; totalShield += values.normal; avgShield += values.average; }
+      effectResults.push(result);
     }
 
     const messageParts: string[] = [];
@@ -748,16 +766,17 @@ export class SimulationEngineService {
       damage: totalDamage,
       heal: totalHeal,
       shield: totalShield,
+      averageDamage: Math.round(avgDamage),
+      averageHeal: Math.round(avgHeal),
+      averageShield: Math.round(avgShield),
       paCost,
       pwCost,
       mpCost: 0,
-      message: `${spell.name}: ${effectsSummary}${isCritical ? ' (CRITIQUE !)' : ''}`,
+      message: `${spell.name}: ${effectsSummary}`,
       effects: effectResults,
       details: {
-        isCritical,
         lineOfSight: spell.lineOfSight,
-        variantUsed: variantKind,
-        effectCount: spellEffects.length
+        effectCount: normalEffects.length
       }
     };
 
@@ -891,96 +910,6 @@ export class SimulationEngineService {
     console.log(`🔍 [EFFECTS] ${spell.name} (${variantKind}): ${computableEffects.length} effet(s) calculable(s) extraits (ratio breakpoint: ${ratioFromBreakpoint})`);
     return computableEffects;
   }
-
-  /**
-   * Calcule un effet de sort individuel en utilisant les formules du WakfuCombatCalculator
-   * via le DamageCalculatorService
-   */
-  private computeSpellEffect(
-    effect: { type: string; baseValue: number; element?: string },
-    stats: TotalStats,
-    isCritical: boolean,
-    orientation: string
-  ): SpellEffectResult {
-    switch (effect.type) {
-      case 'DEAL_DAMAGE': {
-        const damageResult = this.damageCalculator.calculateDamage({
-          baseDamage: effect.baseValue,
-          masteryElemental: resolveElementalMastery(stats, effect.element),
-          masterySecondary: stats.masterySecondary,
-          backMastery: stats.backMastery,
-          dommageInflict: stats.dommageInflict,
-          critRate: stats.critRate,
-          critMastery: stats.critMastery,
-          resistance: 0,
-          isCritical,
-          orientation: (orientation as any) ?? 'front'
-        });
-
-        console.log(`  ⚔️ DEAL_DAMAGE (${effect.element ?? 'neutre'}): base=${effect.baseValue} → final=${damageResult.finalDamage}`);
-
-        return {
-          effectType: 'DEAL_DAMAGE',
-          element: effect.element,
-          damage: damageResult.finalDamage,
-          isCritical: damageResult.isCritical,
-          breakdown: damageResult.breakdown
-        };
-      }
-
-      case 'HEAL': {
-        const healResult = this.damageCalculator.calculateDirectHeal({
-          baseHeal: effect.baseValue,
-          masteryApplicableSum: resolveElementalMastery(stats, effect.element) + (stats.healingMastery ?? 0),
-          healPerformedBonusSum: 0,
-          healReceivedBonusSum: 0,
-          healResistancePercent: 0,
-          incurablePercent: 0,
-          isCritical
-        });
-
-        console.log(`  💚 HEAL: base=${effect.baseValue} → final=${healResult.value}`);
-
-        return {
-          effectType: 'HEAL',
-          element: effect.element,
-          heal: healResult.value,
-          isCritical,
-          breakdown: healResult.breakdown
-        };
-      }
-
-      case 'GIVE_ARMOR': {
-        const shieldResult = this.damageCalculator.calculateShield({
-          baseShield: effect.baseValue,
-          armorGivenBonusSum: 0,
-          armorReceivedBonusSum: 0,
-          friablePercent: 0,
-          isCritical,
-          maxHp: stats.hp,
-          currentArmor: stats.armor
-        });
-
-        console.log(`  🛡️ GIVE_ARMOR: base=${effect.baseValue} → final=${shieldResult.value}`);
-
-        return {
-          effectType: 'GIVE_ARMOR',
-          element: effect.element,
-          shield: shieldResult.value,
-          isCritical,
-          breakdown: shieldResult.breakdown
-        };
-      }
-
-      default:
-        console.warn(`  ⚠️ Type d'effet non calculable: ${effect.type}`);
-        return {
-          effectType: effect.type,
-          element: effect.element
-        };
-    }
-  }
-
 
   /**
    * Exécute un déplacement
@@ -1138,6 +1067,22 @@ export class SimulationEngineService {
   }
 
   /**
+   * Démarre une session de jeu interactif : fixe la stratégie de classe du build courant
+   * et initialise le contexte de classe depuis l'état du board.
+   *
+   * Sans cette initialisation, seuls les mécanismes POSÉS pendant la session sont connus du
+   * contexte (via activateMechanismAura) : un Rouage déjà présent sur le board n'a ni aura ni
+   * charges, et son explosion — gardée par ROUAGE_AURA — ne se déclenche jamais.
+   *
+   * La stratégie est réaffectée (et non `??=`) : une nouvelle session peut porter un build
+   * d'une autre classe que la session précédente.
+   */
+  initializeInteractiveContext(context: SimulationContext, build: Build): void {
+    this.currentClassStrategy = this.classStrategyFactory.getStrategyForBuild(build);
+    this.currentClassStrategy.initializeClassContext(context, build);
+  }
+
+  /**
    * Exécute un SEUL step avec le contexte fourni (sans ré-exécuter les steps précédents)
    * Utilisé pour l'exécution incrémentale step-by-step
    */
@@ -1155,6 +1100,9 @@ export class SimulationEngineService {
       buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, context);
     }
 
+    // Rend les stats du lanceur disponibles pour les calculs déterministes en jeu interactif.
+    context.casterStats = buildStats;
+
     // Jeu interactif : une action n'est PAS un tour -> pas de cycle de tour automatique.
     return await this.executeStep(step, context, build, buildStats, stepNumber, false);
   }
@@ -1169,6 +1117,15 @@ export class SimulationEngineService {
     this.currentClassStrategy ??= this.classStrategyFactory.getStrategyForBuild(build);
 
     const ctx = this.cloneContext(context);
+
+    // Garantit la présence des stats du lanceur pour les ticks de fin/début de tour (explosion Rouage, soin Sinistro).
+    if (!ctx.casterStats) {
+      let buildStats = this.statsCalculator.calculateTotalStats(build);
+      if (this.currentClassStrategy) {
+        buildStats = this.currentClassStrategy.applyClassPassives(build, buildStats, ctx);
+      }
+      ctx.casterStats = buildStats;
+    }
 
     // Fin du tour courant
     this.currentClassStrategy?.cleanupTurn?.(ctx);
@@ -1209,5 +1166,11 @@ export class SimulationEngineService {
     if (facingDirection === 'back') return 'back';
     if (facingDirection === 'side') return 'side';
     return 'front';
+  }
+
+  private manhattanDistanceToTarget(context: SimulationContext, target: { x: number; y: number }): number {
+    const p = context.playerPosition ?? context.currentPosition;
+    if (!p) return 1;
+    return Math.abs(p.x - target.x) + Math.abs(p.y - target.y);
   }
 }

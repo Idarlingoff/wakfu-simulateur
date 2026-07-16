@@ -35,7 +35,8 @@ function emptyForm(): FormBuild {
     name: '', classId: '', characterLevel: 200, description: '',
     stats: {
       level: 200, masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
-      masterySecondary: 0, backMastery: 0, dommageInflict: 0, critRate: 0, critMastery: 0,
+      masterySecondary: 0, backMastery: 0, masteryMelee: 0, masteryDistance: 0, masteryHealing: 0,
+      dommageInflict: 0, critRate: 0, critMastery: 0,
       resistance: 0, ap: 12, mp: 3, wp: 0, range: 3,
     },
     spells: new Array(12).fill(null),
@@ -123,6 +124,9 @@ function emptyForm(): FormBuild {
               <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/FEROCITY.png" alt="Taux critique" />Taux critique (%)</label><input type="number" [(ngModel)]="form.stats.critRate" name="crit" /></div>
               <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/CRITICAL_BONUS.png" alt="Maîtrise critique" />Maîtrise critique</label><input type="number" [(ngModel)]="form.stats.critMastery" name="critM" /></div>
               <div class="field"><label>Maîtrise secondaire</label><input type="number" [(ngModel)]="form.stats.masterySecondary" name="mSec" /></div>
+              <div class="field"><label>Maîtrise mêlée</label><input type="number" [(ngModel)]="form.stats.masteryMelee" name="mMelee" /></div>
+              <div class="field"><label>Maîtrise distance</label><input type="number" [(ngModel)]="form.stats.masteryDistance" name="mDist" /></div>
+              <div class="field"><label>Maîtrise soin</label><input type="number" [(ngModel)]="form.stats.masteryHealing" name="mHeal" /></div>
               <div class="field"><label><img class="stat-icon" src="assets/images/characteristics/BACKSTAB_BONUS.png" alt="Maîtrise dos" />Maîtrise dos</label><input type="number" [(ngModel)]="form.stats.backMastery" name="mBack" /></div>
             </div>
             <h3>Défense</h3>

@@ -89,6 +89,7 @@ export class InteractivePlayService {
       freeplay: false,
     };
 
+    this.simulationEngine.initializeInteractiveContext(ctx, build);
     this._context.set(ctx);
     this.simulationService.clearInteractiveSteps();
     this._mode.set('idle');
@@ -129,6 +130,7 @@ export class InteractivePlayService {
       freeplay: true,
     };
 
+    this.simulationEngine.initializeInteractiveContext(ctx, this.makeDummyBuild());
     this._context.set(ctx);
     this.simulationService.clearInteractiveSteps();
     this._mode.set('idle');
@@ -178,6 +180,7 @@ export class InteractivePlayService {
         level: 230,
         masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
         masterySecondary: 0, backMastery: 0,
+        masteryMelee: 0, masteryDistance: 0, masteryHealing: 0,
         dommageInflict: 0, critRate: 0, critMastery: 0,
         resistance: 0, ap: INFINITE, mp: INFINITE, wp: INFINITE, range: 99,
       },
@@ -208,6 +211,7 @@ export class InteractivePlayService {
       freeplay: true,
     };
 
+    this.simulationEngine.initializeInteractiveContext(ctx, this._build);
     this._context.set(ctx);
     this.simulationService.clearInteractiveSteps();
     this._mode.set('idle');
@@ -419,6 +423,7 @@ export class InteractivePlayService {
         level: 230,
         masteryFire: 0, masteryWater: 0, masteryEarth: 0, masteryAir: 0,
         masterySecondary: 0, backMastery: 0,
+        masteryMelee: 0, masteryDistance: 0, masteryHealing: 0,
         dommageInflict: 0, critRate: 0, critMastery: 0,
         resistance: 0, ap: 999, mp: 999, wp: 999, range: 99,
       },
