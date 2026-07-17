@@ -80,6 +80,45 @@ describe('AuthService', () => {
     expect(service.profile()).toBeNull();
   });
 
+  // userId vient de la SESSION, pas du profil. loadProfile() retombe volontairement sur
+  // null en cas d'echec (le pseudo est accessoire) ; si userId en dependait, un profil
+  // illisible rendrait l'utilisateur authentifie mais sans id — le stockage cloud
+  // renverrait alors une liste vide et refuserait toute sauvegarde.
+  it('expose l id de session meme quand le profil est illisible', async () => {
+    const service = configure(makeFakeClient({
+      session: { user: { id: 'u1' } },
+      profileRow: null,
+    }));
+    await service.ready();
+    expect(service.status()).toBe('authenticated');
+    expect(service.profile()).toBeNull();
+    expect(service.userId()).toBe('u1');
+  });
+
+  it('expose l id de session quand le profil est lisible', async () => {
+    const service = configure(makeFakeClient({
+      session: { user: { id: 'u1' } },
+      profileRow: { id: 'u1', username: 'Lilia' },
+    }));
+    await service.ready();
+    expect(service.userId()).toBe('u1');
+  });
+
+  it('remet userId a null a la deconnexion', async () => {
+    const fake = makeFakeClient({
+      session: { user: { id: 'u1' } },
+      profileRow: { id: 'u1', username: 'Lilia' },
+    });
+    const service = configure(fake);
+    await service.ready();
+    expect(service.userId()).toBe('u1');
+
+    fake.listeners.forEach(cb => cb('SIGNED_OUT', null));
+    await service.ready();
+
+    expect(service.userId()).toBeNull();
+  });
+
   // Un echec de getSession ne doit pas nous priver du listener pour toute la vie de la
   // page : sinon une connexion ulterieure reussirait cote Supabase sans jamais mettre
   // l'UI a jour, jusqu'au prochain rechargement.
