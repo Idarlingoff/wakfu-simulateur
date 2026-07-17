@@ -1,7 +1,8 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, effect } from '@angular/core';
 import { Build, BuildStats, SpellBar, PassiveBar, SublimationBar, SpellReference } from '../models/build.model';
 import { WakfuApiService } from './wakfu-api.service';
 import { SaveErrorService } from './save-error.service';
+import { AuthService } from './auth.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
@@ -39,8 +40,20 @@ export class BuildService {
   constructor(
     private readonly api: WakfuApiService,
     private readonly saveError: SaveErrorService,
+    private readonly auth: AuthService,
   ) {
-    this.loadBuilds();
+    // Le chargement suit l'etat d'auth, il ne peut pas etre lance ici sans condition :
+    // la restauration de session est asynchrone, donc `status` vaut encore 'loading' a
+    // la construction. Charger tout de suite viserait le stockage invite, puis la
+    // session se restaurerait et les ECRITURES basculeraient vers le cloud pendant que
+    // la liste affichee resterait celle de l'invite — supprimer viserait alors un id
+    // local inexistant en base.
+    effect(() => {
+      if (this.auth.status() === 'loading') {
+        return;
+      }
+      void this.loadBuilds();
+    });
   }
 
   /**

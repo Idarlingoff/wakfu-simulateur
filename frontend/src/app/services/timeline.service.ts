@@ -3,9 +3,10 @@
  * Gère l'état des timelines et combos en local uniquement
  */
 
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, effect } from '@angular/core';
 import { Timeline, TimelineStep, ComboPreset, TimelineAction } from '../models/timeline.model';
 import { WakfuApiService } from './wakfu-api.service';
+import { AuthService } from './auth.service';
 import { SaveErrorService } from './save-error.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -41,8 +42,17 @@ export class TimelineService {
   constructor(
     private api: WakfuApiService,
     private readonly saveError: SaveErrorService,
+    private readonly auth: AuthService,
   ) {
-    this.loadTimelines();
+    // Meme raison que dans BuildService : la restauration de session est asynchrone,
+    // charger des la construction viserait le stockage invite alors que les ecritures
+    // basculeront ensuite vers le cloud.
+    effect(() => {
+      if (this.auth.status() === 'loading') {
+        return;
+      }
+      void this.loadTimelines();
+    });
   }
 
   /**
