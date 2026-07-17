@@ -7,6 +7,7 @@ import { LocalBuildRepository } from './local-build.repository';
 import { LocalTimelineRepository } from './local-timeline.repository';
 import { SupabaseBuildRepository } from './supabase-build.repository';
 import { SupabaseTimelineRepository } from './supabase-timeline.repository';
+import { newEntityId } from '../../utils/entity-id.utils';
 
 export interface ImportPreview {
   builds: Build[];
@@ -67,7 +68,7 @@ export class LocalDataImportService {
     // Les ids locaux sont des chaines libres, les ids Postgres des uuid : on remappe.
     const idMap = new Map<string, string>();
     for (const build of chosenBuilds) {
-      const newId = crypto.randomUUID();
+      const newId = newEntityId();
       idMap.set(build.id, newId);
       await firstValueFrom(this.cloudBuilds.create({ ...build, id: newId }));
     }
@@ -75,7 +76,7 @@ export class LocalDataImportService {
     for (const timeline of chosenTimelines) {
       await firstValueFrom(this.cloudTimelines.create({
         ...timeline,
-        id: crypto.randomUUID(),
+        id: newEntityId(),
         buildId: idMap.get(timeline.buildId) ?? '',
       }));
     }

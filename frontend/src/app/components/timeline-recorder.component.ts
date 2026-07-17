@@ -5,6 +5,7 @@ import { BuildService } from '../services/build.service';
 import { BoardService } from '../services/board.service';
 import { UiButtonComponent } from '../ui/ui-button.component';
 import { Timeline, TimelineStep, TimelineBoardEntitySetup } from '../models/timeline.model';
+import { newEntityId } from '../utils/entity-id.utils';
 
 @Component({
   selector: 'app-timeline-recorder',
@@ -81,7 +82,7 @@ export class TimelineRecorderComponent {
       ...this.boardService.enemies(),
     ].map(e => ({ id: e.id, type: e.type, name: e.name, classId: e.classId, position: e.position, facing: e.facing }));
     const timeline: Timeline = {
-      id: `timeline_${Date.now()}`,
+      id: newEntityId(),
       name: name.trim(),
       buildId: this.buildService.selectedBuildA()?.id ?? '',
       steps: [...this.steps()],

@@ -9,6 +9,7 @@ import { PassiveSelectorComponent } from '../components/passive-selector.compone
 import { SublimationSelectorComponent } from '../components/sublimation-selector.component';
 import { UiButtonComponent } from '../ui/ui-button.component';
 import { removeInnateSpellsFromSelection } from '../utils/innate-spells.utils';
+import { newEntityId } from '../utils/entity-id.utils';
 
 interface FormBuild {
   name: string;
@@ -249,7 +250,7 @@ export class BuildEditorComponent {
       });
     } else {
       const newBuild: Build = {
-        id: `build_${Date.now()}`,
+        id: newEntityId(),
         name: this.form.name,
         classId: this.form.classId,
         characterLevel: this.form.characterLevel,
