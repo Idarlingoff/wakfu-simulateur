@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../services/auth.service';
+import { LocalDataImportService } from '../services/storage/local-data-import.service';
 
 @Component({
   selector: 'app-login-page',
@@ -69,6 +70,7 @@ import { AuthService } from '../services/auth.service';
 export class LoginPageComponent {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly importService = inject(LocalDataImportService);
 
   email = '';
   password = '';
@@ -86,11 +88,26 @@ export class LoginPageComponent {
     this.loading.set(false);
 
     if (result.ok) {
-      // Non attendu : une eventuelle erreur de navigation (route absente en test,
-      // etc.) ne doit jamais faire echouer la soumission du formulaire.
-      this.router.navigate(['/accueil']).catch(() => undefined);
+      this.router.navigate([await this.destinationAfterLogin()]).catch(() => undefined);
     } else {
       this.error.set(result.error ?? null);
+    }
+  }
+
+  /**
+   * Propose l'import si ce navigateur porte des donnees locales pas encore montees dans
+   * le compte. Un echec de cette verification ne doit pas bloquer la connexion.
+   */
+  private async destinationAfterLogin(): Promise<string> {
+    try {
+      if (this.importService.alreadyImported()) {
+        return '/accueil';
+      }
+      const preview = await this.importService.preview();
+      const hasLocalData = preview.builds.length > 0 || preview.timelines.length > 0;
+      return hasLocalData ? '/import' : '/accueil';
+    } catch {
+      return '/accueil';
     }
   }
 }
