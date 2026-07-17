@@ -27,6 +27,10 @@ export class AuthService {
 
   readonly status = this._status.asReadonly();
   readonly profile = this._profile.asReadonly();
+
+  /** Id de l'utilisateur connecte, ou null. Necessaire au cloisonnement du miroir. */
+  readonly userId = computed(() => this._profile()?.id ?? null);
+
   readonly isAuthenticated = computed(() => this._status() === 'authenticated');
 
   /** Resolue quand la resolution de session en cours est terminee (utilisee par les tests). */
