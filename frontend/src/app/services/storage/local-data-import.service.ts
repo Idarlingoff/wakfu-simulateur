@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { Build } from '../../models/build.model';
 import { Timeline } from '../../models/timeline.model';
@@ -32,6 +32,27 @@ export class LocalDataImportService {
   private readonly cloudBuilds = inject(SupabaseBuildRepository);
   private readonly cloudTimelines = inject(SupabaseTimelineRepository);
   private readonly auth = inject(AuthService);
+
+  private readonly _pending = signal(false);
+
+  /**
+   * true si ce navigateur porte des donnees locales pas encore montees dans le compte.
+   *
+   * Cet etat existe parce que la proposition d'import ne peut PAS dependre du seul
+   * evenement de connexion : une session restauree au chargement ne passe jamais par le
+   * formulaire, et l'utilisateur n'aurait alors aucun moyen d'importer ses donnees.
+   */
+  readonly pending = this._pending.asReadonly();
+
+  /** Recalcule `pending`. A appeler quand l'etat d'authentification change. */
+  async refreshPending(): Promise<void> {
+    if (!this.auth.userId() || this.alreadyImported()) {
+      this._pending.set(false);
+      return;
+    }
+    const { builds, timelines } = await this.preview();
+    this._pending.set(builds.length > 0 || timelines.length > 0);
+  }
 
   async preview(): Promise<ImportPreview> {
     return {
@@ -94,6 +115,7 @@ export class LocalDataImportService {
     } catch {
       /* localStorage indisponible : on repropose l'import, c'est sans danger */
     }
+    this._pending.set(false);
   }
 
   private flagKey(userId: string): string {

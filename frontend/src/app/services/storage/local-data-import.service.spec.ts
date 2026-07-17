@@ -91,3 +91,52 @@ describe('LocalDataImportService', () => {
     expect(localStorage.getItem('wakfu_imported_u1')).toBeTruthy();
   });
 });
+
+/**
+ * La proposition d'import ne doit PAS dependre de l'evenement de connexion : une session
+ * restauree au chargement ne passe jamais par le formulaire, et l'utilisateur n'aurait
+ * alors jamais aucun moyen d'importer ses donnees.
+ */
+describe('LocalDataImportService — import en attente', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  it('signale un import en attente quand des donnees locales existent', async () => {
+    const { service } = configure([build('b1')], []);
+    await service.refreshPending();
+    expect(service.pending()).toBe(true);
+  });
+
+  it('ne signale rien quand il n y a aucune donnee locale', async () => {
+    const { service } = configure([], []);
+    await service.refreshPending();
+    expect(service.pending()).toBe(false);
+  });
+
+  it('ne signale plus rien une fois l import fait', async () => {
+    const { service } = configure([build('b1')], []);
+    await service.refreshPending();
+    expect(service.pending()).toBe(true);
+
+    await service.importSelected({ buildIds: ['b1'], timelineIds: [] });
+
+    expect(service.pending()).toBe(false);
+  });
+
+  it('ne signale rien pour un invite (aucun compte ou verser les donnees)', async () => {
+    const created = { builds: [] as Build[], timelines: [] as Timeline[] };
+    TestBed.configureTestingModule({
+      providers: [
+        LocalDataImportService,
+        { provide: LocalBuildRepository, useValue: { getAll: () => of([build('b1')]) } },
+        { provide: LocalTimelineRepository, useValue: { getAll: () => of([]) } },
+        { provide: SupabaseBuildRepository, useValue: { create: (b: Build) => { created.builds.push(b); return of(b); } } },
+        { provide: SupabaseTimelineRepository, useValue: { create: (t: Timeline) => { created.timelines.push(t); return of(t); } } },
+        { provide: AuthService, useValue: { userId: () => null } },
+      ],
+    });
+    const service = TestBed.inject(LocalDataImportService);
+    await service.refreshPending();
+    expect(service.pending()).toBe(false);
+  });
+});
