@@ -8,6 +8,11 @@ import { Spell } from '../models/spell.model';
 import { Passive } from '../models/passive.model';
 import { LocalBuildRepository } from './storage/local-build.repository';
 import { LocalTimelineRepository } from './storage/local-timeline.repository';
+import { AuthService } from './auth.service';
+import { SupabaseBuildRepository } from './storage/supabase-build.repository';
+import { SupabaseTimelineRepository } from './storage/supabase-timeline.repository';
+import { BuildRepository } from './storage/build-repository';
+import { TimelineRepository } from './storage/timeline-repository';
 
 export interface SimulationRequest {
   buildId: string;
@@ -87,24 +92,36 @@ export class WakfuApiService {
     );
   }
 
+  private readonly auth = inject(AuthService);
   private readonly localBuilds = inject(LocalBuildRepository);
   private readonly localTimelines = inject(LocalTimelineRepository);
+  private readonly cloudBuilds = inject(SupabaseBuildRepository);
+  private readonly cloudTimelines = inject(SupabaseTimelineRepository);
+
+  /** Invite -> localStorage, connecte -> Supabase. Seul point de bascule du stockage. */
+  private builds(): BuildRepository {
+    return this.auth.isAuthenticated() ? this.cloudBuilds : this.localBuilds;
+  }
+
+  private timelines(): TimelineRepository {
+    return this.auth.isAuthenticated() ? this.cloudTimelines : this.localTimelines;
+  }
 
   // ============ Builds ============
 
-  getAllBuilds(): Observable<Build[]> { return this.localBuilds.getAll(); }
-  getBuildById(id: string): Observable<Build> { return this.localBuilds.getById(id); }
-  createBuild(build: Build): Observable<Build> { return this.localBuilds.create(build); }
-  updateBuild(id: string, build: Build): Observable<Build> { return this.localBuilds.update(id, build); }
-  deleteBuild(id: string): Observable<void> { return this.localBuilds.delete(id); }
+  getAllBuilds(): Observable<Build[]> { return this.builds().getAll(); }
+  getBuildById(id: string): Observable<Build> { return this.builds().getById(id); }
+  createBuild(build: Build): Observable<Build> { return this.builds().create(build); }
+  updateBuild(id: string, build: Build): Observable<Build> { return this.builds().update(id, build); }
+  deleteBuild(id: string): Observable<void> { return this.builds().delete(id); }
 
   // ============ Timelines ============
 
-  getAllTimelines(buildId?: string): Observable<Timeline[]> { return this.localTimelines.getAll(buildId); }
-  getTimelineById(id: string): Observable<Timeline> { return this.localTimelines.getById(id); }
-  createTimeline(timeline: Timeline): Observable<Timeline> { return this.localTimelines.create(timeline); }
-  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> { return this.localTimelines.update(id, timeline); }
-  deleteTimeline(id: string): Observable<void> { return this.localTimelines.delete(id); }
+  getAllTimelines(buildId?: string): Observable<Timeline[]> { return this.timelines().getAll(buildId); }
+  getTimelineById(id: string): Observable<Timeline> { return this.timelines().getById(id); }
+  createTimeline(timeline: Timeline): Observable<Timeline> { return this.timelines().create(timeline); }
+  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> { return this.timelines().update(id, timeline); }
+  deleteTimeline(id: string): Observable<void> { return this.timelines().delete(id); }
 
   // ============ Simulation (moteur local, non utilisé via HTTP) ============
 
