@@ -6,6 +6,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Timeline, TimelineStep, ComboPreset, TimelineAction } from '../models/timeline.model';
 import { WakfuApiService } from './wakfu-api.service';
+import { SaveErrorService } from './save-error.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
@@ -37,7 +38,10 @@ export class TimelineService {
     return timeline && index < timeline.steps.length ? timeline.steps[index] : null;
   });
 
-  constructor(private api: WakfuApiService) {
+  constructor(
+    private api: WakfuApiService,
+    private readonly saveError: SaveErrorService,
+  ) {
     this.loadTimelines();
   }
 
@@ -60,28 +64,43 @@ export class TimelineService {
   // ============ Timeline CRUD ============
 
   public async createTimeline(timeline: Timeline): Promise<Timeline | null> {
-    const created = await firstValueFrom(this.api.createTimeline(timeline));
-    this.timelines.update(tls => [...tls, created]);
-    return created;
+    try {
+      const created = await firstValueFrom(this.api.createTimeline(timeline));
+      this.timelines.update(tls => [...tls, created]);
+      return created;
+    } catch {
+      this.saveError.reportFailure();
+      return null;
+    }
   }
 
   public async updateTimeline(timelineId: string, updates: Partial<Timeline>): Promise<Timeline | null> {
     const existing = this.getTimelineById(timelineId);
     if (!existing) return null;
     const updated = { ...existing, ...updates, updatedAt: new Date() };
-    await firstValueFrom(this.api.updateTimeline(timelineId, updated));
-    this.timelines.update(tls => tls.map(t => t.id === timelineId ? updated : t));
-    return updated;
+    try {
+      await firstValueFrom(this.api.updateTimeline(timelineId, updated));
+      this.timelines.update(tls => tls.map(t => t.id === timelineId ? updated : t));
+      return updated;
+    } catch {
+      this.saveError.reportFailure();
+      return null;
+    }
   }
 
   public async deleteTimeline(timelineId: string): Promise<boolean> {
-    await firstValueFrom(this.api.deleteTimeline(timelineId));
-    this.timelines.update(tls => tls.filter(t => t.id !== timelineId));
-    if (this.currentTimelineId() === timelineId) {
-      this.currentTimelineId.set(null);
-      this.currentStepIndex.set(0);
+    try {
+      await firstValueFrom(this.api.deleteTimeline(timelineId));
+      this.timelines.update(tls => tls.filter(t => t.id !== timelineId));
+      if (this.currentTimelineId() === timelineId) {
+        this.currentTimelineId.set(null);
+        this.currentStepIndex.set(0);
+      }
+      return true;
+    } catch {
+      this.saveError.reportFailure();
+      return false;
     }
-    return true;
   }
 
   public getTimelineById(timelineId: string): Timeline | undefined {

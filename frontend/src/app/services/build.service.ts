@@ -1,6 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { Build, BuildStats, SpellBar, PassiveBar, SublimationBar, SpellReference } from '../models/build.model';
 import { WakfuApiService } from './wakfu-api.service';
+import { SaveErrorService } from './save-error.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
@@ -35,7 +36,10 @@ export class BuildService {
     return (a && b) ? { buildA: a, buildB: b } : null;
   });
 
-  constructor(private readonly api: WakfuApiService) {
+  constructor(
+    private readonly api: WakfuApiService,
+    private readonly saveError: SaveErrorService,
+  ) {
     this.loadBuilds();
   }
 
@@ -58,26 +62,41 @@ export class BuildService {
   // ============ CRUD Operations ============
 
   public async createBuild(build: Build): Promise<Build | null> {
-    const created = await firstValueFrom(this.api.createBuild(build));
-    this.builds.update(bs => [...bs, created]);
-    return created;
+    try {
+      const created = await firstValueFrom(this.api.createBuild(build));
+      this.builds.update(bs => [...bs, created]);
+      return created;
+    } catch {
+      this.saveError.reportFailure();
+      return null;
+    }
   }
 
   public async updateBuild(buildId: string, updates: Partial<Build>): Promise<boolean> {
     const build = this.builds().find(b => b.id === buildId);
     if (!build) return false;
     const updated = { ...build, ...updates, updatedAt: new Date() } as Build;
-    await firstValueFrom(this.api.updateBuild(buildId, updated));
-    this.builds.update(bs => bs.map(b => b.id === buildId ? updated : b));
-    return true;
+    try {
+      await firstValueFrom(this.api.updateBuild(buildId, updated));
+      this.builds.update(bs => bs.map(b => b.id === buildId ? updated : b));
+      return true;
+    } catch {
+      this.saveError.reportFailure();
+      return false;
+    }
   }
 
   public async deleteBuild(buildId: string): Promise<boolean> {
-    await firstValueFrom(this.api.deleteBuild(buildId));
-    this.builds.update(bs => bs.filter(b => b.id !== buildId));
-    if (this.selectedBuildIdA() === buildId) this.selectedBuildIdA.set(null);
-    if (this.selectedBuildIdB() === buildId) this.selectedBuildIdB.set(null);
-    return true;
+    try {
+      await firstValueFrom(this.api.deleteBuild(buildId));
+      this.builds.update(bs => bs.filter(b => b.id !== buildId));
+      if (this.selectedBuildIdA() === buildId) this.selectedBuildIdA.set(null);
+      if (this.selectedBuildIdB() === buildId) this.selectedBuildIdB.set(null);
+      return true;
+    } catch {
+      this.saveError.reportFailure();
+      return false;
+    }
   }
 
   public getBuildById(buildId: string): Build | undefined {

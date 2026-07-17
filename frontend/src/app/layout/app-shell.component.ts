@@ -1,8 +1,9 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { AppSidebarComponent } from '../ui/app-sidebar.component';
 import { ThemeToggleComponent } from '../ui/theme-toggle.component';
 import { IconComponent } from '../ui/icon.component';
+import { SaveErrorService } from '../services/save-error.service';
 
 @Component({
   selector: 'app-shell',
@@ -25,6 +26,12 @@ import { IconComponent } from '../ui/icon.component';
           <span class="appbar-spacer"></span>
           <ui-theme-toggle></ui-theme-toggle>
         </header>
+        @if (saveError.message()) {
+          <div class="save-error" role="alert">
+            {{ saveError.message() }}
+            <button type="button" (click)="saveError.dismiss()" aria-label="Fermer">×</button>
+          </div>
+        }
         <main class="shell-content">
           <router-outlet></router-outlet>
         </main>
@@ -55,9 +62,15 @@ import { IconComponent } from '../ui/icon.component';
     .appbar-title { font-weight: 600; }
     .appbar-spacer { flex: 1 1 auto; }
     .shell-content { flex: 1 1 auto; min-height: 0; overflow: auto; }
+    .save-error {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 8px 12px; background: #e5484d; color: #fff; font-size: 13px;
+    }
+    .save-error button { background: none; border: 0; color: #fff; font-size: 18px; cursor: pointer; }
   `],
 })
 export class AppShellComponent {
+  protected readonly saveError = inject(SaveErrorService);
   readonly sidebarExpanded = signal<boolean>(true);
 
   toggleSidebar(): void {
