@@ -9,14 +9,14 @@ import { Timeline } from '../../models/timeline.model';
 const timeline = () =>
   ({ id: 't1', name: 'combo', buildId: 'b1', classId: 'XEL', steps: [] } as unknown as Timeline);
 
-/** Capture la derniere ligne passee a insert(). */
+/** Capture la derniere ligne passee a insert()/update(). */
 function makeFakeClient() {
-  const captured: { row?: any } = {};
+  const captured: { row?: any; updated?: any } = {};
   const builder: any = {
     select: () => builder,
     eq: () => builder,
     insert: (row: any) => { captured.row = row; return builder; },
-    update: () => builder,
+    update: (row: any) => { captured.updated = row; return builder; },
     delete: () => builder,
     then: (res: any) => Promise.resolve({ data: null, error: null }).then(res),
   };
@@ -57,5 +57,23 @@ describe('SupabaseTimelineRepository — champs de partage', () => {
     expect(mapped.visibility).toBe('public');
     expect(mapped.shareToken).toBe('tok-1');
     expect(mapped.classId).toBe('XEL');
+  });
+
+  // La colonne visibility (top-level) est celle que lisent RLS et get_shared_timeline.
+  // L'ecrire dans le blob data ne rend RIEN visible : c'est le bug qui rendait tout le
+  // partage inoperant.
+  it('ecrit visibility comme colonne top-level, pas seulement dans data', async () => {
+    const fake = makeFakeClient();
+    TestBed.configureTestingModule({
+      providers: [
+        SupabaseTimelineRepository,
+        LocalMirror,
+        { provide: SupabaseClientService, useValue: { client: fake.client } },
+        { provide: AuthService, useValue: { userId: () => 'u1' } },
+      ],
+    });
+    const repo = TestBed.inject(SupabaseTimelineRepository);
+    await firstValueFrom(repo.updateVisibility('t1', 'public'));
+    expect(fake.captured.updated).toEqual({ visibility: 'public' });
   });
 });

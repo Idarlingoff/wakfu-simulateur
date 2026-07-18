@@ -8,4 +8,10 @@ export interface TimelineRepository {
   create(timeline: Timeline): Observable<Timeline>;
   update(id: string, timeline: Timeline): Observable<Timeline>;
   delete(id: string): Observable<void>;
+  /**
+   * Change UNIQUEMENT la visibilite. Chemin dedie car cote Supabase, visibility est une
+   * colonne top-level (lue par RLS et get_shared_timeline), et non un champ du blob data :
+   * la router via update()/toRow() n'ecrirait que dans data et ne rendrait rien visible.
+   */
+  updateVisibility(id: string, visibility: 'private' | 'unlisted' | 'public'): Observable<void>;
 }

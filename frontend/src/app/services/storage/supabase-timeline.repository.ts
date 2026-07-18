@@ -125,4 +125,17 @@ export class SupabaseTimelineRepository implements TimelineRepository {
       return undefined;
     })());
   }
+
+  updateVisibility(id: string, visibility: 'private' | 'unlisted' | 'public'): Observable<void> {
+    return from((async () => {
+      this.requireUserId();
+      // Ecrit la COLONNE visibility, pas le blob data : c'est elle que lisent RLS et
+      // get_shared_timeline. Un update partiel PostgREST ne touche que cette colonne.
+      const { error } = await this.table().update({ visibility }).eq('id', id);
+      if (error) {
+        throw new Error(error.message);
+      }
+      return undefined;
+    })());
+  }
 }

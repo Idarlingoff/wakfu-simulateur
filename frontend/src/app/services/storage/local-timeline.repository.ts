@@ -42,4 +42,9 @@ export class LocalTimelineRepository implements TimelineRepository {
     lsSet(LS_TIMELINES, lsGet<Timeline>(LS_TIMELINES).filter(t => t.id !== id));
     return of(undefined);
   }
+
+  updateVisibility(id: string, visibility: 'private' | 'unlisted' | 'public'): Observable<void> {
+    lsSet(LS_TIMELINES, lsGet<Timeline>(LS_TIMELINES).map(t => (t.id === id ? { ...t, visibility } : t)));
+    return of(undefined);
+  }
 }

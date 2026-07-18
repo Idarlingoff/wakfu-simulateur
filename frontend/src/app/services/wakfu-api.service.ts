@@ -121,6 +121,7 @@ export class WakfuApiService {
   getTimelineById(id: string): Observable<Timeline> { return this.timelines().getById(id); }
   createTimeline(timeline: Timeline): Observable<Timeline> { return this.timelines().create(timeline); }
   updateTimeline(id: string, timeline: Timeline): Observable<Timeline> { return this.timelines().update(id, timeline); }
+  updateTimelineVisibility(id: string, visibility: 'private' | 'unlisted' | 'public'): Observable<void> { return this.timelines().updateVisibility(id, visibility); }
   deleteTimeline(id: string): Observable<void> { return this.timelines().delete(id); }
 
   // ============ Simulation (moteur local, non utilisé via HTTP) ============

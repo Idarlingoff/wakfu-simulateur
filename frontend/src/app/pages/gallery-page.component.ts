@@ -139,7 +139,12 @@ export class GalleryPageComponent {
   }
 
   async changeVisibility(timeline: Timeline, visibility: Visibility): Promise<void> {
-    await this.sharing.setVisibility(timeline, visibility);
+    const ok = await this.sharing.setVisibility(timeline, visibility);
+    // Recharge la source de verite : sans ca, le <select> reviendrait a l'ancienne
+    // valeur (l'objet du signal n'a pas mute) et /timelines resterait perime.
+    if (ok) {
+      await this.timelineService.loadTimelines();
+    }
   }
 
   copyLink(timeline: Timeline): void {
@@ -152,6 +157,11 @@ export class GalleryPageComponent {
   }
 
   async duplicate(timeline: SharedTimeline): Promise<void> {
-    await this.sharing.duplicate(timeline);
+    const copy = await this.sharing.duplicate(timeline);
+    // La copie est insuree en base directement par le service : on recharge pour qu'elle
+    // apparaisse dans "Mes timelines" et dans le dashboard sans rafraichir la page.
+    if (copy) {
+      await this.timelineService.loadTimelines();
+    }
   }
 }

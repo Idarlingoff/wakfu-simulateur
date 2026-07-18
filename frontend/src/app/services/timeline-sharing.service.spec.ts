@@ -11,9 +11,10 @@ const timeline = () =>
      shareToken: 'tok-1', steps: [] } as unknown as Timeline);
 
 function configure() {
-  const captured = { updated: [] as any[], created: [] as Timeline[] };
+  const captured = { visibility: [] as any[], created: [] as Timeline[] };
   const api = {
-    updateTimeline: (id: string, t: Timeline) => { captured.updated.push({ id, t }); return of(t); },
+    // Chemin d'ecriture etroit : ecrit la COLONNE visibility, pas le blob data.
+    updateTimelineVisibility: (id: string, v: string) => { captured.visibility.push({ id, v }); return of(undefined); },
     createTimeline: (t: Timeline) => { captured.created.push(t); return of(t); },
   };
   TestBed.configureTestingModule({
@@ -27,10 +28,11 @@ function configure() {
 }
 
 describe('TimelineSharingService', () => {
-  it('change la visibilite via updateTimeline', async () => {
+  it('change la visibilite via le chemin d ecriture etroit', async () => {
     const { service, captured } = configure();
     await service.setVisibility(timeline(), 'public');
-    expect(captured.updated[0].t.visibility).toBe('public');
+    // Doit passer par updateTimelineVisibility (colonne), sinon RLS ne voit rien.
+    expect(captured.visibility[0]).toEqual({ id: 't1', v: 'public' });
   });
 
   it('construit un lien de partage a partir du shareToken', () => {
@@ -49,5 +51,7 @@ describe('TimelineSharingService', () => {
     // Partage "structure seule" : la copie n'herite pas du build de l'auteur.
     expect(copy.buildId).toBe('');
     expect(copy.name).toContain('combo');
+    // authorUsername ne doit pas fuiter dans l'objet stocke.
+    expect((copy as any).authorUsername).toBeUndefined();
   });
 });

@@ -15,7 +15,9 @@ export class TimelineSharingService {
 
   async setVisibility(timeline: Timeline, visibility: Visibility): Promise<boolean> {
     try {
-      await firstValueFrom(this.api.updateTimeline(timeline.id, { ...timeline, visibility }));
+      // Chemin etroit : ecrit la colonne visibility. La router via updateTimeline()
+      // n'ecrirait que dans le blob data, que ni RLS ni get_shared_timeline ne lisent.
+      await firstValueFrom(this.api.updateTimelineVisibility(timeline.id, visibility));
       return true;
     } catch {
       this.saveError.reportFailure();

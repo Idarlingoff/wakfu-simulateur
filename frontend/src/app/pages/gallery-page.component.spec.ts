@@ -17,11 +17,15 @@ function configure(authenticated: boolean) {
     shareLink: () => 'http://x/t/tok',
     duplicate: jasmine.createSpy('duplicate').and.returnValue(Promise.resolve(mine)),
   };
+  const timelineSvc = {
+    allTimelines: signal([mine]),
+    loadTimelines: jasmine.createSpy('loadTimelines').and.returnValue(Promise.resolve()),
+  };
   TestBed.configureTestingModule({
     imports: [GalleryPageComponent],
     providers: [
       provideRouter([]),
-      { provide: TimelineService, useValue: { allTimelines: signal([mine]) } },
+      { provide: TimelineService, useValue: timelineSvc },
       { provide: PublicTimelineRepository, useValue: { getPublic: (cls?: string) => of(cls && cls !== 'XEL' ? [] : [pub]) } },
       { provide: TimelineSharingService, useValue: sharing },
       { provide: AuthService, useValue: { isAuthenticated: () => authenticated } },
@@ -29,7 +33,7 @@ function configure(authenticated: boolean) {
   });
   const fixture = TestBed.createComponent(GalleryPageComponent);
   fixture.detectChanges();
-  return { fixture, component: fixture.componentInstance as any, sharing };
+  return { fixture, component: fixture.componentInstance as any, sharing, timelineSvc };
 }
 
 describe('GalleryPageComponent', () => {
@@ -59,6 +63,20 @@ describe('GalleryPageComponent', () => {
     const { component, sharing } = configure(true);
     await component.changeVisibility(mine, 'public');
     expect(sharing.setVisibility).toHaveBeenCalledWith(mine, 'public');
+  });
+
+  // Sans rechargement, la liste reactive n'a jamais mute : le <select> reviendrait a
+  // l'ancienne valeur et la copie dupliquee n'apparaitrait pas.
+  it('recharge la liste apres un changement de visibilite', async () => {
+    const { component, timelineSvc } = configure(true);
+    await component.changeVisibility(mine, 'public');
+    expect(timelineSvc.loadTimelines).toHaveBeenCalled();
+  });
+
+  it('recharge la liste apres une duplication', async () => {
+    const { component, timelineSvc } = configure(true);
+    await component.duplicate(pub);
+    expect(timelineSvc.loadTimelines).toHaveBeenCalled();
   });
 
   it('cache la duplication pour un invite', async () => {
