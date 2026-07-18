@@ -59,10 +59,12 @@ type Tab = 'mine' | 'public';
               <li>
                 <span class="name">{{ t.name }}</span>
                 <span class="author">par {{ t.authorUsername }}</span>
-                <a [href]="'#'" (click)="$event.preventDefault(); open(t)">Ouvrir</a>
-                @if (canDuplicate()) {
-                  <button type="button" (click)="duplicate(t)">Dupliquer</button>
-                }
+                <div class="row-actions">
+                  <button type="button" class="primary" (click)="open(t)">Ouvrir</button>
+                  @if (canDuplicate()) {
+                    <button type="button" (click)="duplicate(t)">Dupliquer</button>
+                  }
+                </div>
               </li>
             }
           </ul>
@@ -83,9 +85,11 @@ type Tab = 'mine' | 'public';
       background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 6px; }
     .name { font-weight: 500; }
     .author { font-size: 12px; opacity: 0.7; }
-    .list a, .list button { margin-left: auto; }
-    .list button { padding: 4px 10px; border: 1px solid var(--app-border); border-radius: 6px;
-      background: transparent; color: inherit; cursor: pointer; }
+    .row-actions { margin-left: auto; display: flex; gap: 8px; }
+    .list button { padding: 5px 12px; border: 1px solid var(--app-border); border-radius: 6px;
+      background: var(--app-surface); color: inherit; cursor: pointer; font-size: 13px; }
+    .list button:hover { border-color: var(--app-accent); }
+    .list button.primary { background: var(--app-accent); border-color: transparent; color: #fff; }
     select { padding: 4px 8px; background: var(--app-surface); border: 1px solid var(--app-border);
       border-radius: 6px; color: inherit; }
     .info { font-size: 14px; opacity: 0.8; }
