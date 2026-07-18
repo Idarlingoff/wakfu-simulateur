@@ -302,29 +302,42 @@ const BOARD_GAP = 1;
         <!-- PANNEAU SORTS -->
         <aside class="spells-panel">
 
-          <!-- Sorts du build : groupés par élément en mode timeline, grille plate sinon -->
-          @if (buildSpells().length > 0) {
-            @if (mode() === 'timeline') {
-              <div class="spell-group" *ngFor="let group of spellsByElement()">
-                <div class="spell-group-label">{{ group.label }}</div>
-                <div class="spell-grid">
-                  <ng-container *ngFor="let spell of group.spells">
-                    <ng-container *ngTemplateOutlet="spellCard; context: { $implicit: spell }"></ng-container>
-                  </ng-container>
+          <!-- Avec un build : la barre de sorts (2 rangees de 6, ordre du deck), pour que
+               l'ordre visuel et les raccourcis coincident. Sinon : tri par element. -->
+          @if (deckRows().length > 0) {
+            <div class="deck-rows">
+              @for (row of deckRows(); track $index; let r = $index) {
+                <div class="spell-grid deck-row">
+                  @for (slot of row; track $index; let c = $index) {
+                    @if (slot) {
+                      <ng-container
+                        *ngTemplateOutlet="spellCard; context: { $implicit: slot, shortcut: deckSlotLabel(r, c) }"
+                      ></ng-container>
+                    } @else {
+                      <div class="spell-icon-card empty-slot" title="Emplacement vide">
+                        <span class="shortcut-badge">{{ deckSlotLabel(r, c) }}</span>
+                      </div>
+                    }
+                  }
                 </div>
-              </div>
-            } @else {
+              }
+            </div>
+          } @else if (buildSpells().length > 0) {
+            <div class="spell-group" *ngFor="let group of spellsByElement()">
+              <div class="spell-group-label">{{ group.label }}</div>
               <div class="spell-grid">
-                <ng-container *ngFor="let spell of buildSpells()">
-                  <ng-container *ngTemplateOutlet="spellCard; context: { $implicit: spell }"></ng-container>
+                <ng-container *ngFor="let spell of group.spells">
+                  <ng-container
+                    *ngTemplateOutlet="spellCard; context: { $implicit: spell, shortcut: shortcutLabels().get(spell.id) }"
+                  ></ng-container>
                 </ng-container>
               </div>
-            }
+            </div>
           } @else {
             <ng-container *ngTemplateOutlet="noSpells"></ng-container>
           }
 
-          <ng-template #spellCard let-spell>
+          <ng-template #spellCard let-spell let-shortcut="shortcut">
             <div
               class="spell-icon-card"
               [class.selected]="selectedSpellId() === spell.id"
@@ -345,6 +358,7 @@ const BOARD_GAP = 1;
                 </span>
               </div>
               <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+              <span class="shortcut-badge" *ngIf="shortcut">{{ shortcut }}</span>
             </div>
           </ng-template>
 
@@ -373,6 +387,7 @@ const BOARD_GAP = 1;
                   </span>
                 </div>
                 <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+                <span class="shortcut-badge" *ngIf="shortcutLabels().get(spell.id)">{{ shortcutLabels().get(spell.id) }}</span>
               </div>
             </div>
           </div>
@@ -1105,6 +1120,31 @@ const BOARD_GAP = 1;
       border-color: #ffd166;
       animation: ringPulseGold 1.5s ease-in-out infinite;
     }
+
+    .deck-rows { display: flex; flex-direction: column; gap: 8px; }
+    .deck-row { display: flex; gap: 6px; }
+    .empty-slot {
+      opacity: 0.35;
+      border: 1px dashed var(--app-border);
+      background: transparent;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .shortcut-badge {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      padding: 0 4px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.65);
+      color: #fff;
+      font-size: 10px;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+    .empty-slot .shortcut-badge { position: static; background: none; opacity: 0.8; }
 
     @keyframes ringPulseGold {
       0%, 100% { box-shadow: 0 0 6px rgba(255, 209, 102, 0.4); }
