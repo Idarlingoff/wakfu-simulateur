@@ -1,4 +1,4 @@
-import { Component, inject, computed, output, effect, input, signal, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, inject, computed, output, effect, input, signal, AfterViewInit, OnDestroy, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
@@ -15,6 +15,13 @@ import { DataCacheService } from '../services/data-cache.service';
 import { StatsCalculatorService } from '../services/calculators/stats-calculator.service';
 import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
 import { getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
+import {
+  parseSpellShortcut,
+  resolveShortcutSpell,
+  shortcutLabel,
+  deckSlotSpells,
+  DECK_SLOT_COUNT,
+} from '../utils/spell-shortcuts.utils';
 
 interface BoardCell {
   x: number;
@@ -2191,6 +2198,49 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
       .filter((s): s is Spell => !!s);
   });
 
+  /**
+   * Les sorts adressables au clavier, dans l'ordre des raccourcis.
+   * Avec un build : les emplacements du deck, trous preserves (index = numero
+   * d'emplacement). Sans build : l'ordre affiche, limite a 12.
+   */
+  shortcutSpells = computed<(Spell | null)[]>(() => {
+    const build = this.buildService.selectedBuildA();
+    const cache = this.spellsCache();
+    if (build) {
+      return deckSlotSpells(build.spellBar.spells, (id: string) => cache.get(id));
+    }
+    return this.buildSpells().slice(0, DECK_SLOT_COUNT);
+  });
+
+  /** Le deck decoupe en rangees de 6, pour l'affichage facon barre de sorts. */
+  deckRows = computed<(Spell | null)[][]>(() => {
+    const slots = this.shortcutSpells();
+    const rows: (Spell | null)[][] = [];
+    for (let i = 0; i < slots.length; i += 6) {
+      rows.push(slots.slice(i, i + 6));
+    }
+    return rows;
+  });
+
+  /** spellId -> libelle du raccourci ('1', 'alt+4', 'ctrl+2'), pour les badges. */
+  shortcutLabels = computed<Map<string, string>>(() => {
+    const labels = new Map<string, string>();
+    this.shortcutSpells().forEach((spell, index) => {
+      if (spell) {
+        labels.set(spell.id, shortcutLabel({ kind: 'deck', index }));
+      }
+    });
+    this.innateSpells().forEach((spell, index) => {
+      labels.set(spell.id, shortcutLabel({ kind: 'innate', index }));
+    });
+    return labels;
+  });
+
+  /** Libelle du raccourci d'un emplacement du deck, y compris vide. */
+  deckSlotLabel(rowIndex: number, colIndex: number): string {
+    return shortcutLabel({ kind: 'deck', index: rowIndex * 6 + colIndex });
+  }
+
   currentStep = computed(() => {
     const timeline = this.currentTimeline();
     if (!timeline) return null;
@@ -2315,6 +2365,26 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     }
 
     this.spellsCache.set(cache);
+  }
+
+  /**
+   * Raccourcis clavier facon Wakfu : selectionne le sort, exactement comme un clic sur
+   * sa carte. La case cible reste choisie a la souris — aucun nouveau chemin de lancement.
+   */
+  @HostListener('window:keydown', ['$event'])
+  onSpellShortcut(event: KeyboardEvent): void {
+    const shortcut = parseSpellShortcut(event);
+    if (!shortcut) {
+      return;
+    }
+    const spell = resolveShortcutSpell(shortcut, this.shortcutSpells(), this.innateSpells());
+    if (!spell) {
+      return;
+    }
+    // preventDefault seulement quand un raccourci a ete reconnu ET resolu, pour ne pas
+    // neutraliser des frappes qui ne nous concernent pas.
+    event.preventDefault();
+    this.onSelectSpell(spell);
   }
 
   onSelectSpell(spell: Spell): void {
