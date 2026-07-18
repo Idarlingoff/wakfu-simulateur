@@ -38,12 +38,22 @@ export class SupabaseTimelineRepository implements TimelineRepository {
       owner_id: ownerId,
       build_id: timeline.buildId || null,
       name: timeline.name,
+      // Denormalise depuis le build : indispensable au filtre par classe de la galerie.
+      class_id: timeline.classId ?? null,
       data: timeline,
     };
   }
 
   private fromRow(row: any): Timeline {
-    return { ...(row.data as Timeline), id: row.id, name: row.name, buildId: row.build_id ?? '' };
+    return {
+      ...(row.data as Timeline),
+      id: row.id,
+      name: row.name,
+      buildId: row.build_id ?? '',
+      classId: row.class_id ?? undefined,
+      visibility: row.visibility ?? undefined,
+      shareToken: row.share_token ?? undefined,
+    };
   }
 
   getAll(buildId?: string): Observable<Timeline[]> {
@@ -57,7 +67,7 @@ export class SupabaseTimelineRepository implements TimelineRepository {
     }
     try {
       const { data, error } = await this.table()
-        .select('id, name, build_id, class_id, visibility, data')
+        .select('id, name, build_id, class_id, visibility, share_token, data')
         .eq('owner_id', userId);
       if (error) {
         throw new Error(error.message);

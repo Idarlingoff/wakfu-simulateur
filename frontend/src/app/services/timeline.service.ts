@@ -8,6 +8,7 @@ import { Timeline, TimelineStep, ComboPreset, TimelineAction } from '../models/t
 import { WakfuApiService } from './wakfu-api.service';
 import { AuthService } from './auth.service';
 import { SaveErrorService } from './save-error.service';
+import { BuildService } from './build.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
@@ -43,6 +44,7 @@ export class TimelineService {
     private api: WakfuApiService,
     private readonly saveError: SaveErrorService,
     private readonly auth: AuthService,
+    private readonly buildService: BuildService,
   ) {
     // Meme raison que dans BuildService : la restauration de session est asynchrone,
     // charger des la construction viserait le stockage invite alors que les ecritures
@@ -74,8 +76,12 @@ export class TimelineService {
   // ============ Timeline CRUD ============
 
   public async createTimeline(timeline: Timeline): Promise<Timeline | null> {
+    // Denormalise la classe depuis le build associe : la galerie de partage (lot 3)
+    // filtre par classe sans avoir a rejoindre les builds.
+    const classId = timeline.classId ?? this.buildService.getBuildById(timeline.buildId)?.classId;
+    const enriched = { ...timeline, classId };
     try {
-      const created = await firstValueFrom(this.api.createTimeline(timeline));
+      const created = await firstValueFrom(this.api.createTimeline(enriched));
       this.timelines.update(tls => [...tls, created]);
       return created;
     } catch {
