@@ -9,6 +9,9 @@ import { ResultatsPageComponent } from './pages/resultats-page.component';
 import { LoginPageComponent } from './pages/login-page.component';
 import { SignupPageComponent } from './pages/signup-page.component';
 import { PasswordResetPageComponent } from './pages/password-reset-page.component';
+import { ImportPageComponent } from './pages/import-page.component';
+import { GalleryPageComponent } from './pages/gallery-page.component';
+import { SharedTimelinePageComponent } from './pages/shared-timeline-page.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: 'accueil', pathMatch: 'full' },
@@ -23,5 +26,8 @@ export const routes: Routes = [
   { path: 'connexion', component: LoginPageComponent },
   { path: 'inscription', component: SignupPageComponent },
   { path: 'mot-de-passe-oublie', component: PasswordResetPageComponent },
+  { path: 'import', component: ImportPageComponent },
+  { path: 'galerie', component: GalleryPageComponent },
+  { path: 't/:token', component: SharedTimelinePageComponent },
   { path: '**', redirectTo: 'accueil' },
 ];

@@ -1,11 +1,18 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, throwError } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Build } from '../models/build.model';
 import { Timeline } from '../models/timeline.model';
 import { Spell } from '../models/spell.model';
 import { Passive } from '../models/passive.model';
+import { LocalBuildRepository } from './storage/local-build.repository';
+import { LocalTimelineRepository } from './storage/local-timeline.repository';
+import { AuthService } from './auth.service';
+import { SupabaseBuildRepository } from './storage/supabase-build.repository';
+import { SupabaseTimelineRepository } from './storage/supabase-timeline.repository';
+import { BuildRepository } from './storage/build-repository';
+import { TimelineRepository } from './storage/timeline-repository';
 
 export interface SimulationRequest {
   buildId: string;
@@ -42,17 +49,6 @@ export interface ActionResult {
   mpCost: number;
   message: string;
   details?: any;
-}
-
-const LS_BUILDS    = 'wakfu_builds';
-const LS_TIMELINES = 'wakfu_timelines';
-
-function lsGet<T>(key: string): T[] {
-  try { return JSON.parse(localStorage.getItem(key) ?? '[]') as T[]; }
-  catch { return []; }
-}
-function lsSet<T>(key: string, data: T[]): void {
-  try { localStorage.setItem(key, JSON.stringify(data)); } catch { /* quota */ }
 }
 
 @Injectable({ providedIn: 'root' })
@@ -96,64 +92,37 @@ export class WakfuApiService {
     );
   }
 
-  // ============ Builds (localStorage) ============
+  private readonly auth = inject(AuthService);
+  private readonly localBuilds = inject(LocalBuildRepository);
+  private readonly localTimelines = inject(LocalTimelineRepository);
+  private readonly cloudBuilds = inject(SupabaseBuildRepository);
+  private readonly cloudTimelines = inject(SupabaseTimelineRepository);
 
-  getAllBuilds(): Observable<Build[]> {
-    return of(lsGet<Build>(LS_BUILDS));
+  /** Invite -> localStorage, connecte -> Supabase. Seul point de bascule du stockage. */
+  private builds(): BuildRepository {
+    return this.auth.isAuthenticated() ? this.cloudBuilds : this.localBuilds;
   }
 
-  getBuildById(id: string): Observable<Build> {
-    const found = lsGet<Build>(LS_BUILDS).find(b => b.id === id);
-    return found ? of(found) : throwError(() => new Error(`Build ${id} not found`));
+  private timelines(): TimelineRepository {
+    return this.auth.isAuthenticated() ? this.cloudTimelines : this.localTimelines;
   }
 
-  createBuild(build: Build): Observable<Build> {
-    const builds = lsGet<Build>(LS_BUILDS);
-    builds.push(build);
-    lsSet(LS_BUILDS, builds);
-    return of(build);
-  }
+  // ============ Builds ============
 
-  updateBuild(id: string, build: Build): Observable<Build> {
-    const builds = lsGet<Build>(LS_BUILDS).map(b => b.id === id ? build : b);
-    lsSet(LS_BUILDS, builds);
-    return of(build);
-  }
+  getAllBuilds(): Observable<Build[]> { return this.builds().getAll(); }
+  getBuildById(id: string): Observable<Build> { return this.builds().getById(id); }
+  createBuild(build: Build): Observable<Build> { return this.builds().create(build); }
+  updateBuild(id: string, build: Build): Observable<Build> { return this.builds().update(id, build); }
+  deleteBuild(id: string): Observable<void> { return this.builds().delete(id); }
 
-  deleteBuild(id: string): Observable<void> {
-    lsSet(LS_BUILDS, lsGet<Build>(LS_BUILDS).filter(b => b.id !== id));
-    return of(undefined);
-  }
+  // ============ Timelines ============
 
-  // ============ Timelines (localStorage) ============
-
-  getAllTimelines(buildId?: string): Observable<Timeline[]> {
-    const timelines = lsGet<Timeline>(LS_TIMELINES);
-    return of(buildId ? timelines.filter(t => t.buildId === buildId) : timelines);
-  }
-
-  getTimelineById(id: string): Observable<Timeline> {
-    const found = lsGet<Timeline>(LS_TIMELINES).find(t => t.id === id);
-    return found ? of(found) : throwError(() => new Error(`Timeline ${id} not found`));
-  }
-
-  createTimeline(timeline: Timeline): Observable<Timeline> {
-    const timelines = lsGet<Timeline>(LS_TIMELINES);
-    timelines.push(timeline);
-    lsSet(LS_TIMELINES, timelines);
-    return of(timeline);
-  }
-
-  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> {
-    const timelines = lsGet<Timeline>(LS_TIMELINES).map(t => t.id === id ? timeline : t);
-    lsSet(LS_TIMELINES, timelines);
-    return of(timeline);
-  }
-
-  deleteTimeline(id: string): Observable<void> {
-    lsSet(LS_TIMELINES, lsGet<Timeline>(LS_TIMELINES).filter(t => t.id !== id));
-    return of(undefined);
-  }
+  getAllTimelines(buildId?: string): Observable<Timeline[]> { return this.timelines().getAll(buildId); }
+  getTimelineById(id: string): Observable<Timeline> { return this.timelines().getById(id); }
+  createTimeline(timeline: Timeline): Observable<Timeline> { return this.timelines().create(timeline); }
+  updateTimeline(id: string, timeline: Timeline): Observable<Timeline> { return this.timelines().update(id, timeline); }
+  updateTimelineVisibility(id: string, visibility: 'private' | 'unlisted' | 'public'): Observable<void> { return this.timelines().updateVisibility(id, visibility); }
+  deleteTimeline(id: string): Observable<void> { return this.timelines().delete(id); }
 
   // ============ Simulation (moteur local, non utilisé via HTTP) ============
 

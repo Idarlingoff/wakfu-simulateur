@@ -3,9 +3,12 @@
  * Gère l'état des timelines et combos en local uniquement
  */
 
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, effect } from '@angular/core';
 import { Timeline, TimelineStep, ComboPreset, TimelineAction } from '../models/timeline.model';
 import { WakfuApiService } from './wakfu-api.service';
+import { AuthService } from './auth.service';
+import { SaveErrorService } from './save-error.service';
+import { BuildService } from './build.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
@@ -37,8 +40,21 @@ export class TimelineService {
     return timeline && index < timeline.steps.length ? timeline.steps[index] : null;
   });
 
-  constructor(private api: WakfuApiService) {
-    this.loadTimelines();
+  constructor(
+    private api: WakfuApiService,
+    private readonly saveError: SaveErrorService,
+    private readonly auth: AuthService,
+    private readonly buildService: BuildService,
+  ) {
+    // Meme raison que dans BuildService : la restauration de session est asynchrone,
+    // charger des la construction viserait le stockage invite alors que les ecritures
+    // basculeront ensuite vers le cloud.
+    effect(() => {
+      if (this.auth.status() === 'loading') {
+        return;
+      }
+      void this.loadTimelines();
+    });
   }
 
   /**
@@ -60,28 +76,47 @@ export class TimelineService {
   // ============ Timeline CRUD ============
 
   public async createTimeline(timeline: Timeline): Promise<Timeline | null> {
-    const created = await firstValueFrom(this.api.createTimeline(timeline));
-    this.timelines.update(tls => [...tls, created]);
-    return created;
+    // Denormalise la classe depuis le build associe : la galerie de partage (lot 3)
+    // filtre par classe sans avoir a rejoindre les builds.
+    const classId = timeline.classId ?? this.buildService.getBuildById(timeline.buildId)?.classId;
+    const enriched = { ...timeline, classId };
+    try {
+      const created = await firstValueFrom(this.api.createTimeline(enriched));
+      this.timelines.update(tls => [...tls, created]);
+      return created;
+    } catch {
+      this.saveError.reportFailure();
+      return null;
+    }
   }
 
   public async updateTimeline(timelineId: string, updates: Partial<Timeline>): Promise<Timeline | null> {
     const existing = this.getTimelineById(timelineId);
     if (!existing) return null;
     const updated = { ...existing, ...updates, updatedAt: new Date() };
-    await firstValueFrom(this.api.updateTimeline(timelineId, updated));
-    this.timelines.update(tls => tls.map(t => t.id === timelineId ? updated : t));
-    return updated;
+    try {
+      await firstValueFrom(this.api.updateTimeline(timelineId, updated));
+      this.timelines.update(tls => tls.map(t => t.id === timelineId ? updated : t));
+      return updated;
+    } catch {
+      this.saveError.reportFailure();
+      return null;
+    }
   }
 
   public async deleteTimeline(timelineId: string): Promise<boolean> {
-    await firstValueFrom(this.api.deleteTimeline(timelineId));
-    this.timelines.update(tls => tls.filter(t => t.id !== timelineId));
-    if (this.currentTimelineId() === timelineId) {
-      this.currentTimelineId.set(null);
-      this.currentStepIndex.set(0);
+    try {
+      await firstValueFrom(this.api.deleteTimeline(timelineId));
+      this.timelines.update(tls => tls.filter(t => t.id !== timelineId));
+      if (this.currentTimelineId() === timelineId) {
+        this.currentTimelineId.set(null);
+        this.currentStepIndex.set(0);
+      }
+      return true;
+    } catch {
+      this.saveError.reportFailure();
+      return false;
     }
-    return true;
   }
 
   public getTimelineById(timelineId: string): Timeline | undefined {

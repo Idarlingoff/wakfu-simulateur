@@ -17,8 +17,9 @@ describe('AppSidebarComponent', () => {
     const fixture = TestBed.createComponent(AppSidebarComponent);
     fixture.detectChanges();
     const links = fixture.nativeElement.querySelectorAll('a.nav-item');
-    expect(links.length).toBe(6);
+    expect(links.length).toBe(7);
     expect(fixture.nativeElement.textContent).toContain('Accueil');
+    expect(fixture.nativeElement.textContent).toContain('Galerie');
     expect(fixture.nativeElement.textContent).toContain('Résultats');
     expect(fixture.nativeElement.textContent).toContain('Comparaison');
   });

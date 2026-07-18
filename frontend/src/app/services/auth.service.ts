@@ -24,9 +24,22 @@ export class AuthService {
 
   private readonly _status = signal<AuthStatus>('loading');
   private readonly _profile = signal<Profile | null>(null);
+  private readonly _userId = signal<string | null>(null);
 
   readonly status = this._status.asReadonly();
   readonly profile = this._profile.asReadonly();
+
+  /**
+   * Id de l'utilisateur connecte, ou null.
+   *
+   * Vient de la SESSION, pas du profil : loadProfile() retombe volontairement sur null
+   * quand la table profiles est illisible (le pseudo est accessoire). Si userId en
+   * dependait, un profil illisible donnerait un utilisateur authentifie mais sans id —
+   * et le stockage cloud, qui s'en sert pour filtrer et pour cloisonner le miroir,
+   * renverrait une liste vide en lecture et refuserait toute sauvegarde.
+   */
+  readonly userId = this._userId.asReadonly();
+
   readonly isAuthenticated = computed(() => this._status() === 'authenticated');
 
   /** Resolue quand la resolution de session en cours est terminee (utilisee par les tests). */
@@ -142,12 +155,14 @@ export class AuthService {
     if (generation !== this.generation) {
       return;
     }
+    this._userId.set(userId);
     this._profile.set(profile);
     this._status.set('authenticated');
   }
 
   private toAnonymous(): void {
     this.generation++;
+    this._userId.set(null);
     this._profile.set(null);
     this._status.set('anonymous');
   }

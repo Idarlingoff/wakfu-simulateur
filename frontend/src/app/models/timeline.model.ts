@@ -58,6 +58,9 @@ export interface Timeline {
   id: string;
   name: string;
   buildId: string;
+  classId?: string;
+  visibility?: 'private' | 'unlisted' | 'public';
+  shareToken?: string;
   steps: TimelineStep[];
   boardSetup?: TimelineBoardSetup;
   currentTurn?: number;
