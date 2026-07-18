@@ -1,60 +1,93 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { ActivatedRoute } from '@angular/router';
-import { signal } from '@angular/core';
+import { provideRouter, Router, ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 import { SharedTimelinePageComponent } from './shared-timeline-page.component';
 import { PublicTimelineRepository } from '../services/storage/public-timeline.repository';
-import { BuildService } from '../services/build.service';
-import { AuthService } from '../services/auth.service';
+import { TimelineService } from '../services/timeline.service';
+import { WakfuApiService } from '../services/wakfu-api.service';
 
-const shared = { id: 't1', name: 'combo', buildId: '', classId: 'XEL', visibility: 'unlisted',
-  shareToken: 'tok-1', authorUsername: 'Lilia', steps: [{ id: 's1', actions: [] }] } as any;
-const myBuild = { id: 'b9', name: 'mon xelor', classId: 'XEL' } as any;
+const shared = {
+  id: 't1', name: 'combo', buildId: '', classId: 'XEL', visibility: 'unlisted',
+  shareToken: 'tok-1', authorUsername: 'Lilia',
+  steps: [
+    { id: 's1', actions: [
+      { id: 'a1', type: 'CastSpell', order: 1, spellId: 'XEL_ROUAGE', targetPosition: { x: 6, y: 6 } },
+      { id: 'a2', type: 'Move', order: 2, targetPosition: { x: 5, y: 6 } },
+    ] },
+  ],
+} as any;
 
-function configure(token: string, resolved: any) {
+const spells = [{ id: 'XEL_ROUAGE', name: 'Rouage' }] as any;
+
+function configure(resolved: any) {
+  const router = { navigate: jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true)) };
+  const timelineService = {
+    createTimeline: jasmine.createSpy('createTimeline').and.callFake((t: any) => Promise.resolve({ ...t, id: 'copy-1' })),
+    loadTimeline: jasmine.createSpy('loadTimeline'),
+  };
   TestBed.configureTestingModule({
     imports: [SharedTimelinePageComponent],
     providers: [
       provideRouter([]),
-      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => token } } } },
+      { provide: Router, useValue: router },
+      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'tok-1' } } } },
       { provide: PublicTimelineRepository, useValue: { getByShareToken: () => of(resolved) } },
-      { provide: BuildService, useValue: { allBuilds: signal([myBuild]) } },
-      { provide: AuthService, useValue: { isAuthenticated: () => true } },
+      { provide: TimelineService, useValue: timelineService },
+      { provide: WakfuApiService, useValue: { getAllSpells: () => of(spells) } },
     ],
   });
   const fixture = TestBed.createComponent(SharedTimelinePageComponent);
   fixture.detectChanges();
-  return { component: fixture.componentInstance as any };
+  return { component: fixture.componentInstance as any, router, timelineService };
 }
 
 describe('SharedTimelinePageComponent', () => {
   it('charge la timeline du jeton', async () => {
-    const { component } = configure('tok-1', shared);
+    const { component } = configure(shared);
     await component.load();
     expect(component.timeline()?.name).toBe('combo');
     expect(component.error()).toBeNull();
   });
 
   it('affiche une erreur pour un jeton invalide ou une timeline redevenue privee', async () => {
-    const { component } = configure('inconnu', null);
+    const { component } = configure(null);
     await component.load();
     expect(component.timeline()).toBeNull();
     expect(component.error()).toBe('Cette timeline n existe plus ou n est plus partagee.');
   });
 
-  // Partage "structure seule" : pas de degats tant qu'aucun build du lecteur n'est choisi.
-  it('n affiche pas de degats sans build selectionne', async () => {
-    const { component } = configure('tok-1', shared);
+  // Issue #2 : chaque action doit etre lisible (nom du sort, mouvement), pas "1 action(s)".
+  it('rend chaque action avec le nom du sort et la cible', async () => {
+    const { component } = configure(shared);
     await component.load();
-    expect(component.selectedBuildId()).toBeNull();
-    expect(component.showsDamage()).toBe(false);
+    await component.loadSpellNames();
+    const lines = component.actionLines();
+    expect(lines.length).toBe(2);
+    expect(lines[0]).toContain('Rouage');
+    expect(lines[0]).toContain('(6, 6)');
+    expect(lines[1]).toContain('Déplacement');
   });
 
-  it('affiche les degats une fois un build du lecteur choisi', async () => {
-    const { component } = configure('tok-1', shared);
+  it('retombe sur l id du sort si son nom est inconnu', async () => {
+    const withUnknown = { ...shared, steps: [{ id: 's1', actions: [
+      { id: 'a1', type: 'CastSpell', order: 1, spellId: 'INCONNU' },
+    ] }] };
+    const { component } = configure(withUnknown);
     await component.load();
-    component.selectBuild('b9');
-    expect(component.showsDamage()).toBe(true);
+    await component.loadSpellNames();
+    expect(component.actionLines()[0]).toContain('INCONNU');
+  });
+
+  // Issue #3 : "Ouvrir dans l'editeur" copie puis navigue vers l'onglet Timelines.
+  it('copie la timeline (structure seule) puis ouvre l editeur', async () => {
+    const { component, router, timelineService } = configure(shared);
+    await component.load();
+    await component.openInEditor();
+    const copyArg = timelineService.createTimeline.calls.mostRecent().args[0];
+    expect(copyArg.id).not.toBe('t1');
+    expect(copyArg.shareToken).toBeUndefined();
+    expect(copyArg.authorUsername).toBeUndefined();
+    expect(timelineService.loadTimeline).toHaveBeenCalledWith('copy-1');
+    expect(router.navigate).toHaveBeenCalledWith(['/timelines']);
   });
 });
