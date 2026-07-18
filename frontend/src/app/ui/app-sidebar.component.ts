@@ -13,6 +13,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { path: '/accueil', label: 'Accueil', icon: 'home' },
   { path: '/builds', label: 'Builds', icon: 'user' },
   { path: '/timelines', label: 'Timelines', icon: 'clock' },
+  { path: '/galerie', label: 'Galerie', icon: 'globe' },
   { path: '/freeplay', label: 'Freeplay', icon: 'play' },
   { path: '/resultats', label: 'Résultats', icon: 'activity' },
   { path: '/comparaison', label: 'Comparaison', icon: 'chart' },
