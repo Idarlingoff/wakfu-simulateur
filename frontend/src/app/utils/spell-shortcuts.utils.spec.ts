@@ -209,3 +209,47 @@ describe('resolveShortcutSpell', () => {
     expect(resolveShortcutSpell({ kind: 'innate', index: 2 }, deck, innates)).toBeNull();
   });
 });
+
+/**
+ * Certains evenements n'ont pas de `code` : claviers virtuels, outils d'accessibilite,
+ * IME, automatisation de test. Sans repli sur `key`, le raccourci y est mort.
+ * `code` reste prioritaire, sinon AZERTY casserait (touche 1 -> key '&').
+ */
+describe('parseSpellShortcut — evenements sans code physique', () => {
+  function noCode(k: string, mods: { alt?: boolean; ctrl?: boolean; shift?: boolean } = {}) {
+    return {
+      code: '',
+      key: k,
+      altKey: !!mods.alt,
+      ctrlKey: !!mods.ctrl,
+      shiftKey: !!mods.shift,
+      metaKey: false,
+      target: document.createElement('div'),
+    } as unknown as KeyboardEvent;
+  }
+
+  it('retombe sur key quand code est absent', () => {
+    expect(parseSpellShortcut(noCode('4'))).toEqual({ kind: 'deck', index: 3 });
+  });
+
+  it('gere alt sans code', () => {
+    expect(parseSpellShortcut(noCode('2', { alt: true }))).toEqual({ kind: 'deck', index: 7 });
+  });
+
+  it('gere ctrl sans code', () => {
+    expect(parseSpellShortcut(noCode('1', { ctrl: true }))).toEqual({ kind: 'innate', index: 0 });
+  });
+
+  it('ignore un caractere non numerique sans code', () => {
+    expect(parseSpellShortcut(noCode('&'))).toBeNull();
+    expect(parseSpellShortcut(noCode('a'))).toBeNull();
+  });
+
+  // Le code physique reste prioritaire : sur AZERTY, code='Digit1' et key='&'.
+  it('prefere toujours le code physique au caractere tape', () => {
+    const azerty = { code: 'Digit1', key: '&', altKey: false, ctrlKey: false,
+      shiftKey: false, metaKey: false, target: document.createElement('div') };
+    expect(parseSpellShortcut(azerty as unknown as KeyboardEvent))
+      .toEqual({ kind: 'deck', index: 0 });
+  });
+});

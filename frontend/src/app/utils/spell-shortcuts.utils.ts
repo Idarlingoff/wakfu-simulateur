@@ -34,14 +34,21 @@ function isTextEntry(target: EventTarget | null): boolean {
 /**
  * Extrait le chiffre de la touche PHYSIQUE ('Digit1' / 'Numpad1' -> 1), ou null.
  *
- * On lit `event.code` et jamais `event.key` : sur un AZERTY francais la rangee du haut
- * sans Shift produit `&é"'(§`, et sur un QWERTY `Shift+1` produit `!`. Se fier au
- * caractere tape rendrait les raccourcis inoperants hors QWERTY, et le repli shift
- * inoperant partout.
+ * `event.code` est PRIORITAIRE : sur un AZERTY francais la rangee du haut sans Shift
+ * produit `&é"'(§`, et sur un QWERTY `Shift+1` produit `!`. Se fier au caractere tape
+ * rendrait les raccourcis inoperants hors QWERTY, et le repli shift inoperant partout.
+ *
+ * Mais `code` peut etre absent : claviers virtuels, outils d'accessibilite, IME,
+ * automatisation de test emettent des evenements sans lui. On retombe alors sur `key`,
+ * qui vaut mieux que rien — sans jamais primer sur le code physique.
  */
-function physicalDigit(code: string | undefined): number | null {
-  const match = /^(?:Digit|Numpad)([0-9])$/.exec(code ?? '');
-  return match ? Number(match[1]) : null;
+function physicalDigit(event: KeyboardEvent): number | null {
+  const fromCode = /^(?:Digit|Numpad)([0-9])$/.exec(event.code ?? '');
+  if (fromCode) {
+    return Number(fromCode[1]);
+  }
+  const fromKey = /^[0-9]$/.exec(event.key ?? '');
+  return fromKey ? Number(fromKey[0]) : null;
 }
 
 /** Traduit une frappe en intention, ou null si elle ne nous concerne pas. */
@@ -54,7 +61,7 @@ export function parseSpellShortcut(event: KeyboardEvent): SpellShortcut | null {
     return null;
   }
 
-  const digit = physicalDigit(event.code);
+  const digit = physicalDigit(event);
   if (digit === null || digit < 1) {
     return null;
   }
