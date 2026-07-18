@@ -82,3 +82,43 @@ export function shortcutLabel(shortcut: SpellShortcut): string {
   }
   return '';
 }
+
+/** Reference minimale d'un emplacement de deck (structurellement compatible avec SpellReference). */
+interface DeckSlotRef {
+  spellId: string;
+}
+
+/**
+ * Convertit les emplacements du deck en sorts, EN PRESERVANT LES TROUS.
+ *
+ * Indispensable : la liste habituelle des sorts du build ecrase les emplacements vides,
+ * si bien que l'index du tableau ne correspond plus au numero d'emplacement. Ici,
+ * result[i] est le sort de l'emplacement i, ou null. Les emplacements vides de FIN sont
+ * retires, pour ne pas afficher de cases vides inutiles.
+ */
+export function deckSlotSpells<T>(
+  deck: ReadonlyArray<DeckSlotRef | null | undefined>,
+  resolve: (spellId: string) => T | undefined,
+): (T | null)[] {
+  const slots: (T | null)[] = [];
+  for (let i = 0; i < Math.min(deck.length, DECK_SLOT_COUNT); i++) {
+    const entry = deck[i];
+    slots.push(entry ? resolve(entry.spellId) ?? null : null);
+  }
+  while (slots.length > 0 && slots[slots.length - 1] === null) {
+    slots.pop();
+  }
+  return slots;
+}
+
+/** Resout l'intention en sort concret, ou null si l'emplacement est vide/inexistant. */
+export function resolveShortcutSpell<T>(
+  shortcut: SpellShortcut,
+  deckSpells: ReadonlyArray<T | null>,
+  innateSpells: ReadonlyArray<T>,
+): T | null {
+  if (shortcut.kind === 'innate') {
+    return innateSpells[shortcut.index] ?? null;
+  }
+  return deckSpells[shortcut.index] ?? null;
+}

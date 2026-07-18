@@ -1,4 +1,9 @@
-import { parseSpellShortcut, shortcutLabel } from './spell-shortcuts.utils';
+import {
+  parseSpellShortcut,
+  shortcutLabel,
+  deckSlotSpells,
+  resolveShortcutSpell,
+} from './spell-shortcuts.utils';
 
 /**
  * Fabrique un faux KeyboardEvent a partir du CODE physique de la touche.
@@ -126,5 +131,81 @@ describe('shortcutLabel', () => {
 
   it('ne libelle rien au-dela du deck', () => {
     expect(shortcutLabel({ kind: 'deck', index: 12 })).toBe('');
+  });
+});
+
+interface FakeSpell { id: string; name: string; }
+
+const ref = (spellId: string) => ({ spellId }) as { spellId: string };
+const spell = (id: string): FakeSpell => ({ id, name: `sort ${id}` });
+
+/** Resolveur : rend le sort si connu du cache, sinon undefined. */
+function resolverFor(ids: string[]) {
+  const cache = new Map(ids.map(id => [id, spell(id)]));
+  return (id: string) => cache.get(id);
+}
+
+describe('deckSlotSpells', () => {
+  it('rend les sorts dans l ordre des emplacements', () => {
+    const deck = [ref('a'), ref('b'), ref('c')];
+    const result = deckSlotSpells(deck, resolverFor(['a', 'b', 'c'])) as FakeSpell[];
+    expect(result.map(s => s.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  // Sans ca, la touche 3 ne viserait plus l'emplacement 3.
+  it('preserve un trou au milieu du deck', () => {
+    const deck = [ref('a'), null, ref('c')];
+    const result = deckSlotSpells(deck, resolverFor(['a', 'c']));
+    expect(result.length).toBe(3);
+    expect(result[0]?.id).toBe('a');
+    expect(result[1]).toBeNull();
+    expect(result[2]?.id).toBe('c');
+  });
+
+  it('retire les emplacements vides de fin', () => {
+    const deck = [ref('a'), null, null, null];
+    expect(deckSlotSpells(deck, resolverFor(['a'])).length).toBe(1);
+  });
+
+  it('rend une liste vide pour un deck entierement vide', () => {
+    expect(deckSlotSpells([null, null], resolverFor([]))).toEqual([]);
+  });
+
+  it('traite un sort introuvable dans le cache comme un emplacement vide', () => {
+    const deck = [ref('a'), ref('inconnu'), ref('c')];
+    const result = deckSlotSpells(deck, resolverFor(['a', 'c']));
+    expect(result[1]).toBeNull();
+    expect(result[2]?.id).toBe('c');
+  });
+
+  it('ne depasse jamais 12 emplacements', () => {
+    const deck = Array.from({ length: 20 }, (_, i) => ref(`s${i}`));
+    const ids = deck.map(d => d.spellId);
+    expect(deckSlotSpells(deck, resolverFor(ids)).length).toBe(12);
+  });
+});
+
+describe('resolveShortcutSpell', () => {
+  const deck = [spell('a'), null, spell('c')];
+  const innates = [spell('i1'), spell('i2')];
+
+  it('resout un emplacement de deck', () => {
+    expect(resolveShortcutSpell({ kind: 'deck', index: 2 }, deck, innates)?.id).toBe('c');
+  });
+
+  it('rend null sur un emplacement vide', () => {
+    expect(resolveShortcutSpell({ kind: 'deck', index: 1 }, deck, innates)).toBeNull();
+  });
+
+  it('rend null hors des bornes', () => {
+    expect(resolveShortcutSpell({ kind: 'deck', index: 9 }, deck, innates)).toBeNull();
+  });
+
+  it('resout un sort inne', () => {
+    expect(resolveShortcutSpell({ kind: 'innate', index: 1 }, deck, innates)?.id).toBe('i2');
+  });
+
+  it('rend null si l inne n existe pas pour cette classe', () => {
+    expect(resolveShortcutSpell({ kind: 'innate', index: 2 }, deck, innates)).toBeNull();
   });
 });
