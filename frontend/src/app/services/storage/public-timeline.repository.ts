@@ -21,14 +21,11 @@ export class PublicTimelineRepository {
 
   private async readPublic(classId?: string): Promise<SharedTimeline[]> {
     try {
-      let query = this.supabase.client
-        .from('timelines')
-        .select('id, name, build_id, class_id, visibility, share_token, data, profiles(username)')
-        .eq('visibility', 'public');
-      if (classId) {
-        query = query.eq('class_id', classId);
-      }
-      const { data, error } = await query.order('name');
+      // Fonction dediee, pas un embed PostgREST : il n'existe pas de FK
+      // timelines->profiles, donc `.select('...profiles(username)')` echoue (PGRST200)
+      // et viderait la galerie. La fonction joint profiles cote SQL.
+      const { data, error } = await this.supabase.client
+        .rpc('get_public_timelines', { class_filter: classId ?? null });
       if (error) {
         throw new Error(error.message);
       }
@@ -64,7 +61,8 @@ export class PublicTimelineRepository {
       classId: row.class_id ?? undefined,
       visibility: row.visibility ?? undefined,
       shareToken: row.share_token ?? undefined,
-      authorUsername: row.profiles?.username ?? 'Anonyme',
+      // Les deux fonctions SQL renvoient author_username a plat.
+      authorUsername: row.author_username ?? 'Anonyme',
     };
   }
 }
