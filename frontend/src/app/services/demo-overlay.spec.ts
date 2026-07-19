@@ -135,4 +135,15 @@ describe('Superposition des donnees de demo', () => {
 
     expect(timelines.currentTimeline()?.id).toBe(DEMO_TIMELINE_ID);
   });
+
+  it('l export de la demo se comporte comme celui d un build reel, des deux cotes', async () => {
+    await configure();
+    await demo.activate();
+
+    const buildJson = TestBed.inject(BuildService).exportBuild(DEMO_BUILD_ID);
+    const timelineJson = TestBed.inject(TimelineService).exportTimeline(DEMO_TIMELINE_ID);
+
+    expect(JSON.parse(buildJson).id).toBe(DEMO_BUILD_ID);
+    expect(JSON.parse(timelineJson).id).toBe(DEMO_TIMELINE_ID);
+  });
 });

@@ -302,7 +302,7 @@ export class TimelineService {
   // ============ Export/Import ============
 
   public exportTimeline(timelineId: string): string {
-    const timeline = this.timelines().find(t => t.id === timelineId);
+    const timeline = this.getTimelineById(timelineId);
     if (!timeline) throw new Error('Timeline not found');
     return JSON.stringify(timeline, null, 2);
   }

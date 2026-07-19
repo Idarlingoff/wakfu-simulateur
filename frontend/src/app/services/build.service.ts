@@ -104,8 +104,10 @@ export class BuildService {
   }
 
   public async updateBuild(buildId: string, updates: Partial<Build>): Promise<boolean> {
+    // La garde precede la recherche, et c'est elle qui protege : depuis que les lectures
+    // voient la demo, plus rien d'autre n'empeche une ecriture de l'atteindre.
     if (this.demo.isDemoId(buildId)) return false;
-    const build = this.builds().find(b => b.id === buildId);
+    const build = this.visibleBuilds().find(b => b.id === buildId);
     if (!build) return false;
     const updated = { ...build, ...updates, updatedAt: new Date() } as Build;
     try {
