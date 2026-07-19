@@ -2254,6 +2254,12 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
 
   /** Le deck decoupe en rangees de 6, pour l'affichage facon barre de sorts. */
   deckRows = computed<(Spell | null)[][]>(() => {
+    // La barre de deck n'a de sens qu'avec un build : elle reproduit SES emplacements.
+    // Sans build, on rend la liste vide pour laisser le tri par element s'afficher —
+    // sinon shortcutSpells(), tronque a 12 pour le clavier, masquerait les sorts au-dela.
+    if (!this.buildService.selectedBuildA()) {
+      return [];
+    }
     const slots = this.shortcutSpells();
     const rows: (Spell | null)[][] = [];
     for (let i = 0; i < slots.length; i += 6) {
