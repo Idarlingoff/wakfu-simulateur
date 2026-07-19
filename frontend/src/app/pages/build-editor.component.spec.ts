@@ -9,6 +9,8 @@ import { SpellSelectorComponent } from '../components/spell-selector.component';
 import { PassiveSelectorComponent } from '../components/passive-selector.component';
 import { SublimationSelectorComponent } from '../components/sublimation-selector.component';
 import { Build } from '../models/build.model';
+import { DeckCodeService } from '../services/deck-code.service';
+import { DeckCodeFormatError, DeckCodeImportResult } from '../utils/deck-code.utils';
 
 function makeBuild(id: string, name: string): Build {
   return {
@@ -29,16 +31,36 @@ class StubBuildService {
   updateBuild = jasmine.createSpy('updateBuild');
 }
 
+function importResult(spellCount: number, passiveCount: number): DeckCodeImportResult {
+  const spells = new Array(12).fill(null);
+  const passives = new Array(6).fill(null);
+  for (let i = 0; i < spellCount; i++) spells[i] = { spellId: `XEL_S${i}` };
+  for (let i = 0; i < passiveCount; i++) passives[i] = { passiveId: `XEL_P${i}` };
+  return {
+    spells, passives,
+    unresolvedSpellIcons: [], unresolvedPassiveIcons: [],
+    duplicateSpellIcons: [], duplicatePassiveIcons: [],
+  };
+}
+
+class StubDeckCodeService {
+  decode = jasmine.createSpy('decode').and.resolveTo(importResult(12, 5));
+  encode = jasmine.createSpy('encode').and.resolveTo('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
+}
+
 let stub: StubBuildService;
+let deckStub: StubDeckCodeService;
 
 function configure(idParam: string | null): void {
   stub = new StubBuildService();
+  deckStub = new StubDeckCodeService();
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     imports: [BuildEditorComponent],
     providers: [
       provideRouter([]),
       { provide: BuildService, useValue: stub },
+      { provide: DeckCodeService, useValue: deckStub },
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: (_: string) => idParam } } } },
     ],
   });
@@ -98,5 +120,103 @@ describe('BuildEditorComponent', () => {
     fixture.componentInstance.save();
     expect(stub.createBuild).not.toHaveBeenCalled();
     expect(stub.updateBuild).not.toHaveBeenCalled();
+  });
+});
+
+describe('BuildEditorComponent — code deck', () => {
+  it('remplace integralement la selection existante', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    cmp.form.spells[0] = { spellId: 'XEL_ANCIEN' };
+    cmp.form.passives[0] = { passiveId: 'XEL_ANCIEN_PASSIF' };
+    cmp.deckCodeInput = '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
+
+    await cmp.importDeckCode();
+
+    expect(deckStub.decode).toHaveBeenCalledWith(cmp.deckCodeInput, 'XEL');
+    expect(cmp.form.spells[0]).toEqual({ spellId: 'XEL_S0' });
+    expect(cmp.form.passives[0]).toEqual({ passiveId: 'XEL_P0' });
+    expect(cmp.deckCodeReport?.tone).toBe('ok');
+  });
+
+  it('refuse d importer sans classe et laisse la selection intacte', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = '';
+    cmp.form.spells[0] = { spellId: 'XEL_ANCIEN' };
+    cmp.deckCodeInput = '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
+
+    await cmp.importDeckCode();
+
+    expect(deckStub.decode).not.toHaveBeenCalled();
+    expect(cmp.form.spells[0]).toEqual({ spellId: 'XEL_ANCIEN' });
+  });
+
+  it('laisse la selection intacte quand le code est malforme', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    cmp.form.spells[0] = { spellId: 'XEL_ANCIEN' };
+    cmp.deckCodeInput = '1-2-3';
+    deckStub.decode.and.rejectWith(new DeckCodeFormatError('Code deck invalide : 3 valeur(s) au lieu de 18.'));
+
+    await cmp.importDeckCode();
+
+    expect(cmp.form.spells[0]).toEqual({ spellId: 'XEL_ANCIEN' });
+    expect(cmp.deckCodeReport?.tone).toBe('error');
+    expect(cmp.deckCodeReport?.message).toContain('18');
+  });
+
+  it('laisse la selection intacte quand rien n est reconnu', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    cmp.form.spells[0] = { spellId: 'XEL_ANCIEN' };
+    cmp.deckCodeInput = '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
+    deckStub.decode.and.resolveTo(importResult(0, 0));
+
+    await cmp.importDeckCode();
+
+    expect(cmp.form.spells[0]).toEqual({ spellId: 'XEL_ANCIEN' });
+    expect(cmp.deckCodeReport?.tone).toBe('error');
+  });
+
+  it('copie le code deck dans le presse-papier', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+    spyOnProperty(navigator, 'clipboard', 'get').and.returnValue({ writeText } as unknown as Clipboard);
+
+    await cmp.copyDeckCode();
+
+    expect(deckStub.encode).toHaveBeenCalled();
+    expect(writeText).toHaveBeenCalledWith('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
+    expect(cmp.deckCodeCopied).toBeTrue();
+  });
+
+  it('affiche un champ de repli quand le presse-papier est indisponible', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    spyOnProperty(navigator, 'clipboard', 'get').and.returnValue(undefined as unknown as Clipboard);
+
+    await cmp.copyDeckCode();
+
+    expect(cmp.deckCodeFallback).toBe('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
+    expect(cmp.deckCodeCopied).toBeFalse();
   });
 });
