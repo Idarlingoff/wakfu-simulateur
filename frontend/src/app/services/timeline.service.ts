@@ -3,18 +3,21 @@
  * Gère l'état des timelines et combos en local uniquement
  */
 
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
 import { Timeline, TimelineStep, ComboPreset, TimelineAction } from '../models/timeline.model';
 import { WakfuApiService } from './wakfu-api.service';
 import { AuthService } from './auth.service';
 import { SaveErrorService } from './save-error.service';
 import { BuildService } from './build.service';
+import { DemoDataService } from './demo-data.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TimelineService {
+  private readonly demo = inject(DemoDataService);
+
   // State Signals
   private timelines = signal<Timeline[]>([]);
   private comboPresets = signal<ComboPreset[]>([]);
@@ -24,7 +27,10 @@ export class TimelineService {
   private loadError = signal<string | null>(null);
 
   // Computed
-  public allTimelines = computed(() => this.timelines());
+  /** Superposee comme le build de demo, et pour la meme raison : rien n'est ecrit. */
+  public allTimelines = computed(() =>
+    this.demo.active() ? [this.demo.timeline(), ...this.timelines()] : this.timelines(),
+  );
   public allPresets = computed(() => this.comboPresets());
   public loading = computed(() => this.isLoading());
   public error = computed(() => this.loadError());
@@ -91,6 +97,7 @@ export class TimelineService {
   }
 
   public async updateTimeline(timelineId: string, updates: Partial<Timeline>): Promise<Timeline | null> {
+    if (this.demo.isDemoId(timelineId)) return null;
     const existing = this.getTimelineById(timelineId);
     if (!existing) return null;
     const updated = { ...existing, ...updates, updatedAt: new Date() };
@@ -105,6 +112,7 @@ export class TimelineService {
   }
 
   public async deleteTimeline(timelineId: string): Promise<boolean> {
+    if (this.demo.isDemoId(timelineId)) return false;
     try {
       await firstValueFrom(this.api.deleteTimeline(timelineId));
       this.timelines.update(tls => tls.filter(t => t.id !== timelineId));

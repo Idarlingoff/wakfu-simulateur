@@ -1,14 +1,17 @@
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
 import { Build, BuildStats, SpellBar, PassiveBar, SublimationBar, SpellReference } from '../models/build.model';
 import { WakfuApiService } from './wakfu-api.service';
 import { SaveErrorService } from './save-error.service';
 import { AuthService } from './auth.service';
+import { DemoDataService } from './demo-data.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class BuildService {
+  private readonly demo = inject(DemoDataService);
+
   // State Signals
   private readonly builds = signal<Build[]>([]);
   private readonly selectedBuildIdA = signal<string | null>(null);
@@ -17,7 +20,14 @@ export class BuildService {
   private readonly loadError = signal<string | null>(null);
 
   // Computed Selectors
-  public allBuilds = computed(() => this.builds());
+  /**
+   * Le build de demo est SUPERPOSE, jamais stocke : il n'existe qu'en memoire, le temps de
+   * la visite guidee. Le passer par le stockage l'ecrirait dans Supabase pour un
+   * utilisateur connecte, et un abandon en cours de visite y laisserait un orphelin.
+   */
+  public allBuilds = computed(() =>
+    this.demo.active() ? [this.demo.build(), ...this.builds()] : this.builds(),
+  );
   public loading = computed(() => this.isLoading());
   public error = computed(() => this.loadError());
 
@@ -86,6 +96,7 @@ export class BuildService {
   }
 
   public async updateBuild(buildId: string, updates: Partial<Build>): Promise<boolean> {
+    if (this.demo.isDemoId(buildId)) return false;
     const build = this.builds().find(b => b.id === buildId);
     if (!build) return false;
     const updated = { ...build, ...updates, updatedAt: new Date() } as Build;
@@ -100,6 +111,7 @@ export class BuildService {
   }
 
   public async deleteBuild(buildId: string): Promise<boolean> {
+    if (this.demo.isDemoId(buildId)) return false;
     try {
       await firstValueFrom(this.api.deleteBuild(buildId));
       this.builds.update(bs => bs.filter(b => b.id !== buildId));
