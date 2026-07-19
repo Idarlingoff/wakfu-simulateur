@@ -1,11 +1,9 @@
 import {
   DECK_CODE_SEGMENT_COUNT,
-  DECK_PASSIVE_SLOT_COUNT,
   DeckCodeFormatError,
   formatDeckCode,
   parseDeckCode,
 } from './deck-code.utils';
-import { DECK_SLOT_COUNT } from './spell-shortcuts.utils';
 
 /** Code de reference fourni par le jeu : 12 sorts, 5 passifs, 1 slot de passif vide. */
 const REFERENCE =
@@ -13,9 +11,10 @@ const REFERENCE =
 
 describe('deck-code.utils', () => {
   it('expose 18 segments : 12 sorts + 6 passifs', () => {
-    expect(DECK_SLOT_COUNT).toBe(12);
-    expect(DECK_PASSIVE_SLOT_COUNT).toBe(6);
     expect(DECK_CODE_SEGMENT_COUNT).toBe(18);
+    const slots = parseDeckCode(REFERENCE);
+    expect(slots.spells.length).toBe(12);
+    expect(slots.passives.length).toBe(6);
   });
 
   it('parse le code de reference en sorts et passifs', () => {
@@ -26,6 +25,11 @@ describe('deck-code.utils', () => {
 
   it('fait un aller-retour sans perte', () => {
     expect(formatDeckCode(parseDeckCode(REFERENCE))).toBe(REFERENCE);
+  });
+
+  it('preserve un trou en milieu de rangee sur un aller-retour', () => {
+    const withHole = '2839-0-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
+    expect(formatDeckCode(parseDeckCode(withHole))).toBe(withHole);
   });
 
   it('traite 0 comme un slot vide, en tete comme au milieu', () => {
@@ -55,5 +59,10 @@ describe('deck-code.utils', () => {
 
   it('formatDeckCode complete les rangees trop courtes avec des 0', () => {
     expect(formatDeckCode({ spells: [763], passives: [] })).toBe('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
+  });
+
+  it('tronque une rangee trop longue : le code est a largeur fixe', () => {
+    const spells = new Array(14).fill(763);
+    expect(formatDeckCode({ spells, passives: [] }).split('-').length).toBe(18);
   });
 });

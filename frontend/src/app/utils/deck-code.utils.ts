@@ -49,8 +49,8 @@ export class DeckCodeFormatError extends Error {
   }
 }
 
-function toSlot(iconId: number): number | null {
-  return iconId === 0 ? null : iconId;
+function slotFromSegment(segment: number): number | null {
+  return segment === 0 ? null : segment;
 }
 
 /**
@@ -63,7 +63,7 @@ function toSlot(iconId: number): number | null {
  *         n'est pas un entier positif.
  */
 export function parseDeckCode(raw: string): DeckCodeSlots {
-  const segments = (raw ?? '')
+  const segments = raw
     .trim()
     .split('-')
     .map(segment => segment.trim())
@@ -79,19 +79,26 @@ export function parseDeckCode(raw: string): DeckCodeSlots {
     // Rejette du meme coup les negatifs, les decimaux et le texte.
     if (!/^\d+$/.test(segment)) {
       throw new DeckCodeFormatError(
-        `Code deck invalide : « ${segment} » n'est pas un identifiant numerique.`,
+        `Code deck invalide : « ${segment} » n'est pas un identifiant numérique.`,
       );
     }
     return Number(segment);
   });
 
   return {
-    spells: iconIds.slice(0, DECK_SLOT_COUNT).map(toSlot),
-    passives: iconIds.slice(DECK_SLOT_COUNT).map(toSlot),
+    spells: iconIds.slice(0, DECK_SLOT_COUNT).map(slotFromSegment),
+    passives: iconIds.slice(DECK_SLOT_COUNT).map(slotFromSegment),
   };
 }
 
-function fixedLength(slots: ReadonlyArray<number | null>, size: number): (number | null)[] {
+/**
+ * Ramene une rangee a exactement `size` slots.
+ *
+ * La troncature est VOLONTAIRE : un build a 12 sorts et 6 passifs, pas un de plus, et le
+ * code deck est a largeur fixe. Tout ce qui depasse est une entree malformee, pas une
+ * donnee a preserver.
+ */
+function padToLength(slots: ReadonlyArray<number | null>, size: number): (number | null)[] {
   const row = slots.slice(0, size);
   while (row.length < size) {
     row.push(null);
@@ -102,8 +109,8 @@ function fixedLength(slots: ReadonlyArray<number | null>, size: number): (number
 /** Produit toujours 18 segments, `0` pour chaque slot vide, y compris ceux de fin. */
 export function formatDeckCode(slots: DeckCodeSlots): string {
   return [
-    ...fixedLength(slots.spells, DECK_SLOT_COUNT),
-    ...fixedLength(slots.passives, DECK_PASSIVE_SLOT_COUNT),
+    ...padToLength(slots.spells, DECK_SLOT_COUNT),
+    ...padToLength(slots.passives, DECK_PASSIVE_SLOT_COUNT),
   ]
     .map(iconId => String(iconId ?? 0))
     .join('-');
