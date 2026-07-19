@@ -102,6 +102,18 @@ describe('describeImportResult', () => {
     expect(report.message).toContain('inconnus : 812, 913');
   });
 
+  it('n affiche qu une fois un identifiant inconnu repete, mais le compte deux fois', () => {
+    const result = emptyResult();
+    for (let i = 0; i < 10; i++) result.spells[i] = { spellId: `S${i}` };
+    result.unresolvedSpellIcons = [99999, 99999];
+
+    const report = describeImportResult(result);
+    // Deux slots ont bien echoue : le denominateur reste a 12.
+    expect(report.message).toContain('10/12 sorts');
+    expect(report.message).toContain('inconnus : 99999');
+    expect(report.message).not.toContain('99999, 99999');
+  });
+
   it('signale les doublons separement des inconnus', () => {
     const result = emptyResult();
     for (let i = 0; i < 11; i++) result.spells[i] = { spellId: `S${i}` };

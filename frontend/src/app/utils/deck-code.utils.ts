@@ -137,12 +137,15 @@ export function describeImportResult(result: DeckCodeImportResult): DeckCodeRepo
 
   const counts = `${spellsPlaced}/${spellsTotal} sorts et ${passivesPlaced}/${passivesTotal} passifs importés`;
 
+  // Les listes affichees sont dedupliquees, pas les compteurs : si un meme ID inconnu
+  // occupe deux slots, deux slots ont bien echoue (le denominateur le dit), mais l'usager
+  // n'a qu'un seul identifiant a corriger, et le lire deux fois n'aide pas.
   const problems: string[] = [];
-  const unknown = [...result.unresolvedSpellIcons, ...result.unresolvedPassiveIcons];
+  const unknown = [...new Set([...result.unresolvedSpellIcons, ...result.unresolvedPassiveIcons])];
   if (unknown.length > 0) {
     problems.push(`inconnus : ${unknown.join(', ')}`);
   }
-  const duplicates = [...result.duplicateSpellIcons, ...result.duplicatePassiveIcons];
+  const duplicates = [...new Set([...result.duplicateSpellIcons, ...result.duplicatePassiveIcons])];
   if (duplicates.length > 0) {
     problems.push(`en double : ${duplicates.join(', ')}`);
   }

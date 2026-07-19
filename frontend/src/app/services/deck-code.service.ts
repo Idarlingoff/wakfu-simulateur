@@ -7,14 +7,17 @@
 
 import { Injectable, inject } from '@angular/core';
 import { DataCacheService } from './data-cache.service';
-import { PassiveReference, SpellReference } from '../models/build.model';
+import { Passive } from '../models/passive.model';
+import { Spell } from '../models/spell.model';
 import { DeckCodeImportResult, parseDeckCode } from '../utils/deck-code.utils';
 
-/** Vue minimale commune aux sorts et aux passifs, seul ce qui sert a la resolution. */
-interface IconEntry {
-  id: string;
-  iconId?: number;
-}
+/**
+ * Vue minimale commune aux sorts et aux passifs, seul ce qui sert a la resolution.
+ *
+ * Derive des modeles reels plutot que redeclare : si `Spell.iconId` etait renomme, la
+ * compilation casserait ici au lieu de laisser le decodage echouer silencieusement.
+ */
+type IconEntry = Pick<Spell, 'id' | 'iconId'> | Pick<Passive, 'id' | 'iconId'>;
 
 function indexByIcon(entries: ReadonlyArray<IconEntry>): Map<number, IconEntry> {
   const index = new Map<number, IconEntry>();
@@ -86,10 +89,10 @@ export class DeckCodeService {
 
     return {
       spells: spellEntries.map(entry =>
-        entry ? ({ spellId: entry.id, iconId: entry.iconId } as SpellReference) : null,
+        entry ? { spellId: entry.id, iconId: entry.iconId } : null,
       ),
       passives: passiveEntries.map(entry =>
-        entry ? ({ passiveId: entry.id, iconId: entry.iconId } as PassiveReference) : null,
+        entry ? { passiveId: entry.id, iconId: entry.iconId } : null,
       ),
       unresolvedSpellIcons,
       unresolvedPassiveIcons,

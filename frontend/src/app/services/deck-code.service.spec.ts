@@ -8,16 +8,22 @@ import { Passive } from '../models/passive.model';
 const REFERENCE =
   '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
 
-/** Sorts Xélor minimaux : seuls `id` et `iconId` comptent pour la resolution. */
-const SPELL_ICONS: ReadonlyArray<[string, number]> = [
+/**
+ * Sorts Xélor minimaux : seuls `id` et `iconId` comptent pour la resolution.
+ *
+ * `XEL_SANS_ICONE` n'a pas d'iconId : `Spell.iconId` est optionnel, donc c'est une forme
+ * de donnee reelle, et l'index doit l'ignorer sans perturber le reste.
+ */
+const SPELL_ICONS: ReadonlyArray<[string, number | undefined]> = [
   ['XEL_DEVOUEMENT', 2839], ['XEL_REGULATEUR', 5344], ['XEL_POINTE_HEURE', 767],
   ['XEL_RETOUR_SPONTANE', 771], ['XEL_TEMPUS_FUGIT', 765], ['XEL_SYMETRIE', 772],
   ['XEL_SINISTRO', 777], ['XEL_ROUAGE', 766], ['XEL_DESYNCHRO', 1417],
   ['XEL_HORLOGE', 763], ['XEL_RALENTISSEMENT', 775], ['XEL_PREMONITION', 757],
   ['XEL_DIAL', 5345], ['XEL_DISTO', 7794], ['XEL_VDT', 3909],
+  ['XEL_SANS_ICONE', undefined],
 ];
 
-const PASSIVE_ICONS: ReadonlyArray<[string, number]> = [
+const PASSIVE_ICONS: ReadonlyArray<[string, number | undefined]> = [
   ['XEL_MAITRE_HORLOGER', 758], ['XEL_COURS_TEMPS', 785], ['XEL_TEMPORISATION', 7190],
   ['XEL_ACCELERATION', 7191], ['XEL_REMONTOIR', 7192], ['XEL_CONNAISSANCE_PASSE', 7186],
 ];
@@ -51,6 +57,7 @@ describe('DeckCodeService.decode', () => {
     const result = await service().decode(REFERENCE, 'XEL');
 
     expect(cache.getSpells).toHaveBeenCalledWith('XEL');
+    expect(cache.getPassives).toHaveBeenCalledWith('XEL');
     expect(result.spells.length).toBe(12);
     expect(result.spells[0]).toEqual({ spellId: 'XEL_DEVOUEMENT', iconId: 2839 });
     expect(result.spells[8]).toEqual({ spellId: 'XEL_DESYNCHRO', iconId: 1417 });
@@ -77,6 +84,30 @@ describe('DeckCodeService.decode', () => {
     expect(result.spells[2]).toEqual({ spellId: 'XEL_POINTE_HEURE', iconId: 767 });
     expect(result.spells[3]).toBeNull();
     expect(result.duplicateSpellIcons).toEqual([767]);
+  });
+
+  it('partage le registre des doublons entre sorts et passifs', async () => {
+    // 757 (XEL_PREMONITION) occupe deja le slot de sort 11. Reutilise en case de passif,
+    // il doit etre signale comme DOUBLON, pas comme inconnu : c'est ce qui prouve que le
+    // registre `used` couvre les deux rangees. Documente aussi l'ordre garanti : les
+    // sorts sont resolus en premier, donc ils gagnent toute collision inter-rangees.
+    const code = REFERENCE.replace('-758-785-', '-757-785-');
+    const result = await service().decode(code, 'XEL');
+
+    expect(result.spells[11]).toEqual({ spellId: 'XEL_PREMONITION', iconId: 757 });
+    expect(result.passives[0]).toBeNull();
+    expect(result.duplicatePassiveIcons).toEqual([757]);
+    expect(result.unresolvedPassiveIcons).toEqual([]);
+  });
+
+  it('ignore une entree sans iconId sans perturber la resolution', async () => {
+    // `iconId` est optionnel sur Spell/Passive : une entree sans icone ne doit ni entrer
+    // dans l'index ni empecher le code de reference de se resoudre entierement.
+    const result = await service().decode(REFERENCE, 'XEL');
+
+    expect(result.spells.every(s => s !== null)).toBeTrue();
+    expect(result.spells.map(s => s?.spellId)).not.toContain('XEL_SANS_ICONE');
+    expect(result.unresolvedSpellIcons).toEqual([]);
   });
 
   it('ne fait pas de repli croise : un ID de passif dans une case de sort est inconnu', async () => {
