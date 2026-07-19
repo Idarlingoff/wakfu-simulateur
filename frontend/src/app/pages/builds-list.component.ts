@@ -4,6 +4,7 @@ import { BuildService } from '../services/build.service';
 import { UiButtonComponent } from '../ui/ui-button.component';
 import { IconComponent } from '../ui/icon.component';
 import { Build } from '../models/build.model';
+import { DEMO_BUILD_ID } from '../services/demo-data.service';
 
 @Component({
   selector: 'app-builds-list',
@@ -13,7 +14,7 @@ import { Build } from '../models/build.model';
     <section class="builds">
       <header class="builds-head">
         <h1>Builds</h1>
-        <button ui-button variant="primary" (click)="createBuild()">
+        <button ui-button variant="primary" (click)="createBuild()" data-tour="builds-nouveau">
           <ui-icon name="user"></ui-icon> Nouveau build
         </button>
       </header>
@@ -39,8 +40,10 @@ import { Build } from '../models/build.model';
               </div>
               <div class="card-actions">
                 <button ui-button variant="ghost" (click)="selectBuild(build)" [attr.aria-label]="'Sélectionner ' + build.name">Sélectionner</button>
-                <button ui-button variant="ghost" (click)="editBuild(build)" [attr.aria-label]="'Modifier ' + build.name">Modifier</button>
-                <button ui-button variant="danger" (click)="deleteBuild(build)" [attr.aria-label]="'Supprimer ' + build.name">Supprimer</button>
+                @if (!isDemo(build)) {
+                  <button ui-button variant="ghost" (click)="editBuild(build)" [attr.aria-label]="'Modifier ' + build.name">Modifier</button>
+                  <button ui-button variant="danger" (click)="deleteBuild(build)" [attr.aria-label]="'Supprimer ' + build.name">Supprimer</button>
+                }
               </div>
             </article>
           }
@@ -88,5 +91,14 @@ export class BuildsListComponent {
     if (window.confirm(`Supprimer le build « ${build.name} » ?`)) {
       this.buildService.deleteBuild(build.id);
     }
+  }
+
+  /**
+   * Le build de demo n'existe qu'en memoire : ouvrir l'editeur dessus donnerait un ecran
+   * incoherent, et le supprimer n'aurait rien a supprimer. On retire les deux actions
+   * plutot que de rattraper le probleme apres coup.
+   */
+  protected isDemo(build: Build): boolean {
+    return build.id === DEMO_BUILD_ID;
   }
 }

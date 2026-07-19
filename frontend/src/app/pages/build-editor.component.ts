@@ -90,7 +90,7 @@ function emptyForm(): FormBuild {
             </div>
           </section>
 
-          <section class="card">
+          <section class="card" data-tour="code-deck">
             <h2>Code deck</h2>
             <p class="deck-help">
               Colle un code deck du jeu pour remplir sorts et passifs d'un coup, ou copie
