@@ -1,4 +1,4 @@
-import { Component, inject, computed, output, effect, input, signal, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, inject, computed, output, effect, input, signal, AfterViewInit, OnDestroy, ViewChild, ElementRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TimelineService } from '../services/timeline.service';
 import { BuildService } from '../services/build.service';
@@ -15,6 +15,15 @@ import { DataCacheService } from '../services/data-cache.service';
 import { StatsCalculatorService } from '../services/calculators/stats-calculator.service';
 import {getMechanismDisplayName, getMechanismImagePath, isSpellMechanism, getSpellMechanismType} from '../utils/mechanism-utils';
 import { getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
+import {
+  parseSpellShortcut,
+  resolveShortcutSpell,
+  shortcutRowSize,
+  shortcutLabelForIndex,
+  innateShortcutLabel,
+  deckSlotSpells,
+  DECK_ROW_SIZE,
+} from '../utils/spell-shortcuts.utils';
 
 interface BoardCell {
   x: number;
@@ -295,29 +304,42 @@ const BOARD_GAP = 1;
         <!-- PANNEAU SORTS -->
         <aside class="spells-panel">
 
-          <!-- Sorts du build : groupés par élément en mode timeline, grille plate sinon -->
-          @if (buildSpells().length > 0) {
-            @if (mode() === 'timeline') {
-              <div class="spell-group" *ngFor="let group of spellsByElement()">
-                <div class="spell-group-label">{{ group.label }}</div>
-                <div class="spell-grid">
-                  <ng-container *ngFor="let spell of group.spells">
-                    <ng-container *ngTemplateOutlet="spellCard; context: { $implicit: spell }"></ng-container>
-                  </ng-container>
+          <!-- Avec un build : la barre de sorts (2 rangees de 6, ordre du deck), pour que
+               l'ordre visuel et les raccourcis coincident. Sinon : tri par element. -->
+          @if (deckRows().length > 0) {
+            <div class="deck-rows">
+              @for (row of deckRows(); track $index; let r = $index) {
+                <div class="spell-grid deck-row">
+                  @for (slot of row; track $index; let c = $index) {
+                    @if (slot) {
+                      <ng-container
+                        *ngTemplateOutlet="spellCard; context: { $implicit: slot, shortcut: deckSlotLabel(r, c) }"
+                      ></ng-container>
+                    } @else {
+                      <div class="spell-icon-card empty-slot" title="Emplacement vide">
+                        <span class="shortcut-badge">{{ deckSlotLabel(r, c) }}</span>
+                      </div>
+                    }
+                  }
                 </div>
-              </div>
-            } @else {
+              }
+            </div>
+          } @else if (buildSpells().length > 0) {
+            <div class="spell-group" *ngFor="let group of spellsByElement()">
+              <div class="spell-group-label">{{ group.label }}</div>
               <div class="spell-grid">
-                <ng-container *ngFor="let spell of buildSpells()">
-                  <ng-container *ngTemplateOutlet="spellCard; context: { $implicit: spell }"></ng-container>
+                <ng-container *ngFor="let spell of group.spells">
+                  <ng-container
+                    *ngTemplateOutlet="spellCard; context: { $implicit: spell, shortcut: shortcutLabels().get(spell.id) }"
+                  ></ng-container>
                 </ng-container>
               </div>
-            }
+            </div>
           } @else {
             <ng-container *ngTemplateOutlet="noSpells"></ng-container>
           }
 
-          <ng-template #spellCard let-spell>
+          <ng-template #spellCard let-spell let-shortcut="shortcut">
             <div
               class="spell-icon-card"
               [class.selected]="selectedSpellId() === spell.id"
@@ -338,6 +360,7 @@ const BOARD_GAP = 1;
                 </span>
               </div>
               <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+              <span class="shortcut-badge" *ngIf="shortcut">{{ shortcut }}</span>
             </div>
           </ng-template>
 
@@ -366,6 +389,7 @@ const BOARD_GAP = 1;
                   </span>
                 </div>
                 <div class="selected-ring" *ngIf="selectedSpellId() === spell.id"></div>
+                <span class="shortcut-badge" *ngIf="shortcutLabels().get(spell.id)">{{ shortcutLabels().get(spell.id) }}</span>
               </div>
             </div>
           </div>
@@ -1098,6 +1122,31 @@ const BOARD_GAP = 1;
       border-color: #ffd166;
       animation: ringPulseGold 1.5s ease-in-out infinite;
     }
+
+    .deck-rows { display: flex; flex-direction: column; gap: 8px; }
+    .deck-row { display: flex; gap: 6px; }
+    .empty-slot {
+      opacity: 0.35;
+      border: 1px dashed var(--app-border);
+      background: transparent;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .shortcut-badge {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      padding: 0 4px;
+      border-radius: 4px;
+      background: rgba(0, 0, 0, 0.65);
+      color: #fff;
+      font-size: 10px;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+    .empty-slot .shortcut-badge { position: static; background: none; opacity: 0.8; }
 
     @keyframes ringPulseGold {
       0%, 100% { box-shadow: 0 0 6px rgba(255, 209, 102, 0.4); }
@@ -2191,6 +2240,68 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
       .filter((s): s is Spell => !!s);
   });
 
+  /**
+   * Les sorts adressables au clavier, dans l'ordre des raccourcis.
+   * Avec un build : les emplacements du deck, trous preserves (index = numero
+   * d'emplacement). Sans build : l'ordre affiche, limite a 12.
+   */
+  shortcutSpells = computed<(Spell | null)[]>(() => {
+    const build = this.buildService.selectedBuildA();
+    const cache = this.spellsCache();
+    if (build) {
+      return deckSlotSpells(build.spellBar.spells, (id: string) => cache.get(id));
+    }
+    // Sans build, les raccourcis suivent l'ORDRE AFFICHE (tri par element), sinon les
+    // badges paraitraient tires au hasard : ils viendraient de l'ordre du cache alors
+    // que les cartes sont rangees par element.
+    return this.spellsByElement().flatMap(group => group.spells);
+  });
+
+  /**
+   * Sorts par rangee. Le deck garde 6 (comme en jeu, touche = emplacement). Sans build,
+   * on coupe la liste affichee en deux : 15 sorts -> 8 puis 7, et cela suit le total.
+   */
+  shortcutRowSize = computed<number>(() =>
+    this.buildService.selectedBuildA()
+      ? DECK_ROW_SIZE
+      : shortcutRowSize(this.shortcutSpells().length),
+  );
+
+  /** Le deck decoupe en rangees de 6, pour l'affichage facon barre de sorts. */
+  deckRows = computed<(Spell | null)[][]>(() => {
+    // La barre de deck n'a de sens qu'avec un build : elle reproduit SES emplacements.
+    // Sans build, on rend la liste vide pour laisser le tri par element s'afficher.
+    if (!this.buildService.selectedBuildA()) {
+      return [];
+    }
+    const slots = this.shortcutSpells();
+    const rows: (Spell | null)[][] = [];
+    for (let i = 0; i < slots.length; i += DECK_ROW_SIZE) {
+      rows.push(slots.slice(i, i + DECK_ROW_SIZE));
+    }
+    return rows;
+  });
+
+  /** spellId -> libelle du raccourci ('1', 'alt+4', 'ctrl+2'), pour les badges. */
+  shortcutLabels = computed<Map<string, string>>(() => {
+    const labels = new Map<string, string>();
+    const rowSize = this.shortcutRowSize();
+    this.shortcutSpells().forEach((spell, index) => {
+      if (spell) {
+        labels.set(spell.id, shortcutLabelForIndex(index, rowSize));
+      }
+    });
+    this.innateSpells().forEach((spell, index) => {
+      labels.set(spell.id, innateShortcutLabel(index));
+    });
+    return labels;
+  });
+
+  /** Libelle du raccourci d'un emplacement du deck, y compris vide. */
+  deckSlotLabel(rowIndex: number, colIndex: number): string {
+    return shortcutLabelForIndex(rowIndex * DECK_ROW_SIZE + colIndex, DECK_ROW_SIZE);
+  }
+
   currentStep = computed(() => {
     const timeline = this.currentTimeline();
     if (!timeline) return null;
@@ -2315,6 +2426,31 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     }
 
     this.spellsCache.set(cache);
+  }
+
+  /**
+   * Raccourcis clavier facon Wakfu : selectionne le sort, exactement comme un clic sur
+   * sa carte. La case cible reste choisie a la souris — aucun nouveau chemin de lancement.
+   */
+  @HostListener('window:keydown', ['$event'])
+  onSpellShortcut(event: KeyboardEvent): void {
+    const shortcut = parseSpellShortcut(event);
+    if (!shortcut) {
+      return;
+    }
+    const spell = resolveShortcutSpell(
+      shortcut,
+      this.shortcutSpells(),
+      this.innateSpells(),
+      this.shortcutRowSize(),
+    );
+    if (!spell) {
+      return;
+    }
+    // preventDefault seulement quand un raccourci a ete reconnu ET resolu, pour ne pas
+    // neutraliser des frappes qui ne nous concernent pas.
+    event.preventDefault();
+    this.onSelectSpell(spell);
   }
 
   onSelectSpell(spell: Spell): void {
