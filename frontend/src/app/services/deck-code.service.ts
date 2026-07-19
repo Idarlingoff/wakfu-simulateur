@@ -1,8 +1,14 @@
 /**
  * Traduit un code deck du jeu en references de sorts et de passifs, et inversement.
  *
- * La cle de correspondance est `iconId`, l'ID de jeu present dans nos donnees. Il est
- * unique dans la table des sorts comme dans celle des passifs, ce qui rend l'index sur.
+ * La cle de correspondance est `iconId`, l'ID de jeu present dans nos donnees. Son
+ * unicite n'est pas qu'une observation sur les donnees actuelles : elle est garantie
+ * en base par les contraintes `uq_spell_class_icon` et `uq_passive_class_icon`
+ * (backend/src/main/resources/sql/creation_tables_{spells,passifs}.sql), ce qui rend
+ * l'index sur. La portee est `(class_id, icon_id)` et non `icon_id` seul, ce qui suffit
+ * ici puisque `decode` et `encode` ne chargent qu'une classe a la fois : un doublon
+ * intra-classe est rejete a l'insertion plutot que de degenerer silencieusement en une
+ * selection arbitraire (dernier ecrit gagne dans la Map).
  */
 
 import { Injectable, inject } from '@angular/core';

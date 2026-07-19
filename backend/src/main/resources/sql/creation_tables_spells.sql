@@ -23,7 +23,12 @@ CREATE TABLE spell (
                        ratio_eval_mode  VARCHAR(16) NOT NULL DEFAULT 'STEP', -- STEP|LINEAR
                        icon_id          INT,
                        is_aoe           BOOLEAN NOT NULL DEFAULT FALSE,   -- TRUE si le sort fait des dégâts de zone
-                       CONSTRAINT ck_spell_type CHECK (spell_type IN ('ELEMENTAL','NEUTRAL','INNATE'))
+                       CONSTRAINT ck_spell_type CHECK (spell_type IN ('ELEMENTAL','NEUTRAL','INNATE')),
+    -- L'import/export de code deck indexe les sorts par icon_id, classe par classe
+    -- (deck-code.service.ts, indexByIcon). Sans cette contrainte, deux sorts d'une
+    -- meme classe partageant un icon_id feraient degenerer le decodage en un choix
+    -- arbitraire (dernier ecrit gagne dans la Map), sans aucun diagnostic.
+                       CONSTRAINT uq_spell_class_icon UNIQUE (class_id, icon_id)
 );
 
 CREATE TABLE spell_ratio_breakpoint (
