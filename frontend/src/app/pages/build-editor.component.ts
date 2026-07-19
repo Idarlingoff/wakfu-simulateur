@@ -12,7 +12,7 @@ import { removeInnateSpellsFromSelection } from '../utils/innate-spells.utils';
 import { newEntityId } from '../utils/entity-id.utils';
 import { DeckCodeService } from '../services/deck-code.service';
 import { DeckCodeFormatError, DeckCodeImportResult, DeckCodeReport, describeImportResult } from '../utils/deck-code.utils';
-import { isPassiveSlotUnlocked } from '../utils/passive-slots.utils';
+import { prunePassivesForLevel } from '../utils/passive-slots.utils';
 
 interface FormBuild {
   name: string;
@@ -76,7 +76,7 @@ function emptyForm(): FormBuild {
             </div>
             <div class="field">
               <label>Niveau</label>
-              <select [(ngModel)]="form.characterLevel" name="level">
+              <select [ngModel]="form.characterLevel" (ngModelChange)="onLevelChange($event)" name="level">
                 @for (l of levels; track l) { <option [ngValue]="l">{{ l }}</option> }
               </select>
             </div>
@@ -290,6 +290,19 @@ export class BuildEditorComponent implements OnDestroy {
     return this.classOptions.find(c => c.id === this.form.classId)?.name ?? '—';
   }
 
+  /**
+   * Le niveau conditionne les emplacements de passifs deverrouilles : on vide ici ceux qui
+   * viennent de se verrouiller, avant de propager le niveau au selecteur.
+   *
+   * Cette regle appartient au parent, qui possede `form.passives` : la faire appliquer par
+   * le selecteur l'obligerait a emettre depuis son `ngOnChanges`, en pleine detection de
+   * changement, et le parent modifierait alors un binding deja verifie (NG0100).
+   */
+  onLevelChange(level: number): void {
+    this.form.characterLevel = level;
+    this.form.passives = prunePassivesForLevel(this.form.passives, level);
+  }
+
   onSpellsChange(spells: (SpellReference | null)[]): void { this.form.spells = spells; }
   onPassivesChange(passives: (PassiveReference | null)[]): void { this.form.passives = passives; }
   onSublimationsChange(subs: (Sublimation | null)[]): void { this.form.sublimations = subs; }
@@ -335,9 +348,7 @@ export class BuildEditorComponent implements OnDestroy {
     // Le code deck porte toujours 6 passifs, mais un personnage de bas niveau n'a pas
     // encore debloque tous les emplacements. Sans ce filtre, un passif resterait dans un
     // emplacement que le selecteur n'affiche pas, et save() le persisterait quand meme.
-    const passives = result.passives.map((passive, index) =>
-      passive !== null && !isPassiveSlotUnlocked(index, this.form.characterLevel) ? null : passive,
-    );
+    const passives = prunePassivesForLevel(result.passives, this.form.characterLevel);
     const lockedOut = result.passives.filter((p, i) => p !== null && passives[i] === null).length;
 
     this.onSpellsChange(result.spells);

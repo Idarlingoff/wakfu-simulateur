@@ -112,6 +112,38 @@ describe('BuildEditorComponent', () => {
     expect(stub.updateBuild).not.toHaveBeenCalled();
   });
 
+  it('baisser le niveau vide les emplacements de passifs verrouilles', () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.passives = [
+      { passiveId: 'XEL_P0' }, { passiveId: 'XEL_P1' }, { passiveId: 'XEL_P2' },
+      { passiveId: 'XEL_P3' }, { passiveId: 'XEL_P4' }, null,
+    ];
+
+    // Niveau 50 : seuls les emplacements 0, 1 et 2 sont deverrouilles (20/35/50).
+    cmp.onLevelChange(50);
+
+    expect(cmp.form.characterLevel).toBe(50);
+    expect(cmp.form.passives.map(p => p?.passiveId ?? null))
+      .toEqual(['XEL_P0', 'XEL_P1', 'XEL_P2', null, null, null]);
+  });
+
+  it('monter le niveau conserve les passifs deja places', () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.characterLevel = 50;
+    cmp.form.passives = [{ passiveId: 'XEL_P0' }, null, null, null, null, null];
+
+    cmp.onLevelChange(200);
+
+    expect(cmp.form.passives.map(p => p?.passiveId ?? null))
+      .toEqual(['XEL_P0', null, null, null, null, null]);
+  });
+
   it('save sans nom/classe n appelle ni create ni update', () => {
     configure(null);
     spyOn(window, 'alert');

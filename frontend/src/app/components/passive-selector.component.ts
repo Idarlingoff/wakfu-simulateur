@@ -563,17 +563,9 @@ export class PassiveSelectorComponent implements OnChanges {
       console.log('[PassiveSelector] ngOnChanges - Nouvelle classId:', changes['classId'].currentValue, '(ancienne:', changes['classId'].previousValue, ')');
       this.loadPassives();
     }
-
-    // Si le niveau change, on vérifie s'il faut retirer des passifs des emplacements verrouillés
-    if (changes['characterLevel'] && !changes['characterLevel'].isFirstChange()) {
-      const newLevel = changes['characterLevel'].currentValue;
-      const oldLevel = changes['characterLevel'].previousValue;
-
-      if (newLevel < oldLevel) {
-        // Le niveau a diminué, vérifier si des passifs sont dans des emplacements maintenant verrouillés
-        this.removePassivesFromLockedSlots();
-      }
-    }
+    // Le vidage des emplacements verrouillés quand le niveau baisse appartient au parent, qui
+    // possède la barre de passifs (voir prunePassivesForLevel). L'appliquer ici obligerait à
+    // émettre passivesChange en pleine détection de changement, ce qui remonte une NG0100.
   }
 
   openModal(): void {
@@ -707,26 +699,6 @@ export class PassiveSelectorComponent implements OnChanges {
 
   countSelected(): number {
     return this.selectedPassives.filter(p => p !== null).length;
-  }
-
-  /**
-   * Retire les passifs des emplacements verrouillés si le niveau du personnage diminue
-   */
-  private removePassivesFromLockedSlots(): void {
-    const newPassives = [...this.selectedPassives];
-    let hasChanges = false;
-
-    for (let i = 0; i < newPassives.length; i++) {
-      if (newPassives[i] !== null && !this.isSlotAvailable(i)) {
-        console.log(`[PassiveSelector] Retrait du passif de l'emplacement ${i} (niveau ${PASSIVE_UNLOCK_LEVELS[i]} > ${this.characterLevel})`);
-        newPassives[i] = null;
-        hasChanges = true;
-      }
-    }
-
-    if (hasChanges) {
-      this.passivesChange.emit(newPassives);
-    }
   }
 }
 
