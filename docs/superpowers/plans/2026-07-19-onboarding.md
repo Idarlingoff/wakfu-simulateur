@@ -29,6 +29,21 @@ Trois ajustements décidés après lecture du code :
    répéter ce motif ailleurs.
 3. **`activate()` est asynchrone**, conséquence directe du point 2.
 
+4. **Correction apportée en cours d'exécution — la Task 2 ci-dessous est incomplète.**
+   Telle qu'écrite, elle ne superpose que `allBuilds` et `allTimelines`. Or toutes les
+   autres lectures interrogent les signaux privés : `selectedBuildA` / `selectedBuildB` /
+   `getBuildById` côté builds, `currentTimeline` / `getTimelineById` / `loadTimeline` côté
+   timelines. Le build de démo apparaissait donc dans les listes tout en restant
+   **insélectionnable**, et la timeline de démo **inchargeable** — si bien que l'écran
+   Résultats, cinquième et dernière étape de la visite, serait resté vide. C'est-à-dire
+   exactement la raison d'être des données de démo.
+
+   La correction route toutes les lectures à travers un accesseur privé unique
+   (`visibleBuilds` / `visibleTimelines`), les écritures continuant de lire les signaux
+   privés. Effet de bord utile : les gardes `isDemoId` sur `updateBuild` et `updateTimeline`
+   deviennent réellement porteuses, alors qu'elles n'étaient jusque-là protégées que par
+   accident — la démo étant absente de la liste privée, le `find` échouait de lui-même.
+
 ## Structure des fichiers
 
 | Fichier | Responsabilité |
