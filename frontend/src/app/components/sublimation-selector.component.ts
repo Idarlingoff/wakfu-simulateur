@@ -537,27 +537,17 @@ export class SublimationSelectorComponent {
     this.currentRarityFilter.set(null);
   }
 
-  async loadSublimations(): Promise<void> {
-    this.loading.set(true);
-    try {
-      // Mock data
-      const mockSublimations: Sublimation[] = [
-        { id: 'subli_1', name: 'Bravoure', rarity: 'classic', stats: { ap: 1 }, description: '+1 PA' },
-        { id: 'subli_2', name: 'Vivacité', rarity: 'classic', stats: { mp: 1 }, description: '+1 PM' },
-        { id: 'subli_3', name: 'Puissance', rarity: 'classic', stats: { mastery: 40 }, description: '+40 Maîtrise' },
-        { id: 'subli_4', name: 'Résistance', rarity: 'classic', stats: { resistance: 40 }, description: '+40 Résistance' },
-        { id: 'subli_5', name: 'Critique', rarity: 'classic', stats: { critRate: 5 }, description: '+5% Critique' },
-        { id: 'subli_6', name: 'Rage', rarity: 'epic', stats: { mastery: 80, critMastery: 40 }, description: '+80 Maîtrise, +40 Maîtrise Crit' },
-        { id: 'subli_7', name: 'Sagesse Ancestrale', rarity: 'relic', stats: { ap: 1, wp: 2 }, description: '+1 PA, +2 PW' },
-      ];
-
-      this.allSublimations.set(mockSublimations);
-      this.filterSublimations();
-    } catch (error) {
-      console.error('Erreur chargement sublimations:', error);
-    } finally {
-      this.loading.set(false);
-    }
+  /**
+   * Les sublimations n'ont pas encore de source de donnees.
+   *
+   * Les sept sublimations mock ont ete retirees : a l'ecran rien ne les distinguait de
+   * vraies donnees, alors qu'elles n'existaient nulle part ailleurs dans le simulateur et
+   * qu'aucun calcul ne les prenait en compte. Le selecteur affiche donc son etat vide en
+   * attendant un backend ou un seed.
+   */
+  loadSublimations(): void {
+    this.allSublimations.set([]);
+    this.filterSublimations();
   }
 
   setFilterRarity(rarity: 'all' | 'classic' | 'epic' | 'relic'): void {

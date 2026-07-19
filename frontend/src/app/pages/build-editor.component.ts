@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnDestroy, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -10,6 +10,9 @@ import { SublimationSelectorComponent } from '../components/sublimation-selector
 import { UiButtonComponent } from '../ui/ui-button.component';
 import { removeInnateSpellsFromSelection } from '../utils/innate-spells.utils';
 import { newEntityId } from '../utils/entity-id.utils';
+import { DeckCodeService } from '../services/deck-code.service';
+import { DeckCodeFormatError, DeckCodeImportResult, DeckCodeReport, describeImportResult } from '../utils/deck-code.utils';
+import { prunePassivesForLevel } from '../utils/passive-slots.utils';
 
 interface FormBuild {
   name: string;
@@ -22,12 +25,16 @@ interface FormBuild {
   sublimations: (Sublimation | null)[];
 }
 
+/**
+ * Classes jouables en tant que BUILD, volontairement limitees au Xelor.
+ *
+ * Seul le Xelor a des sorts et des passifs en base : proposer les autres classes ici
+ * menait a un build vide, sans rien pour l'expliquer. Cette restriction ne vaut QUE pour
+ * le personnage du build ; les alliés et ennemis gardent la liste complete des classes
+ * dans `player-form.component.ts`, ou seule la classe affichee compte.
+ */
 const CLASS_OPTIONS: ReadonlyArray<{ id: string; name: string }> = [
   { id: 'XEL', name: 'Xélor' },
-  { id: 'sacrier', name: 'Sacrier' },
-  { id: 'osamodas', name: 'Osamodas' },
-  { id: 'ecaflip', name: 'Écaflip' },
-  { id: 'enutrof', name: 'Enutrof' },
 ];
 const LEVELS: ReadonlyArray<number> = [20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215, 230, 245];
 
@@ -73,7 +80,7 @@ function emptyForm(): FormBuild {
             </div>
             <div class="field">
               <label>Niveau</label>
-              <select [(ngModel)]="form.characterLevel" name="level">
+              <select [ngModel]="form.characterLevel" (ngModelChange)="onLevelChange($event)" name="level">
                 @for (l of levels; track l) { <option [ngValue]="l">{{ l }}</option> }
               </select>
             </div>
@@ -81,6 +88,38 @@ function emptyForm(): FormBuild {
               <label>Description</label>
               <textarea [(ngModel)]="form.description" name="description" rows="2" placeholder="Notes sur le build…"></textarea>
             </div>
+          </section>
+
+          <section class="card">
+            <h2>Code deck</h2>
+            <p class="deck-help">
+              Colle un code deck du jeu pour remplir sorts et passifs d'un coup, ou copie
+              le tien pour l'exporter.
+            </p>
+            @if (!form.classId) {
+              <p class="deck-help deck-help-warn">Sélectionne d'abord une classe.</p>
+            }
+            <div class="deck-row">
+              <input
+                type="text"
+                class="deck-input"
+                [(ngModel)]="deckCodeInput"
+                name="deckCode"
+                aria-label="Code deck"
+                [disabled]="!form.classId"
+                placeholder="2839-5344-767-771-765-…"
+              />
+              <button ui-button variant="primary" [disabled]="!form.classId" (click)="importDeckCode()">Importer</button>
+              <button ui-button variant="ghost" [disabled]="!form.classId" (click)="copyDeckCode()">
+                {{ deckCodeCopied ? 'Copié ✓' : 'Copier' }}
+              </button>
+            </div>
+            @if (deckCodeFallback) {
+              <input type="text" class="deck-input deck-fallback" [value]="deckCodeFallback" readonly />
+            }
+            @if (deckCodeReport) {
+              <p class="deck-report" [class]="'deck-report-' + deckCodeReport.tone">{{ deckCodeReport.message }}</p>
+            }
           </section>
 
           <section class="card">
@@ -191,18 +230,35 @@ function emptyForm(): FormBuild {
     .sum-mast { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--app-text-muted); }
     .sum-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
     @media (max-width: 860px) { .editor-grid { grid-template-columns: 1fr; } .editor-summary { position: static; } }
+    .deck-help { margin: 0 0 10px; font-size: 13px; color: var(--app-text-muted); }
+    .deck-help-warn { color: var(--app-warning); }
+    .deck-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .deck-input { flex: 1 1 260px; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .deck-fallback { margin-top: 8px; width: 100%; }
+    .deck-report { margin: 10px 0 0; font-size: 13px; }
+    .deck-report-ok { color: var(--app-success); }
+    .deck-report-warn { color: var(--app-warning); }
+    .deck-report-error { color: var(--app-danger); }
   `],
 })
-export class BuildEditorComponent {
+export class BuildEditorComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly buildService = inject(BuildService);
+  private readonly deckCodeService = inject(DeckCodeService);
 
   protected readonly classOptions = CLASS_OPTIONS;
   protected readonly levels = LEVELS;
   editingId: string | null = null;
   form: FormBuild = emptyForm();
+  deckCodeInput = '';
+  deckCodeReport: DeckCodeReport | null = null;
+  deckCodeCopied = false;
+  /** Code affiche en lecture seule quand l'API presse-papier est indisponible. */
+  deckCodeFallback = '';
+  /** Minuterie du badge « Copié ✓ », a nettoyer pour ne pas ecrire dans une vue detruite. */
+  private deckCodeCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -223,13 +279,130 @@ export class BuildEditorComponent {
     }
   }
 
+  ngOnDestroy(): void {
+    this.clearDeckCodeCopiedTimer();
+  }
+
+  private clearDeckCodeCopiedTimer(): void {
+    if (this.deckCodeCopiedTimer !== null) {
+      clearTimeout(this.deckCodeCopiedTimer);
+      this.deckCodeCopiedTimer = null;
+    }
+  }
+
   classLabel(): string {
     return this.classOptions.find(c => c.id === this.form.classId)?.name ?? '—';
+  }
+
+  /**
+   * Le niveau conditionne les emplacements de passifs deverrouilles : on vide ici ceux qui
+   * viennent de se verrouiller, avant de propager le niveau au selecteur.
+   *
+   * Cette regle appartient au parent, qui possede `form.passives` : la faire appliquer par
+   * le selecteur l'obligerait a emettre depuis son `ngOnChanges`, en pleine detection de
+   * changement, et le parent modifierait alors un binding deja verifie (NG0100).
+   */
+  onLevelChange(level: number): void {
+    this.form.characterLevel = level;
+    this.form.passives = prunePassivesForLevel(this.form.passives, level);
   }
 
   onSpellsChange(spells: (SpellReference | null)[]): void { this.form.spells = spells; }
   onPassivesChange(passives: (PassiveReference | null)[]): void { this.form.passives = passives; }
   onSublimationsChange(subs: (Sublimation | null)[]): void { this.form.sublimations = subs; }
+
+  /**
+   * Applique un code deck : remplacement TOTAL des sorts et passifs, comme en jeu.
+   *
+   * Un code invalide ou dont rien n'est reconnu ne touche a rien : vider la barre entiere
+   * sur une faute de frappe serait destructeur.
+   */
+  async importDeckCode(): Promise<void> {
+    if (!this.form.classId) {
+      return;
+    }
+    const code = this.deckCodeInput.trim();
+    if (!code) {
+      this.deckCodeReport = { tone: 'error', message: 'Colle un code deck avant d’importer.' };
+      return;
+    }
+
+    let result: DeckCodeImportResult;
+    try {
+      result = await this.deckCodeService.decode(code, this.form.classId);
+    } catch (error) {
+      this.deckCodeReport = {
+        tone: 'error',
+        message: error instanceof DeckCodeFormatError
+          ? error.message
+          : 'Impossible de charger les données de la classe. Réessaie.',
+      };
+      return;
+    }
+
+    const placed = result.spells.filter(s => s !== null).length + result.passives.filter(p => p !== null).length;
+    if (placed === 0) {
+      this.deckCodeReport = {
+        tone: 'error',
+        message: `Aucun sort ni passif reconnu pour ${this.classLabel()}. Vérifie que le code correspond bien à cette classe.`,
+      };
+      return;
+    }
+
+    // Le code deck porte toujours 6 passifs, mais un personnage de bas niveau n'a pas
+    // encore debloque tous les emplacements. Sans ce filtre, un passif resterait dans un
+    // emplacement que le selecteur n'affiche pas, et save() le persisterait quand meme.
+    const passives = prunePassivesForLevel(result.passives, this.form.characterLevel);
+    const lockedOut = result.passives.filter((p, i) => p !== null && passives[i] === null).length;
+
+    this.onSpellsChange(result.spells);
+    this.onPassivesChange(passives);
+
+    const report = describeImportResult(result);
+    this.deckCodeReport = lockedOut === 0
+      ? report
+      : {
+          tone: report.tone === 'ok' ? 'warn' : report.tone,
+          message: `${report.message} — ${lockedOut} passif(s) ignoré(s) : emplacement verrouillé à ce niveau`,
+        };
+  }
+
+  async copyDeckCode(): Promise<void> {
+    if (!this.form.classId) {
+      return;
+    }
+    const code = await this.deckCodeService.encode(this.form.spells, this.form.passives, this.form.classId);
+
+    // navigator.clipboard est absent hors contexte securise : on ne peut pas se contenter
+    // d'un try/catch, un `await undefined` reussirait silencieusement.
+    const clipboard = navigator.clipboard;
+    if (clipboard?.writeText) {
+      try {
+        await clipboard.writeText(code);
+        this.deckCodeFallback = '';
+        // Sinon le message « sélectionne le code ci-dessous » survit au champ qu'il designe.
+        this.deckCodeReport = null;
+        this.deckCodeCopied = true;
+        // Une seconde copie rapide ne doit pas laisser la minuterie precedente eteindre
+        // le badge en avance.
+        this.clearDeckCodeCopiedTimer();
+        this.deckCodeCopiedTimer = setTimeout(() => {
+          this.deckCodeCopied = false;
+          this.deckCodeCopiedTimer = null;
+        }, 2000);
+        return;
+      } catch {
+        // Permission refusee : on retombe sur le champ manuel.
+      }
+    }
+
+    this.deckCodeFallback = code;
+    this.deckCodeCopied = false;
+    this.deckCodeReport = {
+      tone: 'warn',
+      message: 'Copie automatique indisponible : sélectionne le code ci-dessous et copie-le manuellement.',
+    };
+  }
 
   save(): void {
     if (!this.form.name || !this.form.classId) {

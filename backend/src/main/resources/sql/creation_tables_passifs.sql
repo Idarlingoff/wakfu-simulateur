@@ -7,7 +7,10 @@ CREATE TABLE IF NOT EXISTS passive (
     class_id    VARCHAR(32) NOT NULL,      -- 'XEL'
     name        VARCHAR(128) NOT NULL,
     description CLOB,
-    icon_id     INT
+    icon_id     INT,
+    -- Voir creation_tables_spells.sql : meme garantie pour l'index par icon_id du
+    -- decodage de code deck, les passifs partageant l'espace d'icones des sorts.
+    CONSTRAINT uq_passive_class_icon UNIQUE (class_id, icon_id)
     );
 
 CREATE TABLE IF NOT EXISTS passive_effect (
