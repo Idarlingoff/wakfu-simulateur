@@ -1,8 +1,11 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, NavigationCancel, NavigationEnd } from '@angular/router';
 import { Subject } from 'rxjs';
 import { TourService, TOUR_SEEN_KEY } from './tour.service';
-import { DemoDataService } from './demo-data.service';
+import { BuildService } from './build.service';
+import { DEMO_BUILD_ID, DEMO_TIMELINE_ID, DemoDataService } from './demo-data.service';
+import { TimelineService } from './timeline.service';
 import { TOUR_STEPS } from '../utils/tour-steps';
 
 class StubRouter {
@@ -33,19 +36,38 @@ class StubDemo {
   deactivate = jasmine.createSpy('deactivate');
 }
 
+class StubBuilds {
+  private selected: any = null;
+  selectedBuildA = () => this.selected;
+  getBuildById = jasmine.createSpy('getBuildById').and.callFake((id: string) =>
+    id === DEMO_BUILD_ID ? { id: DEMO_BUILD_ID, name: 'Build de démo' } : { id, name: id });
+  selectBuildA = jasmine.createSpy('selectBuildA').and.callFake((b: any) => { this.selected = b; });
+}
+
+class StubTimelines {
+  currentTimelineId = signal<string | null>(null);
+  loadTimeline = jasmine.createSpy('loadTimeline').and.callFake((id: string) => this.currentTimelineId.set(id));
+}
+
 let router: StubRouter;
 let demo: StubDemo;
+let builds: StubBuilds;
+let timelines: StubTimelines;
 
 function service(): TourService {
   localStorage.removeItem(TOUR_SEEN_KEY);
   router = new StubRouter();
   demo = new StubDemo();
+  builds = new StubBuilds();
+  timelines = new StubTimelines();
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
     providers: [
       TourService,
       { provide: Router, useValue: router },
       { provide: DemoDataService, useValue: demo },
+      { provide: BuildService, useValue: builds },
+      { provide: TimelineService, useValue: timelines },
     ],
   });
   return TestBed.inject(TourService);
@@ -162,6 +184,35 @@ describe('TourService', () => {
     expect(svc.active()).toBeTrue();
     expect(svc.stepIndex()).toBe(2);
     expect(localStorage.getItem(TOUR_SEEN_KEY)).toBeNull();
+  });
+
+  it('selectionne le build et la timeline de demo au demarrage', async () => {
+    const svc = service();
+    await svc.start();
+
+    expect(builds.selectBuildA).toHaveBeenCalledWith(jasmine.objectContaining({ id: DEMO_BUILD_ID }));
+    expect(timelines.loadTimeline).toHaveBeenCalledWith(DEMO_TIMELINE_ID);
+  });
+
+  it('rend a l utilisateur la selection qu il avait avant la visite', async () => {
+    const svc = service();
+    builds.selectBuildA({ id: 'reel-7' });
+    timelines.currentTimelineId.set('tl-3');
+
+    await svc.start();
+    svc.skip();
+
+    expect(builds.selectedBuildA()?.id).toBe('reel-7');
+    expect(timelines.currentTimelineId()).toBe('tl-3');
+  });
+
+  it('rend une selection vide si l utilisateur n avait rien de selectionne', async () => {
+    const svc = service();
+    await svc.start();
+    svc.skip();
+
+    expect(builds.selectedBuildA()).toBeNull();
+    expect(timelines.currentTimelineId()).toBeNull();
   });
 
   it('une navigation pilotee annulee ne bloque pas l abandon suivant', async () => {

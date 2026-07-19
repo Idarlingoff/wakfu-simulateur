@@ -16,7 +16,9 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { NavigationCancel, NavigationEnd, NavigationError, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
-import { DemoDataService } from './demo-data.service';
+import { BuildService } from './build.service';
+import { DEMO_BUILD_ID, DEMO_TIMELINE_ID, DemoDataService } from './demo-data.service';
+import { TimelineService } from './timeline.service';
 import { TOUR_STEPS, TourStep } from '../utils/tour-steps';
 
 export const TOUR_SEEN_KEY = 'wakfu-onboarding-vu';
@@ -25,10 +27,14 @@ export const TOUR_SEEN_KEY = 'wakfu-onboarding-vu';
 export class TourService {
   private readonly router = inject(Router);
   private readonly demo = inject(DemoDataService);
+  private readonly builds = inject(BuildService);
+  private readonly timelines = inject(TimelineService);
 
   private readonly isActive = signal(false);
   private readonly index = signal(0);
   private navigatingSelf = false;
+  private previousBuildId: string | null = null;
+  private previousTimelineId: string | null = null;
 
   readonly active = this.isActive.asReadonly();
   readonly stepIndex = this.index.asReadonly();
@@ -59,6 +65,20 @@ export class TourService {
 
   async start(): Promise<void> {
     await this.demo.activate();
+
+    // Rendre la demo visible ne suffit pas : tant qu'elle n'est pas SELECTIONNEE, les
+    // ecrans Timelines et Resultats affichent leur etat vide, et les deux dernieres etapes
+    // de la visite ne montrent rien. On memorise la selection de l'utilisateur pour la lui
+    // rendre intacte a la fin — la visite emprunte son espace de travail, elle ne le prend pas.
+    this.previousBuildId = this.builds.selectedBuildA()?.id ?? null;
+    this.previousTimelineId = this.timelines.currentTimelineId();
+
+    const demoBuild = this.builds.getBuildById(DEMO_BUILD_ID);
+    if (demoBuild) {
+      this.builds.selectBuildA(demoBuild);
+    }
+    this.timelines.loadTimeline(DEMO_TIMELINE_ID);
+
     this.index.set(0);
     this.isActive.set(true);
     await this.goTo(TOUR_STEPS[0]);
@@ -89,9 +109,25 @@ export class TourService {
   }
 
   finish(): void {
+    // Restaurer avant d'eteindre la demo. L'ordre n'est pas load-bearing aujourd'hui : on
+    // ne rebranche qu'une selection d'AVANT la visite, donc un build reel, toujours
+    // resolvable que la demo soit active ou non. C'est de la prudence, pas une dependance —
+    // le jour ou la restauration touchera un etat que la demo masque, l'ordre comptera.
+    this.restoreSelection();
     this.isActive.set(false);
     this.demo.deactivate();
     this.writeSeen();
+  }
+
+  /** Rend a l'utilisateur exactement ce qu'il avait avant la visite, y compris « rien ». */
+  private restoreSelection(): void {
+    const previousBuild = this.previousBuildId
+      ? this.builds.getBuildById(this.previousBuildId)
+      : undefined;
+    this.builds.selectBuildA(previousBuild ?? null);
+    this.timelines.currentTimelineId.set(this.previousTimelineId);
+    this.previousBuildId = null;
+    this.previousTimelineId = null;
   }
 
   private async goTo(step: TourStep): Promise<void> {
