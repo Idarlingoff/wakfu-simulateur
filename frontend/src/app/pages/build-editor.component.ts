@@ -25,12 +25,16 @@ interface FormBuild {
   sublimations: (Sublimation | null)[];
 }
 
+/**
+ * Classes jouables en tant que BUILD, volontairement limitees au Xelor.
+ *
+ * Seul le Xelor a des sorts et des passifs en base : proposer les autres classes ici
+ * menait a un build vide, sans rien pour l'expliquer. Cette restriction ne vaut QUE pour
+ * le personnage du build ; les alliés et ennemis gardent la liste complete des classes
+ * dans `player-form.component.ts`, ou seule la classe affichee compte.
+ */
 const CLASS_OPTIONS: ReadonlyArray<{ id: string; name: string }> = [
   { id: 'XEL', name: 'Xélor' },
-  { id: 'sacrier', name: 'Sacrier' },
-  { id: 'osamodas', name: 'Osamodas' },
-  { id: 'ecaflip', name: 'Écaflip' },
-  { id: 'enutrof', name: 'Enutrof' },
 ];
 const LEVELS: ReadonlyArray<number> = [20, 35, 50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215, 230, 245];
 
