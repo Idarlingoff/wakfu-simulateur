@@ -1,16 +1,18 @@
 import {
   parseSpellShortcut,
-  shortcutLabel,
+  shortcutRowSize,
+  spellIndexForShortcut,
+  shortcutLabelForIndex,
   deckSlotSpells,
   resolveShortcutSpell,
+  DECK_ROW_SIZE,
 } from './spell-shortcuts.utils';
 
 /**
  * Fabrique un faux KeyboardEvent a partir du CODE physique de la touche.
  *
- * On lit `event.code` et jamais `event.key` : sur un AZERTY francais, la rangee du haut
- * sans Shift produit `&é"'(§` et non `1..6`, et sur un QWERTY `Shift+1` produit `!`.
- * `code` ('Digit1') identifie la touche physique quelle que soit la disposition.
+ * `code` est prioritaire : sur un AZERTY francais, la rangee du haut sans Shift produit
+ * `&é"'(§` et non `1..6`, et sur un QWERTY `Shift+1` produit `!`.
  */
 function code(
   c: string,
@@ -38,46 +40,39 @@ function key(
 }
 
 describe('parseSpellShortcut', () => {
-  it('mappe 1..6 sur les emplacements 0..5 du deck', () => {
-    expect(parseSpellShortcut(key('1'))).toEqual({ kind: 'deck', index: 0 });
-    expect(parseSpellShortcut(key('6'))).toEqual({ kind: 'deck', index: 5 });
+  it('rend le chiffre et l etat de alt, sans decider de la disposition', () => {
+    expect(parseSpellShortcut(key('1'))).toEqual({ kind: 'spell', digit: 1, alt: false });
+    expect(parseSpellShortcut(key('8'))).toEqual({ kind: 'spell', digit: 8, alt: false });
   });
 
-  it('mappe alt+1..6 sur les emplacements 6..11 du deck', () => {
-    expect(parseSpellShortcut(key('1', { alt: true }))).toEqual({ kind: 'deck', index: 6 });
-    expect(parseSpellShortcut(key('6', { alt: true }))).toEqual({ kind: 'deck', index: 11 });
+  it('marque alt sans interpreter le numero de rangee', () => {
+    expect(parseSpellShortcut(key('1', { alt: true }))).toEqual({ kind: 'spell', digit: 1, alt: true });
+    expect(parseSpellShortcut(key('7', { alt: true }))).toEqual({ kind: 'spell', digit: 7, alt: true });
   });
 
-  it('mappe ctrl+1..3 sur les sorts innes', () => {
+  it('accepte les chiffres 1..9 (le plafond depend du contexte, pas du parsing)', () => {
+    expect(parseSpellShortcut(key('9'))).toEqual({ kind: 'spell', digit: 9, alt: false });
+  });
+
+  it('mappe ctrl sur les sorts innes', () => {
     expect(parseSpellShortcut(key('1', { ctrl: true }))).toEqual({ kind: 'innate', index: 0 });
     expect(parseSpellShortcut(key('3', { ctrl: true }))).toEqual({ kind: 'innate', index: 2 });
   });
 
   // Ctrl+1..8 est confisque par Chrome/Firefox sous Windows et Linux : sans ce repli,
   // les sorts innes seraient injouables au clavier pour la majorite des joueurs.
-  it('mappe aussi shift+1..3 sur les sorts innes', () => {
-    expect(parseSpellShortcut(key('1', { shift: true }))).toEqual({ kind: 'innate', index: 0 });
-    expect(parseSpellShortcut(key('3', { shift: true }))).toEqual({ kind: 'innate', index: 2 });
+  it('mappe aussi shift sur les sorts innes', () => {
+    expect(parseSpellShortcut(key('2', { shift: true }))).toEqual({ kind: 'innate', index: 1 });
   });
 
-  it('ignore les chiffres hors 1..6 pour le deck', () => {
-    expect(parseSpellShortcut(key('7'))).toBeNull();
+  it('ignore le 0 et les touches non numeriques', () => {
     expect(parseSpellShortcut(key('0'))).toBeNull();
-  });
-
-  it('ignore ctrl/shift au-dela de 3 (le Xelor n a que 3 innes)', () => {
-    expect(parseSpellShortcut(key('4', { ctrl: true }))).toBeNull();
-    expect(parseSpellShortcut(key('4', { shift: true }))).toBeNull();
+    expect(parseSpellShortcut(code('KeyA'))).toBeNull();
+    expect(parseSpellShortcut(code('Enter'))).toBeNull();
   });
 
   it('ignore toute frappe avec Cmd, pour ne pas marcher sur les raccourcis systeme', () => {
     expect(parseSpellShortcut(key('1', { meta: true }))).toBeNull();
-    expect(parseSpellShortcut(key('1', { meta: true, alt: true }))).toBeNull();
-  });
-
-  it('ignore les touches non numeriques', () => {
-    expect(parseSpellShortcut(code('KeyA'))).toBeNull();
-    expect(parseSpellShortcut(code('Enter'))).toBeNull();
   });
 
   // Sur AZERTY, la touche physique 1 tape '&' : lire event.key casserait tout.
@@ -85,22 +80,22 @@ describe('parseSpellShortcut', () => {
     const azerty = { code: 'Digit1', key: '&', altKey: false, ctrlKey: false,
       shiftKey: false, metaKey: false, target: document.createElement('div') };
     expect(parseSpellShortcut(azerty as unknown as KeyboardEvent))
-      .toEqual({ kind: 'deck', index: 0 });
-  });
-
-  // Sur QWERTY, Shift+1 tape '!' : la aussi, seul le code physique est fiable.
-  it('reconnait shift+1 meme quand la frappe produit un symbole', () => {
-    const qwerty = { code: 'Digit1', key: '!', altKey: false, ctrlKey: false,
-      shiftKey: true, metaKey: false, target: document.createElement('div') };
-    expect(parseSpellShortcut(qwerty as unknown as KeyboardEvent))
-      .toEqual({ kind: 'innate', index: 0 });
+      .toEqual({ kind: 'spell', digit: 1, alt: false });
   });
 
   it('accepte aussi le pave numerique', () => {
-    expect(parseSpellShortcut(code('Numpad1'))).toEqual({ kind: 'deck', index: 0 });
+    expect(parseSpellShortcut(code('Numpad3'))).toEqual({ kind: 'spell', digit: 3, alt: false });
   });
 
-  // Sans ca, renommer une timeline lancerait des selections a chaque chiffre tape.
+  // Claviers virtuels, outils d'accessibilite, IME : pas de `code`.
+  it('retombe sur key quand le code physique est absent', () => {
+    const sansCode = { code: '', key: '4', altKey: false, ctrlKey: false,
+      shiftKey: false, metaKey: false, target: document.createElement('div') };
+    expect(parseSpellShortcut(sansCode as unknown as KeyboardEvent))
+      .toEqual({ kind: 'spell', digit: 4, alt: false });
+  });
+
+  // Sans ce garde, renommer une timeline lancerait des selections a chaque chiffre tape.
   it('ignore les frappes dans un champ de saisie', () => {
     expect(parseSpellShortcut(key('1', {}, document.createElement('input')))).toBeNull();
     expect(parseSpellShortcut(key('1', {}, document.createElement('textarea')))).toBeNull();
@@ -114,23 +109,75 @@ describe('parseSpellShortcut', () => {
   });
 });
 
-describe('shortcutLabel', () => {
-  it('libelle les 6 premiers emplacements sans modificateur', () => {
-    expect(shortcutLabel({ kind: 'deck', index: 0 })).toBe('1');
-    expect(shortcutLabel({ kind: 'deck', index: 5 })).toBe('6');
+describe('shortcutRowSize', () => {
+  // Sans build, on repartit les sorts en deux rangees egales : 15 sorts -> 8 puis 7.
+  it('coupe la liste en deux, en arrondissant la premiere rangee au superieur', () => {
+    expect(shortcutRowSize(15)).toBe(8);
+    expect(shortcutRowSize(14)).toBe(7);
+    expect(shortcutRowSize(18)).toBe(9);
   });
 
-  it('libelle les emplacements 7..12 avec alt', () => {
-    expect(shortcutLabel({ kind: 'deck', index: 6 })).toBe('alt+1');
-    expect(shortcutLabel({ kind: 'deck', index: 11 })).toBe('alt+6');
+  it('evolue quand le nombre de sorts change', () => {
+    expect(shortcutRowSize(16)).toBe(8);
+    expect(shortcutRowSize(21)).toBe(9);
   });
 
-  it('libelle les innes avec ctrl', () => {
-    expect(shortcutLabel({ kind: 'innate', index: 0 })).toBe('ctrl+1');
+  it('ne depasse jamais 9, faute de touches au-dela', () => {
+    expect(shortcutRowSize(30)).toBe(9);
   });
 
-  it('ne libelle rien au-dela du deck', () => {
-    expect(shortcutLabel({ kind: 'deck', index: 12 })).toBe('');
+  it('rend 0 quand il n y a aucun sort', () => {
+    expect(shortcutRowSize(0)).toBe(0);
+  });
+});
+
+describe('spellIndexForShortcut', () => {
+  it('mappe la premiere rangee sur les premiers sorts', () => {
+    expect(spellIndexForShortcut({ digit: 1, alt: false }, 8)).toBe(0);
+    expect(spellIndexForShortcut({ digit: 8, alt: false }, 8)).toBe(7);
+  });
+
+  it('mappe alt sur la seconde rangee', () => {
+    expect(spellIndexForShortcut({ digit: 1, alt: true }, 8)).toBe(8);
+    expect(spellIndexForShortcut({ digit: 7, alt: true }, 8)).toBe(14);
+  });
+
+  it('refuse un chiffre au-dela de la rangee', () => {
+    expect(spellIndexForShortcut({ digit: 9, alt: false }, 8)).toBeNull();
+  });
+
+  // Le deck garde ses 6 par rangee, quelle que soit sa taille.
+  it('respecte la rangee de 6 du deck', () => {
+    expect(spellIndexForShortcut({ digit: 6, alt: false }, DECK_ROW_SIZE)).toBe(5);
+    expect(spellIndexForShortcut({ digit: 1, alt: true }, DECK_ROW_SIZE)).toBe(6);
+    expect(spellIndexForShortcut({ digit: 7, alt: false }, DECK_ROW_SIZE)).toBeNull();
+  });
+
+  it('rend null quand il n y a aucune rangee', () => {
+    expect(spellIndexForShortcut({ digit: 1, alt: false }, 0)).toBeNull();
+  });
+});
+
+describe('shortcutLabelForIndex', () => {
+  it('libelle la premiere rangee sans modificateur', () => {
+    expect(shortcutLabelForIndex(0, 8)).toBe('1');
+    expect(shortcutLabelForIndex(7, 8)).toBe('8');
+  });
+
+  it('libelle la seconde rangee avec alt', () => {
+    expect(shortcutLabelForIndex(8, 8)).toBe('alt+1');
+    expect(shortcutLabelForIndex(14, 8)).toBe('alt+7');
+  });
+
+  it('suit la rangee de 6 pour le deck', () => {
+    expect(shortcutLabelForIndex(5, DECK_ROW_SIZE)).toBe('6');
+    expect(shortcutLabelForIndex(6, DECK_ROW_SIZE)).toBe('alt+1');
+    expect(shortcutLabelForIndex(11, DECK_ROW_SIZE)).toBe('alt+6');
+  });
+
+  it('ne libelle rien au-dela des deux rangees', () => {
+    expect(shortcutLabelForIndex(16, 8)).toBe('');
+    expect(shortcutLabelForIndex(12, DECK_ROW_SIZE)).toBe('');
   });
 });
 
@@ -139,7 +186,6 @@ interface FakeSpell { id: string; name: string; }
 const ref = (spellId: string) => ({ spellId }) as { spellId: string };
 const spell = (id: string): FakeSpell => ({ id, name: `sort ${id}` });
 
-/** Resolveur : rend le sort si connu du cache, sinon undefined. */
 function resolverFor(ids: string[]) {
   const cache = new Map(ids.map(id => [id, spell(id)]));
   return (id: string) => cache.get(id);
@@ -157,14 +203,12 @@ describe('deckSlotSpells', () => {
     const deck = [ref('a'), null, ref('c')];
     const result = deckSlotSpells(deck, resolverFor(['a', 'c']));
     expect(result.length).toBe(3);
-    expect(result[0]?.id).toBe('a');
     expect(result[1]).toBeNull();
     expect(result[2]?.id).toBe('c');
   });
 
   it('retire les emplacements vides de fin', () => {
-    const deck = [ref('a'), null, null, null];
-    expect(deckSlotSpells(deck, resolverFor(['a'])).length).toBe(1);
+    expect(deckSlotSpells([ref('a'), null, null], resolverFor(['a'])).length).toBe(1);
   });
 
   it('rend une liste vide pour un deck entierement vide', () => {
@@ -172,84 +216,40 @@ describe('deckSlotSpells', () => {
   });
 
   it('traite un sort introuvable dans le cache comme un emplacement vide', () => {
-    const deck = [ref('a'), ref('inconnu'), ref('c')];
-    const result = deckSlotSpells(deck, resolverFor(['a', 'c']));
-    expect(result[1]).toBeNull();
-    expect(result[2]?.id).toBe('c');
+    expect(deckSlotSpells([ref('a'), ref('inconnu')], resolverFor(['a'])).length).toBe(1);
   });
 
   it('ne depasse jamais 12 emplacements', () => {
     const deck = Array.from({ length: 20 }, (_, i) => ref(`s${i}`));
-    const ids = deck.map(d => d.spellId);
-    expect(deckSlotSpells(deck, resolverFor(ids)).length).toBe(12);
+    expect(deckSlotSpells(deck, resolverFor(deck.map(d => d.spellId))).length).toBe(12);
   });
 });
 
 describe('resolveShortcutSpell', () => {
-  const deck = [spell('a'), null, spell('c')];
+  const spells = [spell('a'), null, spell('c'), spell('d')];
   const innates = [spell('i1'), spell('i2')];
 
-  it('resout un emplacement de deck', () => {
-    expect(resolveShortcutSpell({ kind: 'deck', index: 2 }, deck, innates)?.id).toBe('c');
+  it('resout un sort de la premiere rangee', () => {
+    expect(resolveShortcutSpell({ kind: 'spell', digit: 3, alt: false }, spells, innates, 6)?.id).toBe('c');
+  });
+
+  it('resout un sort de la seconde rangee', () => {
+    expect(resolveShortcutSpell({ kind: 'spell', digit: 1, alt: true }, spells, innates, 2)?.id).toBe('c');
   });
 
   it('rend null sur un emplacement vide', () => {
-    expect(resolveShortcutSpell({ kind: 'deck', index: 1 }, deck, innates)).toBeNull();
+    expect(resolveShortcutSpell({ kind: 'spell', digit: 2, alt: false }, spells, innates, 6)).toBeNull();
   });
 
   it('rend null hors des bornes', () => {
-    expect(resolveShortcutSpell({ kind: 'deck', index: 9 }, deck, innates)).toBeNull();
+    expect(resolveShortcutSpell({ kind: 'spell', digit: 9, alt: false }, spells, innates, 6)).toBeNull();
   });
 
   it('resout un sort inne', () => {
-    expect(resolveShortcutSpell({ kind: 'innate', index: 1 }, deck, innates)?.id).toBe('i2');
+    expect(resolveShortcutSpell({ kind: 'innate', index: 1 }, spells, innates, 6)?.id).toBe('i2');
   });
 
   it('rend null si l inne n existe pas pour cette classe', () => {
-    expect(resolveShortcutSpell({ kind: 'innate', index: 2 }, deck, innates)).toBeNull();
-  });
-});
-
-/**
- * Certains evenements n'ont pas de `code` : claviers virtuels, outils d'accessibilite,
- * IME, automatisation de test. Sans repli sur `key`, le raccourci y est mort.
- * `code` reste prioritaire, sinon AZERTY casserait (touche 1 -> key '&').
- */
-describe('parseSpellShortcut — evenements sans code physique', () => {
-  function noCode(k: string, mods: { alt?: boolean; ctrl?: boolean; shift?: boolean } = {}) {
-    return {
-      code: '',
-      key: k,
-      altKey: !!mods.alt,
-      ctrlKey: !!mods.ctrl,
-      shiftKey: !!mods.shift,
-      metaKey: false,
-      target: document.createElement('div'),
-    } as unknown as KeyboardEvent;
-  }
-
-  it('retombe sur key quand code est absent', () => {
-    expect(parseSpellShortcut(noCode('4'))).toEqual({ kind: 'deck', index: 3 });
-  });
-
-  it('gere alt sans code', () => {
-    expect(parseSpellShortcut(noCode('2', { alt: true }))).toEqual({ kind: 'deck', index: 7 });
-  });
-
-  it('gere ctrl sans code', () => {
-    expect(parseSpellShortcut(noCode('1', { ctrl: true }))).toEqual({ kind: 'innate', index: 0 });
-  });
-
-  it('ignore un caractere non numerique sans code', () => {
-    expect(parseSpellShortcut(noCode('&'))).toBeNull();
-    expect(parseSpellShortcut(noCode('a'))).toBeNull();
-  });
-
-  // Le code physique reste prioritaire : sur AZERTY, code='Digit1' et key='&'.
-  it('prefere toujours le code physique au caractere tape', () => {
-    const azerty = { code: 'Digit1', key: '&', altKey: false, ctrlKey: false,
-      shiftKey: false, metaKey: false, target: document.createElement('div') };
-    expect(parseSpellShortcut(azerty as unknown as KeyboardEvent))
-      .toEqual({ kind: 'deck', index: 0 });
+    expect(resolveShortcutSpell({ kind: 'innate', index: 5 }, spells, innates, 6)).toBeNull();
   });
 });

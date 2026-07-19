@@ -18,9 +18,11 @@ import { getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
 import {
   parseSpellShortcut,
   resolveShortcutSpell,
-  shortcutLabel,
+  shortcutRowSize,
+  shortcutLabelForIndex,
+  innateShortcutLabel,
   deckSlotSpells,
-  DECK_SLOT_COUNT,
+  DECK_ROW_SIZE,
 } from '../utils/spell-shortcuts.utils';
 
 interface BoardCell {
@@ -2249,21 +2251,33 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     if (build) {
       return deckSlotSpells(build.spellBar.spells, (id: string) => cache.get(id));
     }
-    return this.buildSpells().slice(0, DECK_SLOT_COUNT);
+    // Sans build, les raccourcis suivent l'ORDRE AFFICHE (tri par element), sinon les
+    // badges paraitraient tires au hasard : ils viendraient de l'ordre du cache alors
+    // que les cartes sont rangees par element.
+    return this.spellsByElement().flatMap(group => group.spells);
   });
+
+  /**
+   * Sorts par rangee. Le deck garde 6 (comme en jeu, touche = emplacement). Sans build,
+   * on coupe la liste affichee en deux : 15 sorts -> 8 puis 7, et cela suit le total.
+   */
+  shortcutRowSize = computed<number>(() =>
+    this.buildService.selectedBuildA()
+      ? DECK_ROW_SIZE
+      : shortcutRowSize(this.shortcutSpells().length),
+  );
 
   /** Le deck decoupe en rangees de 6, pour l'affichage facon barre de sorts. */
   deckRows = computed<(Spell | null)[][]>(() => {
     // La barre de deck n'a de sens qu'avec un build : elle reproduit SES emplacements.
-    // Sans build, on rend la liste vide pour laisser le tri par element s'afficher —
-    // sinon shortcutSpells(), tronque a 12 pour le clavier, masquerait les sorts au-dela.
+    // Sans build, on rend la liste vide pour laisser le tri par element s'afficher.
     if (!this.buildService.selectedBuildA()) {
       return [];
     }
     const slots = this.shortcutSpells();
     const rows: (Spell | null)[][] = [];
-    for (let i = 0; i < slots.length; i += 6) {
-      rows.push(slots.slice(i, i + 6));
+    for (let i = 0; i < slots.length; i += DECK_ROW_SIZE) {
+      rows.push(slots.slice(i, i + DECK_ROW_SIZE));
     }
     return rows;
   });
@@ -2271,20 +2285,21 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
   /** spellId -> libelle du raccourci ('1', 'alt+4', 'ctrl+2'), pour les badges. */
   shortcutLabels = computed<Map<string, string>>(() => {
     const labels = new Map<string, string>();
+    const rowSize = this.shortcutRowSize();
     this.shortcutSpells().forEach((spell, index) => {
       if (spell) {
-        labels.set(spell.id, shortcutLabel({ kind: 'deck', index }));
+        labels.set(spell.id, shortcutLabelForIndex(index, rowSize));
       }
     });
     this.innateSpells().forEach((spell, index) => {
-      labels.set(spell.id, shortcutLabel({ kind: 'innate', index }));
+      labels.set(spell.id, innateShortcutLabel(index));
     });
     return labels;
   });
 
   /** Libelle du raccourci d'un emplacement du deck, y compris vide. */
   deckSlotLabel(rowIndex: number, colIndex: number): string {
-    return shortcutLabel({ kind: 'deck', index: rowIndex * 6 + colIndex });
+    return shortcutLabelForIndex(rowIndex * DECK_ROW_SIZE + colIndex, DECK_ROW_SIZE);
   }
 
   currentStep = computed(() => {
@@ -2423,7 +2438,12 @@ export class BoardComponent implements AfterViewInit, OnDestroy {
     if (!shortcut) {
       return;
     }
-    const spell = resolveShortcutSpell(shortcut, this.shortcutSpells(), this.innateSpells());
+    const spell = resolveShortcutSpell(
+      shortcut,
+      this.shortcutSpells(),
+      this.innateSpells(),
+      this.shortcutRowSize(),
+    );
     if (!spell) {
       return;
     }
