@@ -6,11 +6,13 @@ import { IconComponent } from '../ui/icon.component';
 import { SaveErrorService } from '../services/save-error.service';
 import { AuthService } from '../services/auth.service';
 import { LocalDataImportService } from '../services/storage/local-data-import.service';
+import { TourOverlayComponent } from '../components/tour-overlay.component';
+import { TourService } from '../services/tour.service';
 
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, AppSidebarComponent, ThemeToggleComponent, IconComponent],
+  imports: [RouterOutlet, RouterLink, AppSidebarComponent, ThemeToggleComponent, IconComponent, TourOverlayComponent],
   template: `
     <div class="shell">
       <app-sidebar class="shell-sidebar" [expanded]="sidebarExpanded()"></app-sidebar>
@@ -26,6 +28,15 @@ import { LocalDataImportService } from '../services/storage/local-data-import.se
           </button>
           <span class="appbar-title">Wakfu Simulator</span>
           <span class="appbar-spacer"></span>
+          <button
+            type="button"
+            class="menu-btn"
+            (click)="tour.start()"
+            title="Revoir la visite guidée"
+            aria-label="Revoir la visite guidée"
+          >
+            <ui-icon name="help"></ui-icon>
+          </button>
           <ui-theme-toggle></ui-theme-toggle>
         </header>
         @if (saveError.message()) {
@@ -44,6 +55,7 @@ import { LocalDataImportService } from '../services/storage/local-data-import.se
           <router-outlet></router-outlet>
         </main>
       </div>
+      <app-tour-overlay></app-tour-overlay>
     </div>
   `,
   styles: [`
@@ -86,6 +98,7 @@ import { LocalDataImportService } from '../services/storage/local-data-import.se
 export class AppShellComponent {
   protected readonly saveError = inject(SaveErrorService);
   protected readonly importService = inject(LocalDataImportService);
+  protected readonly tour = inject(TourService);
   private readonly auth = inject(AuthService);
 
   readonly sidebarExpanded = signal<boolean>(true);

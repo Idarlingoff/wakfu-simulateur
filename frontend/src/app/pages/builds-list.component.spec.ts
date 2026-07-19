@@ -4,6 +4,7 @@ import { provideRouter, Router } from '@angular/router';
 import { BuildsListComponent } from './builds-list.component';
 import { BuildService } from '../services/build.service';
 import { Build } from '../models/build.model';
+import { DEMO_BUILD_ID } from '../services/demo-data.service';
 
 function makeBuild(id: string, name: string): Build {
   return {
@@ -99,5 +100,30 @@ describe('BuildsListComponent', () => {
     fixture.detectChanges();
     fixture.componentInstance.editBuild(stub.allBuilds()[1]);
     expect(nav).toHaveBeenCalledWith(['/builds', 'b2', 'edition']);
+  });
+});
+
+describe('BuildsListComponent — build de demo', () => {
+  it('masque Modifier et Supprimer sur le build de demo, pas sur les autres', () => {
+    const stub = new StubBuildService();
+    stub.allBuilds.set([makeBuild(DEMO_BUILD_ID, 'Build de démo'), makeBuild('b2', 'Burst')]);
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [BuildsListComponent],
+      providers: [provideRouter([]), { provide: BuildService, useValue: stub }],
+    });
+
+    const fixture = TestBed.createComponent(BuildsListComponent);
+    fixture.detectChanges();
+
+    const cartes = [...fixture.nativeElement.querySelectorAll('article.card')] as HTMLElement[];
+    const carteDemo = cartes.find(c => c.textContent!.includes('Build de démo'))!;
+    const carteReelle = cartes.find(c => c.textContent!.includes('Burst'))!;
+
+    expect(carteDemo.textContent).not.toContain('Modifier');
+    expect(carteDemo.textContent).not.toContain('Supprimer');
+    expect(carteDemo.textContent).toContain('Sélectionner');
+    expect(carteReelle.textContent).toContain('Modifier');
+    expect(carteReelle.textContent).toContain('Supprimer');
   });
 });

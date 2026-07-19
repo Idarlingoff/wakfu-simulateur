@@ -16,7 +16,7 @@ import { IconComponent } from '../ui/icon.component';
       </div>
     </section>
     <div class="resultats">
-      <app-damage-summary></app-damage-summary>
+      <app-damage-summary data-tour="resultats-degats"></app-damage-summary>
       <app-timeline-summary></app-timeline-summary>
     </div>
   `,

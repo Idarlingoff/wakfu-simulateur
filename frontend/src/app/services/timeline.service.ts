@@ -3,18 +3,21 @@
  * Gère l'état des timelines et combos en local uniquement
  */
 
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
 import { Timeline, TimelineStep, ComboPreset, TimelineAction } from '../models/timeline.model';
 import { WakfuApiService } from './wakfu-api.service';
 import { AuthService } from './auth.service';
 import { SaveErrorService } from './save-error.service';
 import { BuildService } from './build.service';
+import { DemoDataService } from './demo-data.service';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class TimelineService {
+  private readonly demo = inject(DemoDataService);
+
   // State Signals
   private timelines = signal<Timeline[]>([]);
   private comboPresets = signal<ComboPreset[]>([]);
@@ -24,14 +27,24 @@ export class TimelineService {
   private loadError = signal<string | null>(null);
 
   // Computed
-  public allTimelines = computed(() => this.timelines());
+  /**
+   * Superposee comme le build de demo, et pour la meme raison : rien n'est ecrit.
+   *
+   * Meme regle que pour les builds : une timeline visible mais inchargeable ne sert a rien,
+   * donc toutes les lectures passent par ici.
+   */
+  private readonly visibleTimelines = computed(() =>
+    this.demo.active() ? [this.demo.timeline(), ...this.timelines()] : this.timelines(),
+  );
+
+  public allTimelines = this.visibleTimelines;
   public allPresets = computed(() => this.comboPresets());
   public loading = computed(() => this.isLoading());
   public error = computed(() => this.loadError());
 
   public currentTimeline = computed(() => {
     const id = this.currentTimelineId();
-    return id ? this.timelines().find(t => t.id === id) || null : null;
+    return id ? this.visibleTimelines().find(t => t.id === id) || null : null;
   });
 
   public currentStep = computed(() => {
@@ -91,6 +104,7 @@ export class TimelineService {
   }
 
   public async updateTimeline(timelineId: string, updates: Partial<Timeline>): Promise<Timeline | null> {
+    if (this.demo.isDemoId(timelineId)) return null;
     const existing = this.getTimelineById(timelineId);
     if (!existing) return null;
     const updated = { ...existing, ...updates, updatedAt: new Date() };
@@ -105,6 +119,7 @@ export class TimelineService {
   }
 
   public async deleteTimeline(timelineId: string): Promise<boolean> {
+    if (this.demo.isDemoId(timelineId)) return false;
     try {
       await firstValueFrom(this.api.deleteTimeline(timelineId));
       this.timelines.update(tls => tls.filter(t => t.id !== timelineId));
@@ -120,13 +135,13 @@ export class TimelineService {
   }
 
   public getTimelineById(timelineId: string): Timeline | undefined {
-    return this.timelines().find(t => t.id === timelineId);
+    return this.visibleTimelines().find(t => t.id === timelineId);
   }
 
   // ============ Timeline Loading ============
 
   public loadTimeline(timelineId: string): void {
-    const timeline = this.timelines().find(t => t.id === timelineId);
+    const timeline = this.visibleTimelines().find(t => t.id === timelineId);
     if (timeline) {
       this.currentTimelineId.set(timelineId);
       this.currentStepIndex.set(0);
@@ -287,7 +302,7 @@ export class TimelineService {
   // ============ Export/Import ============
 
   public exportTimeline(timelineId: string): string {
-    const timeline = this.timelines().find(t => t.id === timelineId);
+    const timeline = this.getTimelineById(timelineId);
     if (!timeline) throw new Error('Timeline not found');
     return JSON.stringify(timeline, null, 2);
   }

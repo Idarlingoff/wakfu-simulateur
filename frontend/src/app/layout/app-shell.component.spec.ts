@@ -4,13 +4,27 @@ import { provideRouter } from '@angular/router';
 import { AppShellComponent } from './app-shell.component';
 import { AuthService } from '../services/auth.service';
 import { LocalDataImportService } from '../services/storage/local-data-import.service';
+import { TourService } from '../services/tour.service';
+
+class StubTour {
+  active = signal(false);
+  currentStep = signal(null);
+  stepIndex = signal(0);
+  steps: unknown[] = [];
+  shouldAutoStart = jasmine.createSpy('shouldAutoStart').and.returnValue(false);
+  start = jasmine.createSpy('start').and.resolveTo(undefined);
+  next = jasmine.createSpy('next').and.resolveTo(undefined);
+  previous = jasmine.createSpy('previous').and.resolveTo(undefined);
+  skip = jasmine.createSpy('skip');
+  finish = jasmine.createSpy('finish');
+}
 
 describe('AppShellComponent', () => {
   beforeEach(() => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       imports: [AppShellComponent],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), { provide: TourService, useValue: new StubTour() }],
     });
   });
 
@@ -61,6 +75,7 @@ describe('AppShellComponent — banniere d import', () => {
           provide: LocalDataImportService,
           useValue: { pending: signal(pending), refreshPending: () => Promise.resolve() },
         },
+        { provide: TourService, useValue: new StubTour() },
       ],
     });
     const fixture = TestBed.createComponent(AppShellComponent);

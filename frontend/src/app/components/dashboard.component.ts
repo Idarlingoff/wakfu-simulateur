@@ -54,7 +54,7 @@ import { IconComponent } from '../ui/icon.component';
 
           <!-- Timeline selector (Timeline mode uniquement) -->
           @if (mode() === 'timeline') {
-          <div class="selector-group">
+          <div class="selector-group" data-tour="timeline-selecteur">
             <label class="selector-label">Timeline</label>
             <div class="selector-dropdown" (click)="toggleTimelineDropdown()">
               <span class="selector-value">{{ getSelectedTimelineName() }}</span>

@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { IconComponent } from '../ui/icon.component';
+import { TourService } from '../services/tour.service';
 
 interface HomeLink {
   readonly path: string;
@@ -17,7 +18,7 @@ interface HomeLink {
     <section class="home">
       <h1>Wakfu Simulator</h1>
       <p class="lead">Crée tes builds, monte tes timelines, teste en freeplay et compare tes résultats.</p>
-      <div class="cards">
+      <div class="cards" data-tour="accueil-cartes">
         @for (link of links; track link.path) {
           <a class="card" [routerLink]="link.path">
             <ui-icon [name]="link.icon"></ui-icon>
@@ -42,6 +43,16 @@ interface HomeLink {
   `],
 })
 export class HomeComponent {
+  private readonly tour = inject(TourService);
+
+  constructor() {
+    // Le declenchement vit sur l'accueil, pas dans la coquille : c'est la seule page dont
+    // on est sur qu'un nouvel arrivant la traverse, et la premiere etape la vise deja.
+    if (this.tour.shouldAutoStart()) {
+      void this.tour.start();
+    }
+  }
+
   protected readonly links: ReadonlyArray<HomeLink> = [
     { path: '/builds', label: 'Builds', icon: 'user', desc: 'Gérer tes personnages et équipements' },
     { path: '/timelines', label: 'Timelines', icon: 'clock', desc: 'Composer une suite d\'actions' },
