@@ -21,24 +21,32 @@ export class BuildService {
 
   // Computed Selectors
   /**
+   * Source unique de lecture des builds, demo comprise.
+   *
    * Le build de demo est SUPERPOSE, jamais stocke : il n'existe qu'en memoire, le temps de
    * la visite guidee. Le passer par le stockage l'ecrirait dans Supabase pour un
    * utilisateur connecte, et un abandon en cours de visite y laisserait un orphelin.
+   *
+   * TOUTES les lectures passent par ici. Superposer seulement `allBuilds` ferait apparaitre
+   * le build de demo dans les listes tout en le laissant introuvable a la selection : il
+   * s'afficherait sans jamais pouvoir etre utilise.
    */
-  public allBuilds = computed(() =>
+  private readonly visibleBuilds = computed(() =>
     this.demo.active() ? [this.demo.build(), ...this.builds()] : this.builds(),
   );
+
+  public allBuilds = this.visibleBuilds;
   public loading = computed(() => this.isLoading());
   public error = computed(() => this.loadError());
 
   public selectedBuildA = computed(() => {
     const id = this.selectedBuildIdA();
-    return id ? this.builds().find(b => b.id === id) || null : null;
+    return id ? this.visibleBuilds().find(b => b.id === id) || null : null;
   });
 
   public selectedBuildB = computed(() => {
     const id = this.selectedBuildIdB();
-    return id ? this.builds().find(b => b.id === id) || null : null;
+    return id ? this.visibleBuilds().find(b => b.id === id) || null : null;
   });
 
   public activeComparison = computed(() => {
@@ -125,7 +133,7 @@ export class BuildService {
   }
 
   public getBuildById(buildId: string): Build | undefined {
-    return this.builds().find(b => b.id === buildId);
+    return this.visibleBuilds().find(b => b.id === buildId);
   }
 
   // ============ Selection & Comparison ============

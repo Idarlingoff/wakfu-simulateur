@@ -104,4 +104,35 @@ describe('Superposition des donnees de demo', () => {
     expect(await TestBed.inject(BuildService).updateBuild('reel-1', { name: 'renomme' })).toBeTrue();
     expect(api.updateBuild).toHaveBeenCalled();
   });
+
+  it('le build de demo est selectionnable pendant la visite', async () => {
+    await configure();
+    await demo.activate();
+    const builds = TestBed.inject(BuildService);
+
+    builds.selectBuildA(builds.allBuilds().find(b => b.id === DEMO_BUILD_ID)!);
+
+    expect(builds.selectedBuildA()?.id).toBe(DEMO_BUILD_ID);
+  });
+
+  it('getBuildById voit la demo pendant la visite, plus apres', async () => {
+    await configure();
+    const builds = TestBed.inject(BuildService);
+
+    await demo.activate();
+    expect(builds.getBuildById(DEMO_BUILD_ID)?.name).toBe('Build de démo');
+
+    demo.deactivate();
+    expect(builds.getBuildById(DEMO_BUILD_ID)).toBeUndefined();
+  });
+
+  it('la timeline de demo peut devenir la timeline courante', async () => {
+    await configure();
+    await demo.activate();
+    const timelines = TestBed.inject(TimelineService);
+
+    timelines.loadTimeline(DEMO_TIMELINE_ID);
+
+    expect(timelines.currentTimeline()?.id).toBe(DEMO_TIMELINE_ID);
+  });
 });

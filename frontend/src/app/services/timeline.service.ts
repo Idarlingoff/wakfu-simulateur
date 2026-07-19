@@ -27,17 +27,24 @@ export class TimelineService {
   private loadError = signal<string | null>(null);
 
   // Computed
-  /** Superposee comme le build de demo, et pour la meme raison : rien n'est ecrit. */
-  public allTimelines = computed(() =>
+  /**
+   * Superposee comme le build de demo, et pour la meme raison : rien n'est ecrit.
+   *
+   * Meme regle que pour les builds : une timeline visible mais inchargeable ne sert a rien,
+   * donc toutes les lectures passent par ici.
+   */
+  private readonly visibleTimelines = computed(() =>
     this.demo.active() ? [this.demo.timeline(), ...this.timelines()] : this.timelines(),
   );
+
+  public allTimelines = this.visibleTimelines;
   public allPresets = computed(() => this.comboPresets());
   public loading = computed(() => this.isLoading());
   public error = computed(() => this.loadError());
 
   public currentTimeline = computed(() => {
     const id = this.currentTimelineId();
-    return id ? this.timelines().find(t => t.id === id) || null : null;
+    return id ? this.visibleTimelines().find(t => t.id === id) || null : null;
   });
 
   public currentStep = computed(() => {
@@ -128,13 +135,13 @@ export class TimelineService {
   }
 
   public getTimelineById(timelineId: string): Timeline | undefined {
-    return this.timelines().find(t => t.id === timelineId);
+    return this.visibleTimelines().find(t => t.id === timelineId);
   }
 
   // ============ Timeline Loading ============
 
   public loadTimeline(timelineId: string): void {
-    const timeline = this.timelines().find(t => t.id === timelineId);
+    const timeline = this.visibleTimelines().find(t => t.id === timelineId);
     if (timeline) {
       this.currentTimelineId.set(timelineId);
       this.currentStepIndex.set(0);
