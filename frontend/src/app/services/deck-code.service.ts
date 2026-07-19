@@ -9,7 +9,9 @@ import { Injectable, inject } from '@angular/core';
 import { DataCacheService } from './data-cache.service';
 import { Passive } from '../models/passive.model';
 import { Spell } from '../models/spell.model';
-import { DeckCodeImportResult, parseDeckCode } from '../utils/deck-code.utils';
+import { PassiveReference, SpellReference } from '../models/build.model';
+import { DeckCodeImportResult, formatDeckCode, parseDeckCode } from '../utils/deck-code.utils';
+import { areEquivalentSpellIds, canonicalizeInnateSpellId, getInnateSpellIdsForClass } from '../utils/innate-spells.utils';
 
 /**
  * Vue minimale commune aux sorts et aux passifs, seul ce qui sert a la resolution.
@@ -99,5 +101,40 @@ export class DeckCodeService {
       duplicateSpellIcons,
       duplicatePassiveIcons,
     };
+  }
+
+  /**
+   * Produit le code deck de la selection courante.
+   *
+   * Une reference introuvable devient `0` plutot que de disparaitre : decaler les slots
+   * changerait les raccourcis de tous les sorts suivants.
+   */
+  async encode(
+    spells: ReadonlyArray<SpellReference | null>,
+    passives: ReadonlyArray<PassiveReference | null>,
+    classId: string,
+  ): Promise<string> {
+    const [allSpells, allPassives] = await Promise.all([
+      this.dataCache.getSpells(classId),
+      this.dataCache.getPassives(classId),
+    ]);
+
+    const spellIcons = new Map(
+      allSpells.map(spell => [canonicalizeInnateSpellId(spell.id), spell.iconId ?? null]),
+    );
+    const passiveIcons = new Map(allPassives.map(passive => [passive.id, passive.iconId ?? null]));
+
+    const innateIds = getInnateSpellIdsForClass(classId);
+    const isInnate = (spellId: string): boolean =>
+      innateIds.some(innateId => areEquivalentSpellIds(innateId, spellId));
+
+    return formatDeckCode({
+      spells: spells.map(ref =>
+        ref && !isInnate(ref.spellId)
+          ? spellIcons.get(canonicalizeInnateSpellId(ref.spellId)) ?? null
+          : null,
+      ),
+      passives: passives.map(ref => (ref ? passiveIcons.get(ref.passiveId) ?? null : null)),
+    });
   }
 }

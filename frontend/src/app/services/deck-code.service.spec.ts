@@ -134,3 +134,40 @@ describe('DeckCodeService.decode', () => {
     await expectAsync(service().decode('1-2-3', 'XEL')).toBeRejectedWithError(DeckCodeFormatError);
   });
 });
+
+describe('DeckCodeService.encode', () => {
+  it('reconstitue le code de reference depuis une selection', async () => {
+    const svc = service();
+    const decoded = await svc.decode(REFERENCE, 'XEL');
+
+    const code = await svc.encode(decoded.spells, decoded.passives, 'XEL');
+
+    expect(code).toBe(REFERENCE);
+  });
+
+  it('ecrit 0 pour les slots vides et complete a 18 segments', async () => {
+    const code = await service().encode(
+      [{ spellId: 'XEL_HORLOGE' }, null],
+      [],
+      'XEL',
+    );
+
+    expect(code).toBe('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
+  });
+
+  it('n emet jamais les sorts innes', async () => {
+    const code = await service().encode(
+      [{ spellId: 'XEL_DIAL' }, { spellId: 'XEL_DISTO' }, { spellId: 'XEL_HORLOGE' }],
+      [],
+      'XEL',
+    );
+
+    expect(code.split('-').slice(0, 3)).toEqual(['0', '0', '763']);
+  });
+
+  it('ecrit 0 pour une reference introuvable plutot que de decaler les slots', async () => {
+    const code = await service().encode([{ spellId: 'XEL_INEXISTANT' }, { spellId: 'XEL_HORLOGE' }], [], 'XEL');
+
+    expect(code.split('-').slice(0, 2)).toEqual(['0', '763']);
+  });
+});
