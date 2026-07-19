@@ -115,3 +115,40 @@ export function formatDeckCode(slots: DeckCodeSlots): string {
     .map(iconId => String(iconId ?? 0))
     .join('-');
 }
+
+function placedCount(slots: ReadonlyArray<unknown | null>): number {
+  return slots.filter(slot => slot !== null).length;
+}
+
+/**
+ * Redige le rapport affiche apres un import.
+ *
+ * Le denominateur est le nombre de slots NON VIDES du code, pas 12 et 6 : un `0` est un
+ * slot volontairement vide, pas un echec. Le code de reference doit lire « 12/12 sorts et
+ * 5/5 passifs » en vert, sans avertissement pour son dernier slot vide.
+ */
+export function describeImportResult(result: DeckCodeImportResult): DeckCodeReport {
+  const spellsPlaced = placedCount(result.spells);
+  const spellsTotal =
+    spellsPlaced + result.unresolvedSpellIcons.length + result.duplicateSpellIcons.length;
+  const passivesPlaced = placedCount(result.passives);
+  const passivesTotal =
+    passivesPlaced + result.unresolvedPassiveIcons.length + result.duplicatePassiveIcons.length;
+
+  const counts = `${spellsPlaced}/${spellsTotal} sorts et ${passivesPlaced}/${passivesTotal} passifs importés`;
+
+  const problems: string[] = [];
+  const unknown = [...result.unresolvedSpellIcons, ...result.unresolvedPassiveIcons];
+  if (unknown.length > 0) {
+    problems.push(`inconnus : ${unknown.join(', ')}`);
+  }
+  const duplicates = [...result.duplicateSpellIcons, ...result.duplicatePassiveIcons];
+  if (duplicates.length > 0) {
+    problems.push(`en double : ${duplicates.join(', ')}`);
+  }
+
+  if (problems.length === 0) {
+    return { tone: 'ok', message: counts };
+  }
+  return { tone: 'warn', message: `${counts} — identifiants ignorés (${problems.join(' ; ')})` };
+}
