@@ -17,7 +17,16 @@
 Trois ajustements décidés après lecture du code :
 
 1. **La cible de l'étape Timelines vit dans `dashboard.component.ts`.** La spec listait `timeline-page.component.ts`, mais ce fichier n'est qu'un `<app-dashboard mode="timeline">`. Le sélecteur de timeline est dans le `header` du dashboard.
-2. **Le build de démo est défini par un code deck, pas par des ids en dur.** Les ids de passifs servis par le backend (`XEL_MAITRE_CADRAN`, `XEL_REMANENCE`) diffèrent de ceux de `frontend/src/assets/data/Passives.json`. Coder les références en dur dériverait silencieusement. `DemoDataService` les résout via `DeckCodeService` à l'activation, ce qui les aligne par construction sur ce que sert le backend.
+2. **Le build de démo est défini par un code deck, pas par des ids en dur.** `DemoDataService`
+   résout ses références via `DeckCodeService` à l'activation, ce qui garantit une source de
+   vérité unique et fait tourner la fonctionnalité de code deck livrée la semaine passée.
+
+   **Correction :** une version antérieure de ce plan justifiait ce choix par une prétendue
+   divergence entre les ids de passifs du backend et ceux de
+   `frontend/src/assets/data/Passives.json`. **Cette divergence n'existe pas** — les deux
+   sources concordent sur les ids comme sur les `iconId`. L'affirmation venait d'une lecture
+   tronquée du JSON. Le choix de conception reste bon sur ses propres mérites, mais ne pas
+   répéter ce motif ailleurs.
 3. **`activate()` est asynchrone**, conséquence directe du point 2.
 
 ## Structure des fichiers
