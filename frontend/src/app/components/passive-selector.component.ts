@@ -9,6 +9,7 @@ import { FormsModule } from '@angular/forms';
 import { Passive } from '../models/passive.model';
 import { PassiveReference } from '../models/build.model';
 import { DataCacheService } from '../services/data-cache.service';
+import { PASSIVE_UNLOCK_LEVELS, isPassiveSlotUnlocked } from '../utils/passive-slots.utils';
 
 @Component({
   selector: 'app-passive-selector',
@@ -541,24 +542,20 @@ export class PassiveSelectorComponent implements OnChanges {
   errorMessage = signal<string>('');
   searchQuery = '';
 
-  // Niveaux de déverrouillage des passifs
-  private readonly PASSIVE_LEVELS = [20, 35, 50, 100, 150, 200];
-
   /**
    * Obtient les emplacements de passifs disponibles selon le niveau du personnage
    */
   getAvailableSlots(): number[] {
-    return this.PASSIVE_LEVELS
-      .map((level, index) => ({ level, index }))
-      .filter(slot => slot.level <= this.characterLevel)
-      .map(slot => slot.index);
+    return PASSIVE_UNLOCK_LEVELS
+      .map((_level, index) => index)
+      .filter(index => isPassiveSlotUnlocked(index, this.characterLevel));
   }
 
   /**
    * Vérifie si un emplacement est disponible selon le niveau du personnage
    */
   isSlotAvailable(index: number): boolean {
-    return this.PASSIVE_LEVELS[index] <= this.characterLevel;
+    return isPassiveSlotUnlocked(index, this.characterLevel);
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -705,7 +702,7 @@ export class PassiveSelectorComponent implements OnChanges {
   }
 
   getLevelForSlot(index: number): number {
-    return this.PASSIVE_LEVELS[index] || 20;
+    return PASSIVE_UNLOCK_LEVELS[index] || 20;
   }
 
   countSelected(): number {
@@ -721,7 +718,7 @@ export class PassiveSelectorComponent implements OnChanges {
 
     for (let i = 0; i < newPassives.length; i++) {
       if (newPassives[i] !== null && !this.isSlotAvailable(i)) {
-        console.log(`[PassiveSelector] Retrait du passif de l'emplacement ${i} (niveau ${this.PASSIVE_LEVELS[i]} > ${this.characterLevel})`);
+        console.log(`[PassiveSelector] Retrait du passif de l'emplacement ${i} (niveau ${PASSIVE_UNLOCK_LEVELS[i]} > ${this.characterLevel})`);
         newPassives[i] = null;
         hasChanges = true;
       }

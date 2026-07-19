@@ -212,11 +212,92 @@ describe('BuildEditorComponent — code deck', () => {
     fixture.detectChanges();
     const cmp = fixture.componentInstance;
     cmp.form.classId = 'XEL';
+    // Force a true pour que toBeFalse() prouve l'affectation, pas la valeur initiale.
+    cmp.deckCodeCopied = true;
     spyOnProperty(navigator, 'clipboard', 'get').and.returnValue(undefined as unknown as Clipboard);
 
     await cmp.copyDeckCode();
 
     expect(cmp.deckCodeFallback).toBe('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
     expect(cmp.deckCodeCopied).toBeFalse();
+    expect(cmp.deckCodeReport?.tone).toBe('warn');
+  });
+
+  it('efface le repli et le rapport quand une copie ulterieure reussit', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    const clipboardGetter = spyOnProperty(navigator, 'clipboard', 'get');
+
+    clipboardGetter.and.returnValue(undefined as unknown as Clipboard);
+    await cmp.copyDeckCode();
+    expect(cmp.deckCodeFallback).not.toBe('');
+
+    const writeText = jasmine.createSpy('writeText').and.resolveTo(undefined);
+    clipboardGetter.and.returnValue({ writeText } as unknown as Clipboard);
+    await cmp.copyDeckCode();
+
+    expect(cmp.deckCodeFallback).toBe('');
+    expect(cmp.deckCodeReport).toBeNull();
+    expect(cmp.deckCodeCopied).toBeTrue();
+  });
+
+  it('signale en orange un import partiel', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    cmp.deckCodeInput = '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
+    const partial = importResult(10, 4);
+    partial.unresolvedSpellIcons = [9999];
+    deckStub.decode.and.resolveTo(partial);
+
+    await cmp.importDeckCode();
+
+    expect(cmp.deckCodeReport?.tone).toBe('warn');
+    expect(cmp.deckCodeReport?.message).toContain('9999');
+  });
+
+  it('ignore les passifs tombant dans un emplacement verrouille', async () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    // Niveau 50 : seuls les emplacements 0, 1 et 2 sont deverrouilles (20/35/50).
+    cmp.form.characterLevel = 50;
+    cmp.deckCodeInput = '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
+
+    await cmp.importDeckCode();
+
+    expect(cmp.form.passives[0]).toEqual({ passiveId: 'XEL_P0' });
+    expect(cmp.form.passives[2]).toEqual({ passiveId: 'XEL_P2' });
+    expect(cmp.form.passives[3]).toBeNull();
+    expect(cmp.form.passives[4]).toBeNull();
+    expect(cmp.deckCodeReport?.tone).toBe('warn');
+    expect(cmp.deckCodeReport?.message).toContain('verrouillé');
+  });
+
+  it('rend le champ de repli et la tonalite du rapport dans le DOM', () => {
+    configure(null);
+    const fixture = TestBed.createComponent(BuildEditorComponent);
+    fixture.detectChanges();
+    const cmp = fixture.componentInstance;
+    cmp.form.classId = 'XEL';
+    cmp.deckCodeFallback = '763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0';
+    cmp.deckCodeReport = { tone: 'warn', message: 'Copie automatique indisponible' };
+    fixture.detectChanges();
+
+    const fallback: HTMLInputElement = fixture.nativeElement.querySelector('.deck-fallback');
+    expect(fallback).toBeTruthy();
+    expect(fallback.value).toBe('763-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0');
+
+    const report: HTMLElement = fixture.nativeElement.querySelector('.deck-report');
+    expect(report).toBeTruthy();
+    expect(report.classList).toContain('deck-report');
+    expect(report.classList).toContain('deck-report-warn');
   });
 });

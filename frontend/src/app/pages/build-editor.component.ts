@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnDestroy, inject } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,7 +11,8 @@ import { UiButtonComponent } from '../ui/ui-button.component';
 import { removeInnateSpellsFromSelection } from '../utils/innate-spells.utils';
 import { newEntityId } from '../utils/entity-id.utils';
 import { DeckCodeService } from '../services/deck-code.service';
-import { DeckCodeFormatError, DeckCodeReport, describeImportResult } from '../utils/deck-code.utils';
+import { DeckCodeFormatError, DeckCodeImportResult, DeckCodeReport, describeImportResult } from '../utils/deck-code.utils';
+import { isPassiveSlotUnlocked } from '../utils/passive-slots.utils';
 
 interface FormBuild {
   name: string;
@@ -100,6 +101,7 @@ function emptyForm(): FormBuild {
                 class="deck-input"
                 [(ngModel)]="deckCodeInput"
                 name="deckCode"
+                aria-label="Code deck"
                 [disabled]="!form.classId"
                 placeholder="2839-5344-767-771-765-…"
               />
@@ -235,7 +237,7 @@ function emptyForm(): FormBuild {
     .deck-report-error { color: var(--app-danger); }
   `],
 })
-export class BuildEditorComponent {
+export class BuildEditorComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly location = inject(Location);
@@ -251,6 +253,8 @@ export class BuildEditorComponent {
   deckCodeCopied = false;
   /** Code affiche en lecture seule quand l'API presse-papier est indisponible. */
   deckCodeFallback = '';
+  /** Minuterie du badge « Copié ✓ », a nettoyer pour ne pas ecrire dans une vue detruite. */
+  private deckCodeCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     const id = this.route.snapshot.paramMap.get('id');
@@ -268,6 +272,17 @@ export class BuildEditorComponent {
         passives: [...build.passiveBar.passives],
         sublimations: [...build.sublimationBar.sublimations],
       };
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.clearDeckCodeCopiedTimer();
+  }
+
+  private clearDeckCodeCopiedTimer(): void {
+    if (this.deckCodeCopiedTimer !== null) {
+      clearTimeout(this.deckCodeCopiedTimer);
+      this.deckCodeCopiedTimer = null;
     }
   }
 
@@ -295,7 +310,7 @@ export class BuildEditorComponent {
       return;
     }
 
-    let result;
+    let result: DeckCodeImportResult;
     try {
       result = await this.deckCodeService.decode(code, this.form.classId);
     } catch (error) {
@@ -317,9 +332,24 @@ export class BuildEditorComponent {
       return;
     }
 
+    // Le code deck porte toujours 6 passifs, mais un personnage de bas niveau n'a pas
+    // encore debloque tous les emplacements. Sans ce filtre, un passif resterait dans un
+    // emplacement que le selecteur n'affiche pas, et save() le persisterait quand meme.
+    const passives = result.passives.map((passive, index) =>
+      passive !== null && !isPassiveSlotUnlocked(index, this.form.characterLevel) ? null : passive,
+    );
+    const lockedOut = result.passives.filter((p, i) => p !== null && passives[i] === null).length;
+
     this.onSpellsChange(result.spells);
-    this.onPassivesChange(result.passives);
-    this.deckCodeReport = describeImportResult(result);
+    this.onPassivesChange(passives);
+
+    const report = describeImportResult(result);
+    this.deckCodeReport = lockedOut === 0
+      ? report
+      : {
+          tone: report.tone === 'ok' ? 'warn' : report.tone,
+          message: `${report.message} — ${lockedOut} passif(s) ignoré(s) : emplacement verrouillé à ce niveau`,
+        };
   }
 
   async copyDeckCode(): Promise<void> {
@@ -335,8 +365,16 @@ export class BuildEditorComponent {
       try {
         await clipboard.writeText(code);
         this.deckCodeFallback = '';
+        // Sinon le message « sélectionne le code ci-dessous » survit au champ qu'il designe.
+        this.deckCodeReport = null;
         this.deckCodeCopied = true;
-        setTimeout(() => { this.deckCodeCopied = false; }, 2000);
+        // Une seconde copie rapide ne doit pas laisser la minuterie precedente eteindre
+        // le badge en avance.
+        this.clearDeckCodeCopiedTimer();
+        this.deckCodeCopiedTimer = setTimeout(() => {
+          this.deckCodeCopied = false;
+          this.deckCodeCopiedTimer = null;
+        }, 2000);
         return;
       } catch {
         // Permission refusee : on retombe sur le champ manuel.
