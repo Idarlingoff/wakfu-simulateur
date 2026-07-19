@@ -7,8 +7,8 @@
  * demonstration disparait par construction et il n'y a rien qui puisse echouer.
  */
 
-import { Injectable, computed, inject, signal } from '@angular/core';
-import { Build } from '../models/build.model';
+import { Injectable, inject, signal } from '@angular/core';
+import { Build, BuildStats } from '../models/build.model';
 import { Timeline } from '../models/timeline.model';
 import { DeckCodeService } from './deck-code.service';
 
@@ -16,16 +16,16 @@ export const DEMO_BUILD_ID = '__demo__';
 export const DEMO_TIMELINE_ID = '__demo-timeline__';
 
 /**
- * Le build de demo est defini par son CODE DECK, pas par des identifiants en dur.
+ * Le build de demo est defini par son CODE DECK plutot que par des references en dur.
  *
- * Les ids servis par le backend ne sont pas ceux des JSON d'assets — cote passifs ils
- * different franchement. Passer par le code deck aligne la demo sur ce que sert vraiment
- * le backend, et la fait deriver avec lui au lieu de pourrir en silence.
+ * Une seule source de verite : si le seed change, la demo suit, au lieu de tenir une
+ * seconde liste d'identifiants a jour a la main. Accessoirement, cela fait tourner en
+ * conditions reelles la fonctionnalite de code deck livree la semaine passee.
  */
 const DEMO_DECK_CODE =
   '2839-5344-767-771-765-772-777-766-1417-763-775-757-758-785-7190-7191-7192-0';
 
-const DEMO_STATS = {
+const DEMO_STATS: BuildStats = {
   level: 200,
   masteryFire: 0, masteryWater: 850, masteryEarth: 0, masteryAir: 0,
   masterySecondary: 0, backMastery: 120,
@@ -45,9 +45,9 @@ export class DemoDataService {
   private readonly demoTimeline = signal<Timeline>(emptyDemoTimeline());
   private resolved = false;
 
-  readonly active = computed(() => this.isActive());
-  readonly build = computed(() => this.demoBuild());
-  readonly timeline = computed(() => this.demoTimeline());
+  readonly active = this.isActive.asReadonly();
+  readonly build = this.demoBuild.asReadonly();
+  readonly timeline = this.demoTimeline.asReadonly();
 
   /**
    * La resolution n'a lieu qu'une fois : rejouer la visite ne doit pas retaper le backend.
@@ -56,6 +56,7 @@ export class DemoDataService {
    */
   async activate(): Promise<void> {
     if (!this.resolved) {
+      // Pose avant l'await : deux activate() concurrents ne doivent pas decoder deux fois.
       this.resolved = true;
       try {
         const decoded = await this.deckCode.decode(DEMO_DECK_CODE, 'XEL');
@@ -65,8 +66,20 @@ export class DemoDataService {
           passiveBar: { passives: decoded.passives },
         });
         this.demoTimeline.set(timelineFromSpells(decoded.spells));
+
+        // Les iconIds du seed contiennent des valeurs de remplacement (7186 et voisines).
+        // Le jour ou elles deviennent de vrais ids de jeu, le code deck perd des slots en
+        // silence : on veut une trace plutot qu'une demo amputee sans explication.
+        const manquants = [...decoded.unresolvedSpellIcons, ...decoded.unresolvedPassiveIcons];
+        if (manquants.length > 0) {
+          console.warn(`[DemoData] Icones du code deck de demo non resolues : ${manquants.join(', ')}`);
+        }
       } catch {
-        // Build vide : la visite reste jouable, les ecrans en aval seront simplement vides.
+        // Build vide plutot qu'une visite qui refuse de demarrer. Mais on ne condamne pas
+        // la session : un echec reseau ponctuel doit pouvoir etre retente au prochain
+        // demarrage, sinon la demo reste vide pour toujours sans que personne ne sache.
+        this.resolved = false;
+        console.warn('[DemoData] Code deck de demo non resolu, build de demo vide.');
       }
     }
     this.isActive.set(true);
